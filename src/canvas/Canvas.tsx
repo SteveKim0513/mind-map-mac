@@ -51,6 +51,10 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
 
   // measured node sizes drive the layout (width → horizontal, height → vertical spacing)
   const [sizes, setSizes] = useState<Record<string, { w: number; h: number; below: number }>>({});
+  // mirror of `sizes` for callbacks (fit) that need the latest measurements
+  // without re-subscribing — avoids fitting against default node sizes.
+  const sizesRef = useRef(sizes);
+  sizesRef.current = sizes;
   const onMeasure = useCallback((id: string, w: number, h: number, below: number) => {
     setSizes((prev) => {
       const p = prev[id];
@@ -75,6 +79,8 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   const [dragPos, setDragPos] = useState<{ id: string; x: number; y: number } | null>(null);
   // live offset while a whole root tree is being moved
   const [rootDrag, setRootDrag] = useState<{ rootId: string; dx: number; dy: number } | null>(null);
+  // true after a drag ends → keep the selection toolbar hidden until the next click
+  const [dragSuppress, setDragSuppress] = useState(false);
   const [panning, setPanning] = useState(false);
 
   // Mutable interaction state kept in a ref so window listeners see fresh values.
@@ -167,6 +173,10 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
 
     const onUp = () => {
       const st = interaction.current;
+      // a real drag just ended → suppress the toolbar; a plain click (pending-drag
+      // that never moved) → allow it. Selecting via click re-shows the toolbar.
+      if (st.mode === 'dragging') setDragSuppress(true);
+      else if (st.mode === 'pending-drag') setDragSuppress(false);
       if (st.mode === 'dragging') {
         setDraggingId(null);
         if (st.kind === 'move-root') {
@@ -275,7 +285,8 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   const fit = useCallback(() => {
     const s = mapStore.getState();
     fitBounds(
-      layout(s.doc, {}, s.focusRootId, s.colorFilter, s.filterAncestors, s.filterDescendants).bounds,
+      layout(s.doc, sizesRef.current, s.focusRootId, s.colorFilter, s.filterAncestors, s.filterDescendants)
+        .bounds,
     );
   }, [mapStore, fitBounds]);
 
@@ -376,8 +387,8 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
 
   // floating selection toolbar position (screen space, above the node)
   const selToolbar = (() => {
-    // hide while dragging a node or a whole tree — the toolbar shouldn't trail the cursor
-    if (draggingId || rootDrag) return null;
+    // hide while dragging a node/tree, and stay hidden after a drag until the next click
+    if (draggingId || rootDrag || dragSuppress) return null;
     if (editingId || selectedIds.length !== 1) return null;
     const id = selectedIds[0];
     const c = centers[id];

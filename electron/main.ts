@@ -323,7 +323,19 @@ ipcMain.handle('fs:createFolder', async (_e, args: { dir: string; name: string }
 
 ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) => {
   const dir = path.dirname(args.path);
-  const next = path.join(dir, args.newName);
+  let next = path.join(dir, args.newName);
+  // Guard against clobbering an existing different file (fs.rename overwrites silently).
+  // Skip when it's the same file (e.g. a case-only rename on a case-insensitive FS).
+  if (next.toLowerCase() !== args.path.toLowerCase()) {
+    const ext = args.newName.endsWith('.mind') ? '.mind' : '';
+    const base = ext ? args.newName.slice(0, -ext.length) : args.newName;
+    try {
+      await fs.access(next);
+      next = await uniquePath(dir, base, ext); // collision → de-dupe like create/move
+    } catch {
+      /* destination is free */
+    }
+  }
   await fs.rename(args.path, next);
   return next;
 });

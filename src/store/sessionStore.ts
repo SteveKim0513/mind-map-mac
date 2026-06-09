@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createMapStore, type MapStore } from './mapStore';
-import { deserialize, newId } from './../io/formats';
+import { deserialize, serialize, newId } from './../io/formats';
+import { useUi } from './uiStore';
 
 export interface Tab {
   id: string;
@@ -44,6 +45,7 @@ interface SessionState {
   toggleSplit: () => void;
   setActiveGroup: (group: GroupIndex) => void;
   renamePath: (oldPath: string, newPath: string) => void;
+  flushSaves: (target: string) => Promise<void>;
   closeByPath: (path: string) => void;
   hydrate: (files: { path: string; content: string }[], snap: SessionSnapshot) => void;
 }
@@ -56,6 +58,15 @@ function makeTab(path: string, content: string): Tab {
   const store = createMapStore();
   store.getState().loadDoc(deserialize(content), path);
   return { id: newId(), path, title: base(path), store };
+}
+
+/** makeTab that returns null (instead of throwing) when the file is corrupt. */
+function tryMakeTab(path: string, content: string): Tab | null {
+  try {
+    return makeTab(path, content);
+  } catch {
+    return null;
+  }
 }
 
 // ── localStorage persistence ────────────────────────────────────────────────
@@ -145,7 +156,11 @@ export const useSession = create<SessionState>((set, get) => {
         persist();
         return;
       }
-      const tab = makeTab(path, content);
+      const tab = tryMakeTab(path, content);
+      if (!tab) {
+        useUi.getState().toast('파일을 열 수 없습니다 (손상된 .mind)');
+        return;
+      }
       const toRight = get().split && get().activeGroup === 1;
       set((s) => ({
         tabs: [...s.tabs, tab],
@@ -313,7 +328,9 @@ export const useSession = create<SessionState>((set, get) => {
       set((s) => ({
         tabs: s.tabs.map((t) => {
           if (t.path === oldPath || t.path.startsWith(oldPath + '/')) {
-            const np = t.path.replace(oldPath, newPath);
+            // Anchor the replacement to the path prefix — a plain String.replace
+            // would rewrite the first match anywhere in the path.
+            const np = newPath + t.path.slice(oldPath.length);
             t.store.getState().setFilePath(np);
             return { ...t, path: np, title: base(np) };
           }
@@ -321,6 +338,23 @@ export const useSession = create<SessionState>((set, get) => {
         }),
       }));
       persist();
+    },
+
+    flushSaves: async (target) => {
+      // Write out any pending (debounced) edits for tabs at/under `target` before a
+      // rename/move, so the disk operation can't race the autosave onto a stale path.
+      const affected = get().tabs.filter(
+        (t) => t.path === target || t.path.startsWith(target + '/'),
+      );
+      await Promise.all(
+        affected.map(async (t) => {
+          const st = t.store.getState();
+          if (st.dirty && st.filePath) {
+            const p = await window.api.save(st.filePath, serialize(st.doc));
+            if (p) t.store.getState().markSaved(p);
+          }
+        }),
+      );
     },
 
     closeByPath: (path) => {
@@ -334,7 +368,14 @@ export const useSession = create<SessionState>((set, get) => {
     },
 
     hydrate: (files, snap) => {
-      const pool = files.map((f) => makeTab(f.path, f.content));
+      // Skip any corrupt file so one bad doc can't abort restoring the whole session.
+      const pool = files
+        .map((f) => tryMakeTab(f.path, f.content))
+        .filter((t): t is Tab => t !== null);
+      const skipped = files.length - pool.length;
+      if (skipped > 0) {
+        setTimeout(() => useUi.getState().toast(`${skipped}개 파일을 열 수 없어 건너뛰었습니다`), 0);
+      }
       const byPath = new Map(pool.map((t) => [t.path, t.id]));
       const ids = (paths: string[]) =>
         paths.map((p) => byPath.get(p)).filter((id): id is string => !!id);

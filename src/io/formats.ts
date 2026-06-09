@@ -21,8 +21,13 @@ export function serialize(doc: MindMapDoc): string {
 }
 
 export function deserialize(text: string): MindMapDoc {
-  const parsed = JSON.parse(text) as MindMapDoc;
-  if (!parsed.nodes || !parsed.rootIds) throw new Error('Invalid .mind file');
+  let parsed: MindMapDoc;
+  try {
+    parsed = JSON.parse(text) as MindMapDoc;
+  } catch {
+    throw new Error('손상된 .mind 파일 (JSON 파싱 실패)');
+  }
+  if (!parsed || !parsed.nodes || !parsed.rootIds) throw new Error('Invalid .mind file');
   // Backfill defaults defensively.
   for (const n of Object.values(parsed.nodes)) {
     n.children ??= [];

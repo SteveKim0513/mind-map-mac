@@ -294,6 +294,10 @@ export function createMapStore(): MapStore {
           const o = d.nodes[nid];
           const cid = newId();
           d.nodes[cid] = { ...structuredClone(o), id: cid, parentId, children: [] };
+          // A clone must not inherit the original's reminder identity, or both nodes
+          // would map to one reminder. If still reminder-enabled, sync creates a new one.
+          delete d.nodes[cid].reminderId;
+          delete d.nodes[cid].reminderSyncedAt;
           d.nodes[cid].children = o.children.map((c) => clone(c, cid));
           return cid;
         };
@@ -729,30 +733,36 @@ export function createMapStore(): MapStore {
     },
 
     undo: () => {
-      const { past, future, doc } = get();
+      const { past, future, doc, selectedId, selectedIds } = get();
       if (past.length === 0) return;
       const prev = past[past.length - 1];
+      const sid = prev.nodes[selectedId ?? ''] ? selectedId : prev.rootIds[0] ?? null;
+      const sids = selectedIds.filter((i) => prev.nodes[i]);
       set({
         doc: prev,
         past: past.slice(0, -1),
         future: [doc, ...future].slice(0, HISTORY_LIMIT),
         dirty: true,
         editingId: null,
-        selectedId: prev.nodes[get().selectedId ?? ''] ? get().selectedId : prev.rootIds[0] ?? null,
+        selectedId: sid,
+        selectedIds: sids.length ? sids : sid ? [sid] : [],
       });
     },
 
     redo: () => {
-      const { past, future, doc } = get();
+      const { past, future, doc, selectedId, selectedIds } = get();
       if (future.length === 0) return;
       const next = future[0];
+      const sid = next.nodes[selectedId ?? ''] ? selectedId : next.rootIds[0] ?? null;
+      const sids = selectedIds.filter((i) => next.nodes[i]);
       set({
         doc: next,
         past: [...past, doc].slice(-HISTORY_LIMIT),
         future: future.slice(1),
         dirty: true,
         editingId: null,
-        selectedId: next.nodes[get().selectedId ?? ''] ? get().selectedId : next.rootIds[0] ?? null,
+        selectedId: sid,
+        selectedIds: sids.length ? sids : sid ? [sid] : [],
       });
     },
 

@@ -107,6 +107,22 @@ function defaultLabel(nodeIds: string[], centers: Centers): { x: number; y: numb
   return any ? { x: minX + 20, y: topY - SECTION_PAD - 16 } : null;
 }
 
+/** Resolve a node id to its center, or — if it's hidden (collapsed/filtered) — to
+ * the nearest visible ancestor's center, so a connection never silently vanishes. */
+function resolveCenter(
+  id: string,
+  centers: Centers,
+  nodes: Record<string, { parentId: string | null }>,
+): Center | null {
+  let cur: string | null = id;
+  while (cur) {
+    const c = centers[cur];
+    if (c) return c;
+    cur = nodes[cur]?.parentId ?? null;
+  }
+  return null;
+}
+
 interface DragState {
   id: string;
   x: number;
@@ -126,6 +142,7 @@ export function OverlaysBack({
 }) {
   const sections = useMap((s) => s.doc.sections) ?? NO_SECTS;
   const connections = useMap((s) => s.doc.connections) ?? NO_CONNS;
+  const nodes = useMap((s) => s.doc.nodes);
 
   return (
     <>
@@ -184,9 +201,10 @@ export function OverlaysBack({
 
       <svg className="edges conn-lines" width={1} height={1}>
         {connections.map((c) => {
-          const a = centers[c.from];
-          const z = centers[c.to];
-          if (!a || !z) return null;
+          // route to the nearest visible ancestor when an endpoint is collapsed/filtered
+          const a = resolveCenter(c.from, centers, nodes);
+          const z = resolveCenter(c.to, centers, nodes);
+          if (!a || !z || a === z) return null;
           const mid =
             dragPos && dragPos.id === c.id
               ? dragPos
@@ -222,6 +240,7 @@ export function OverlaysFront({
 }) {
   const connections = useMap((s) => s.doc.connections) ?? NO_CONNS;
   const sections = useMap((s) => s.doc.sections) ?? NO_SECTS;
+  const nodes = useMap((s) => s.doc.nodes);
   const setConnectionNote = useMap((s) => s.setConnectionNote);
   const setConnectionLabelPos = useMap((s) => s.setConnectionLabelPos);
   const removeConnection = useMap((s) => s.removeConnection);
@@ -303,9 +322,9 @@ export function OverlaysFront({
       })}
 
       {connections.map((c) => {
-        const a = centers[c.from];
-        const z = centers[c.to];
-        if (!a || !z) return null;
+        const a = resolveCenter(c.from, centers, nodes);
+        const z = resolveCenter(c.to, centers, nodes);
+        if (!a || !z || a === z) return null;
         const memoPos =
           dragPos && dragPos.id === c.id
             ? dragPos
@@ -378,13 +397,26 @@ function SectionLabel({
 }) {
   const [edit, setEdit] = useState(false);
   const [showColors, setShowColors] = useState(false);
+  // Buffer the title locally and commit once on blur/Enter — committing on every
+  // keystroke floods undo history and deep-clones the whole document per character.
+  const [draft, setDraft] = useState(title);
+  const committed = useRef(false);
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (edit) {
+      committed.current = false;
+      setDraft(title);
       ref.current?.focus();
       ref.current?.select();
     }
-  }, [edit]);
+  }, [edit, title]);
+
+  const finish = (save: boolean) => {
+    if (committed.current) return;
+    committed.current = true;
+    if (save && draft !== title) onTitle(draft);
+    setEdit(false);
+  };
 
   return (
     <div
@@ -410,14 +442,15 @@ function SectionLabel({
         <input
           ref={ref}
           className="section-title"
-          value={title}
+          value={draft}
           placeholder="섹션"
           onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => onTitle(e.target.value)}
-          onBlur={() => setEdit(false)}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => finish(true)}
           onKeyDown={(e) => {
             e.stopPropagation();
-            if (e.key === 'Enter' || e.key === 'Escape') setEdit(false);
+            if (e.key === 'Enter') finish(true);
+            else if (e.key === 'Escape') finish(false);
           }}
         />
       ) : (

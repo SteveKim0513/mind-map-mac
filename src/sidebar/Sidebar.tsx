@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { TreeNode } from '../../electron/preload';
 import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
+import { useSession } from '../store/sessionStore';
 import { emptyDoc, serialize } from '../io/formats';
 
 interface Props {
@@ -109,6 +110,9 @@ export function Sidebar({
     const trimmed = draft.trim();
     if (!trimmed || trimmed === displayName(node)) return;
     const newName = node.type === 'file' ? `${trimmed}.mind` : trimmed;
+    // Flush pending autosaves of affected tabs before moving the file on disk,
+    // so a debounced write can't land on the old path mid-rename.
+    await useSession.getState().flushSaves(node.path);
     const newPath = await window.api.rename(node.path, newName);
     await refresh();
     onRenamed(node.path, newPath);
@@ -133,6 +137,7 @@ export function Sidebar({
   const moveInto = async (src: string, destDir: string) => {
     setDropTarget(null);
     setDragging(null);
+    await useSession.getState().flushSaves(src); // avoid autosave racing the move
     const newPath = await window.api.move(src, destDir);
     if (!newPath) return; // no-op or illegal move
     if (destDir !== root) setExpanded(destDir, true);

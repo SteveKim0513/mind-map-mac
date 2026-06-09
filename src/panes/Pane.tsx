@@ -70,7 +70,11 @@ function PaneBody({
   useEffect(() => {
     if (!dirty || !filePath) return;
     const t = setTimeout(() => {
-      void window.api.save(filePath, serialize(store.getState().doc)).then((p) => {
+      // Save to the tab's *current* path (read at fire time), not the path captured
+      // when the timer was scheduled — guards against writing to a just-renamed path.
+      const target = store.getState().filePath;
+      if (!target) return;
+      void window.api.save(target, serialize(store.getState().doc)).then((p) => {
         if (p) markSaved(p);
       });
     }, 1000);

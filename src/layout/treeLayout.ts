@@ -251,10 +251,16 @@ export function layout(
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const p of positioned) {
+    // p.y is the node's vertical CENTER; include its height (and any below-box
+    // accessories like note/schedule chips) so tall edge nodes aren't clipped on fit.
+    const sz = sizes[p.node.id];
+    const h = sz?.h ?? DEFAULT_HEIGHT;
+    const top = p.y - h / 2;
+    const bottom = top + (sz?.below ?? h);
     minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
+    minY = Math.min(minY, top);
     maxX = Math.max(maxX, p.x + p.width);
-    maxY = Math.max(maxY, p.y);
+    maxY = Math.max(maxY, bottom);
   }
   if (!isFinite(minX)) {
     minX = minY = maxX = maxY = 0;
