@@ -21,7 +21,10 @@ export interface ReminderInfo {
   completed: boolean;
   dueDate: string | null; // local-time ISO, or null
   modifiedAt: string; // local-time ISO
+  tag: string | null; // owning node id (stamped in the reminder body), or null
 }
+
+const TAG_PREFIX = 'mindmap:';
 
 // Shared AppleScript handlers: format a date as local-time ISO and pad numbers.
 const SUFFIX = `
@@ -79,6 +82,7 @@ export async function remindersAvailable(): Promise<boolean> {
 export async function createReminder(opts: {
   title: string;
   dueDate: string | null;
+  nodeId: string;
 }): Promise<ReminderInfo> {
   const hasDate = opts.dueDate ? '1' : '0';
   const [y, mo, d, h, mi] = opts.dueDate ? dateParts(opts.dueDate) : ['0', '0', '0', '0', '0'];
@@ -86,9 +90,10 @@ export async function createReminder(opts: {
     `on run argv
       set theTitle to item 1 of argv
       set hasDate to item 2 of argv
+      set theTag to item 8 of argv
       tell application "Reminders"
         if not (exists list "${LIST}") then make new list with properties {name:"${LIST}"}
-        set newR to make new reminder at end of list "${LIST}" with properties {name:theTitle}
+        set newR to make new reminder at end of list "${LIST}" with properties {name:theTitle, body:theTag}
         if hasDate is "1" then
           set dd to current date
           set day of dd to 1
@@ -106,10 +111,17 @@ export async function createReminder(opts: {
       return rid & (character id 31) & my isoOf(md)
     end run
     ${SUFFIX}`,
-    [opts.title, hasDate, y, mo, d, h, mi],
+    [opts.title, hasDate, y, mo, d, h, mi, TAG_PREFIX + opts.nodeId],
   );
   const [id, modifiedAt] = out.split(US);
-  return { id, title: opts.title, completed: false, dueDate: opts.dueDate, modifiedAt };
+  return {
+    id,
+    title: opts.title,
+    completed: false,
+    dueDate: opts.dueDate,
+    modifiedAt,
+    tag: opts.nodeId,
+  };
 }
 
 /** Update an existing reminder. Returns the new modification ISO, or null if it
@@ -197,7 +209,10 @@ export async function queryReminders(): Promise<ReminderInfo[]> {
           set dueStr to ""
           set dd to due date of r
           if dd is not missing value then set dueStr to my isoOf(dd)
-          set outStr to outStr & rid & (character id 31) & nm & (character id 31) & (comp as string) & (character id 31) & (my isoOf(md)) & (character id 31) & dueStr & (character id 30)
+          set bodyStr to ""
+          set bd to body of r
+          if bd is not missing value then set bodyStr to bd
+          set outStr to outStr & rid & (character id 31) & nm & (character id 31) & (comp as string) & (character id 31) & (my isoOf(md)) & (character id 31) & dueStr & (character id 31) & bodyStr & (character id 30)
         end repeat
       end tell
       return outStr
@@ -210,13 +225,15 @@ export async function queryReminders(): Promise<ReminderInfo[]> {
     .split(RS)
     .filter((rec) => rec.length > 0)
     .map((rec) => {
-      const [id, title, comp, modifiedAt, dueStr] = rec.split(US);
+      const [id, title, comp, modifiedAt, dueStr, bodyStr] = rec.split(US);
+      const tag = bodyStr && bodyStr.startsWith(TAG_PREFIX) ? bodyStr.slice(TAG_PREFIX.length) : null;
       return {
         id,
         title: title ?? '',
         completed: comp === 'true',
         dueDate: dueStr ? dueStr : null,
         modifiedAt: modifiedAt ?? '',
+        tag,
       };
     });
 }

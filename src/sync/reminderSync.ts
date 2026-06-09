@@ -42,6 +42,21 @@ function scheduleReconcile() {
   debounceTimer = setTimeout(() => void reconcile(), DEBOUNCE_MS);
 }
 
+// True while sync applies its own write. zustand fires store subscriptions
+// synchronously inside the set(), so the subscription can check this flag to avoid
+// treating sync's own writes as user edits (which would re-trigger an osascript poll).
+let applyingSync = false;
+
+/** Apply a sync-originated patch without re-triggering a reconcile. */
+function patch(store: MapStore, id: string, fields: Record<string, unknown>) {
+  applyingSync = true;
+  try {
+    store.getState().applyReminderPatch(id, fields);
+  } finally {
+    applyingSync = false;
+  }
+}
+
 /** Keep one subscription per open tab; reconcile when a tab's document mutates. */
 function refreshSubs() {
   const tabs = useSession.getState().tabs;
@@ -60,7 +75,7 @@ function refreshSubs() {
       const d = store.getState().doc;
       if (d !== entry.lastDoc) {
         entry.lastDoc = d;
-        scheduleReconcile();
+        if (!applyingSync) scheduleReconcile(); // ignore sync's own writes
       }
     });
     subs.set(t.id, entry);
@@ -103,34 +118,41 @@ async function reconcile() {
 
     const list = await window.api.reminderQuery();
     const byId = new Map<string, ReminderInfo>(list.map((r) => [r.id, r]));
+    // node id → its existing reminder (stamped in the reminder body) — lets create
+    // be idempotent so undo/redo can't spawn duplicate reminders.
+    const byTag = new Map<string, ReminderInfo>();
+    for (const r of list) if (r.tag) byTag.set(r.tag, r);
 
     for (const { store, id } of tracked) {
       const n = store.getState().doc.nodes[id];
       if (!n) continue;
 
       if (n.reminderOn && !n.reminderId) {
-        // create
-        const res = await window.api.reminderCreate({
-          title: titleOf(n),
-          dueDate: n.scheduleAt ?? null,
-        });
-        store.getState().applyReminderPatch(id, {
-          reminderId: res.id,
-          reminderSyncedAt: ms(res.modifiedAt),
-          updatedAt: ms(res.modifiedAt),
-        });
+        const existing = byTag.get(id);
+        if (existing) {
+          // a reminder for this node already exists (e.g. after undo) — adopt it
+          patch(store, id, { reminderId: existing.id, reminderSyncedAt: ms(existing.modifiedAt) });
+        } else {
+          const res = await window.api.reminderCreate({
+            title: titleOf(n),
+            dueDate: n.scheduleAt ?? null,
+            nodeId: id,
+          });
+          patch(store, id, {
+            reminderId: res.id,
+            reminderSyncedAt: ms(res.modifiedAt),
+            updatedAt: ms(res.modifiedAt),
+          });
+        }
       } else if (!n.reminderOn && n.reminderId) {
         // user turned it off but id lingered — clean up
         await window.api.reminderDelete(n.reminderId);
-        store.getState().applyReminderPatch(id, {
-          reminderId: undefined,
-          reminderSyncedAt: undefined,
-        });
+        patch(store, id, { reminderId: undefined, reminderSyncedAt: undefined });
       } else if (n.reminderOn && n.reminderId) {
         const rem = byId.get(n.reminderId);
         if (!rem) {
           // deleted in the Reminders app → reflect by turning the toggle off
-          store.getState().applyReminderPatch(id, {
+          patch(store, id, {
             reminderOn: undefined,
             reminderId: undefined,
             reminderSyncedAt: undefined,
@@ -144,14 +166,19 @@ async function reconcile() {
         const localChanged = local > synced;
 
         if (remoteChanged && (!localChanged || remMs >= local)) {
-          // pull: Reminders → node
-          store.getState().applyReminderPatch(id, {
-            text: rem.title,
+          // pull: Reminders → node. Don't clobber the node's text when (a) it's being
+          // edited, or (b) the remote title is merely the whitespace-normalized form of
+          // the local text (which would silently strip newlines/extra spaces).
+          const editing = store.getState().editingId === id;
+          const titleIsNormalizedLocal = rem.title === titleOf(n);
+          const fields: Record<string, unknown> = {
             done: rem.completed || undefined,
             scheduleAt: rem.dueDate ?? undefined,
             reminderSyncedAt: remMs,
             updatedAt: remMs,
-          });
+          };
+          if (!editing && !titleIsNormalizedLocal) fields.text = rem.title;
+          patch(store, id, fields);
         } else if (localChanged) {
           // push: node → Reminders
           const newMod = await window.api.reminderUpdate({
@@ -161,13 +188,13 @@ async function reconcile() {
             dueDate: n.scheduleAt ?? null,
           });
           if (newMod === null) {
-            store.getState().applyReminderPatch(id, {
+            patch(store, id, {
               reminderOn: undefined,
               reminderId: undefined,
               reminderSyncedAt: undefined,
             });
           } else {
-            store.getState().applyReminderPatch(id, { reminderSyncedAt: ms(newMod) });
+            patch(store, id, { reminderSyncedAt: ms(newMod) });
           }
         }
       }

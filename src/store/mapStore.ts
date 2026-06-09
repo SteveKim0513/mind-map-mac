@@ -460,14 +460,19 @@ export function createMapStore(): MapStore {
       }),
 
     applyReminderPatch: (id, fields) => {
-      // Non-history update used by the sync engine. Keeps a stable doc identity
-      // change (so subscribers fire) and marks dirty so the new ids/state persist.
+      // Non-history update used by the sync engine. Only mark dirty when a persisted,
+      // user-meaningful field actually changes — pure bookkeeping (reminderSyncedAt/
+      // updatedAt) must not trigger autosave churn on every poll.
       const { doc } = get();
       const n = doc.nodes[id];
       if (!n) return;
+      const persistKeys = ['text', 'done', 'scheduleAt', 'reminderId', 'reminderOn'] as const;
+      const dirtied = persistKeys.some(
+        (k) => k in fields && (fields as Record<string, unknown>)[k] !== n[k],
+      );
       set({
         doc: { ...doc, nodes: { ...doc.nodes, [id]: { ...n, ...fields } } },
-        dirty: true,
+        ...(dirtied ? { dirty: true } : {}),
       });
     },
 

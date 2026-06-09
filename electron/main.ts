@@ -383,8 +383,10 @@ ipcMain.handle(
 // ─── macOS Reminders IPC (no-op off macOS) ───────────────────────────────────
 const isMac = process.platform === 'darwin';
 ipcMain.handle('reminders:available', async () => (isMac ? remindersAvailable() : false));
-ipcMain.handle('reminders:create', async (_e, opts: { title: string; dueDate: string | null }) =>
-  createReminder(opts),
+ipcMain.handle(
+  'reminders:create',
+  async (_e, opts: { title: string; dueDate: string | null; nodeId: string }) =>
+    createReminder(opts),
 );
 ipcMain.handle(
   'reminders:update',

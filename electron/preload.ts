@@ -15,6 +15,7 @@ export interface ReminderInfo {
   completed: boolean;
   dueDate: string | null; // local-time ISO, or null
   modifiedAt: string; // local-time ISO
+  tag: string | null; // owning node id, or null
 }
 
 const api = {
@@ -52,8 +53,11 @@ const api = {
 
   // ── macOS Reminders sync ──
   remindersAvailable: (): Promise<boolean> => ipcRenderer.invoke('reminders:available'),
-  reminderCreate: (opts: { title: string; dueDate: string | null }): Promise<ReminderInfo> =>
-    ipcRenderer.invoke('reminders:create', opts),
+  reminderCreate: (opts: {
+    title: string;
+    dueDate: string | null;
+    nodeId: string;
+  }): Promise<ReminderInfo> => ipcRenderer.invoke('reminders:create', opts),
   reminderUpdate: (opts: {
     id: string;
     title: string;

@@ -236,6 +236,18 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
     setPanning(true);
   };
 
+  // Block Chromium's native ctrl/⌘+wheel page zoom (React's onWheel can be passive,
+  // so preventDefault must come from a non-passive native listener).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const stop = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) e.preventDefault();
+    };
+    el.addEventListener('wheel', stop, { passive: false });
+    return () => el.removeEventListener('wheel', stop);
+  }, []);
+
   // ── Wheel: trackpad pan, ctrl/⌘ + wheel (pinch) zoom ──────────────────────
   const onWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
@@ -337,6 +349,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   const relayoutReq = useUi((s) => s.relayoutReq);
   useEffect(() => {
     if (relayoutReq === 0) return;
+    if (!active) return; // only the active pane responds to the global refresh nonce
     const els = containerRef.current?.querySelectorAll<HTMLElement>('[data-node-id]');
     if (els && els.length) {
       const next: Record<string, { w: number; h: number; below: number }> = {};
@@ -403,7 +416,10 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       className={`canvas${panning ? ' panning' : ''}${lod ? ' lod' : ''}`}
       onPointerDown={handleBackgroundPointerDown}
       onDoubleClick={(e) => {
-        // double-click empty canvas → new center topic at the cursor
+        // double-click empty canvas → new center topic at the cursor — but not when
+        // the gesture was used to dismiss an editor (its pointerdown just committed).
+        const st = mapStore.getState();
+        if (st.editingId || Date.now() - st.editCommittedAt < 250) return;
         const w = toWorld(e.clientX, e.clientY);
         addRootAt(w.x, w.y);
       }}
