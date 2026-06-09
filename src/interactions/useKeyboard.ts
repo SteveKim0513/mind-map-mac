@@ -1,0 +1,117 @@
+import { useEffect } from 'react';
+import { useSession } from '../store/sessionStore';
+import { useUi } from '../store/uiStore';
+
+/**
+ * Global keyboard shortcuts (standard mind-map scheme):
+ *   Enter = sibling · Tab = child · Space/F2 = edit · Delete = remove
+ *   arrows = navigate · ⌘/Ctrl+←/→ = collapse/expand
+ * Disabled while editing (the textarea owns the keyboard then).
+ */
+export function useKeyboard() {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const store = useSession.getState().activeStore();
+      if (!store) return; // home screen — no active document
+      const s = store.getState();
+
+      // never intercept while typing in a field (textarea, input, or contentEditable)
+      if (s.editingId) return;
+      const ae = document.activeElement as HTMLElement | null;
+      if (ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+
+      const sel = s.selectedId;
+
+      // ⌘C / ⌘V — copy / paste a subtree
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'v')) {
+        if (e.key === 'c' && sel) {
+          e.preventDefault();
+          s.copyNode(sel);
+          useUi.getState().toast('복사됨');
+        } else if (e.key === 'v') {
+          e.preventDefault();
+          if (s.hasClipboard()) {
+            s.pasteNode(sel);
+            useUi.getState().toast('붙여넣음');
+          }
+        }
+        return;
+      }
+
+      switch (e.key) {
+        case 'Tab':
+          e.preventDefault();
+          if (sel) s.addChild(sel);
+          break;
+        case 'Enter':
+          e.preventDefault();
+          // ⌘Enter toggles "done"
+          if (e.metaKey || e.ctrlKey) {
+            if (sel) s.toggleDone(sel);
+            break;
+          }
+          // Backup guard: ignore the Enter that just finished an edit (same key press
+          // that committed the text), so the first Enter only selects the node.
+          if (Date.now() - s.editCommittedAt < 50) break;
+          // selected node → sibling below; empty canvas / no selection → new center topic
+          if (sel) s.addSibling(sel);
+          else s.addRoot();
+          break;
+        case ' ':
+        case 'F2':
+          e.preventDefault();
+          if (sel) s.startEdit(sel);
+          break;
+        case 'Delete':
+        case 'Backspace':
+          e.preventDefault();
+          s.deleteSelected();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          // ⌥↑ reorders among siblings; plain ↑ navigates
+          if (e.altKey && sel) s.moveSibling(sel, 'up');
+          else s.navigate('up');
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          if (e.altKey && sel) s.moveSibling(sel, 'down');
+          else s.navigate('down');
+          break;
+        case 'ArrowLeft': {
+          e.preventDefault();
+          const n = sel ? s.doc.nodes[sel] : null;
+          // ⌘/Ctrl+← collapses; plain ← navigates to parent
+          if ((e.metaKey || e.ctrlKey) && n && n.children.length && !n.collapsed) s.toggleCollapse(sel!);
+          else s.navigate('left');
+          break;
+        }
+        case 'ArrowRight': {
+          e.preventDefault();
+          const n = sel ? s.doc.nodes[sel] : null;
+          // ⌘/Ctrl+→ expands; plain → navigates to first child
+          if ((e.metaKey || e.ctrlKey) && n && n.children.length && n.collapsed) s.toggleCollapse(sel!);
+          else s.navigate('right');
+          break;
+        }
+        case 'z':
+        case 'Z':
+          // Z (no modifier) → zoom to the selected subtree
+          if (!e.metaKey && !e.ctrlKey && sel) {
+            e.preventDefault();
+            useUi.getState().zoomTo(sel);
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          if (s.focusRootId) s.setFocus(null);
+          else if (s.colorFilter) s.setColorFilter(null);
+          else s.select(null);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+}

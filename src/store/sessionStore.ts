@@ -1,0 +1,356 @@
+import { create } from 'zustand';
+import { createMapStore, type MapStore } from './mapStore';
+import { deserialize, newId } from './../io/formats';
+
+export interface Tab {
+  id: string;
+  path: string;
+  title: string;
+  store: MapStore;
+}
+
+export interface RecentFile {
+  path: string;
+  name: string;
+  ts: number;
+}
+
+export type GroupIndex = 0 | 1;
+
+interface SessionState {
+  tabs: Tab[]; // pool of all open documents (one per file)
+  // Two editor groups (panes). A tab id lives in exactly one group.
+  leftTabs: string[];
+  leftActive: string | null;
+  rightTabs: string[];
+  rightActive: string | null;
+  split: boolean; // is the right group shown?
+  activeGroup: GroupIndex;
+  recent: RecentFile[];
+
+  // queries
+  activeTab: () => Tab | null;
+  activeStore: () => MapStore | null;
+  tabById: (id: string | null) => Tab | undefined;
+
+  // actions
+  openPath: (path: string, content: string) => void;
+  selectTab: (tabId: string, group: GroupIndex) => void;
+  closeTab: (tabId: string) => void;
+  closeAllTabs: () => void;
+  closeOtherTabs: (keepId: string) => void;
+  moveTab: (tabId: string, toGroup: GroupIndex) => void;
+  reorderTab: (tabId: string, group: GroupIndex, beforeTabId: string | null) => void;
+  toggleSplit: () => void;
+  setActiveGroup: (group: GroupIndex) => void;
+  renamePath: (oldPath: string, newPath: string) => void;
+  closeByPath: (path: string) => void;
+  hydrate: (files: { path: string; content: string }[], snap: SessionSnapshot) => void;
+}
+
+function base(path: string): string {
+  return (path.split('/').pop() ?? path).replace(/\.mind$/, '');
+}
+
+function makeTab(path: string, content: string): Tab {
+  const store = createMapStore();
+  store.getState().loadDoc(deserialize(content), path);
+  return { id: newId(), path, title: base(path), store };
+}
+
+// ── localStorage persistence ────────────────────────────────────────────────
+function loadRecent(): RecentFile[] {
+  try {
+    return JSON.parse(localStorage.getItem('recent') ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+export interface SessionSnapshot {
+  leftPaths: string[];
+  leftActivePath: string | null;
+  rightPaths: string[];
+  rightActivePath: string | null;
+  split: boolean;
+  activeGroup: GroupIndex;
+}
+
+export function loadSessionSnapshot(): SessionSnapshot | null {
+  try {
+    const s = localStorage.getItem('session');
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+}
+
+export const useSession = create<SessionState>((set, get) => {
+  const persist = () => {
+    const { tabs, leftTabs, leftActive, rightTabs, rightActive, split, activeGroup } = get();
+    const pathOf = (id: string | null) => tabs.find((t) => t.id === id)?.path ?? null;
+    const paths = (ids: string[]) => ids.map((id) => pathOf(id)).filter((p): p is string => !!p);
+    const snap: SessionSnapshot = {
+      leftPaths: paths(leftTabs),
+      leftActivePath: pathOf(leftActive),
+      rightPaths: paths(rightTabs),
+      rightActivePath: pathOf(rightActive),
+      split,
+      activeGroup,
+    };
+    localStorage.setItem('session', JSON.stringify(snap));
+    localStorage.setItem('recent', JSON.stringify(get().recent));
+  };
+
+  const pushRecent = (path: string) => {
+    const recent = [
+      { path, name: base(path), ts: Date.now() },
+      ...get().recent.filter((r) => r.path !== path),
+    ].slice(0, 12);
+    set({ recent });
+  };
+
+  const groupOf = (id: string): GroupIndex | -1 =>
+    get().leftTabs.includes(id) ? 0 : get().rightTabs.includes(id) ? 1 : -1;
+
+  /** Pick a group's active tab after `removed` left it (list already excludes removed). */
+  const neighborActive = (list: string[], removed: string, prevActive: string | null) =>
+    prevActive !== removed ? prevActive : list[list.length - 1] ?? null;
+
+  return {
+    tabs: [],
+    leftTabs: [],
+    leftActive: null,
+    rightTabs: [],
+    rightActive: null,
+    split: false,
+    activeGroup: 0,
+    recent: loadRecent(),
+
+    tabById: (id) => get().tabs.find((t) => t.id === id),
+    activeTab: () => {
+      const { activeGroup, split, leftActive, rightActive } = get();
+      const id = split && activeGroup === 1 ? rightActive : leftActive;
+      return get().tabs.find((t) => t.id === id) ?? null;
+    },
+    activeStore: () => get().activeTab()?.store ?? null,
+
+    openPath: (path, content) => {
+      const existing = get().tabs.find((t) => t.path === path);
+      if (existing) {
+        const g = groupOf(existing.id);
+        if (g === 1) set({ rightActive: existing.id, activeGroup: 1 });
+        else set({ leftActive: existing.id, activeGroup: 0 });
+        pushRecent(path);
+        persist();
+        return;
+      }
+      const tab = makeTab(path, content);
+      const toRight = get().split && get().activeGroup === 1;
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        ...(toRight
+          ? { rightTabs: [...s.rightTabs, tab.id], rightActive: tab.id, activeGroup: 1 as const }
+          : { leftTabs: [...s.leftTabs, tab.id], leftActive: tab.id, activeGroup: 0 as const }),
+      }));
+      pushRecent(path);
+      persist();
+    },
+
+    selectTab: (tabId, group) => {
+      if (group === 1 && !get().split) return;
+      set(group === 0 ? { leftActive: tabId, activeGroup: 0 } : { rightActive: tabId, activeGroup: 1 });
+      persist();
+    },
+
+    setActiveGroup: (group) => {
+      if (group === 1 && !get().split) return;
+      set({ activeGroup: group });
+      persist();
+    },
+
+    closeTab: (tabId) => {
+      const g = groupOf(tabId);
+      if (g === -1) return;
+      const s = get();
+      const tabs = s.tabs.filter((t) => t.id !== tabId);
+
+      if (g === 0) {
+        const leftTabs = s.leftTabs.filter((id) => id !== tabId);
+        let { rightTabs, rightActive, split, activeGroup } = s;
+        let leftActive = neighborActive(leftTabs, tabId, s.leftActive);
+        // if left emptied while split, pull the right group back into the left
+        if (leftTabs.length === 0 && split) {
+          set({
+            tabs,
+            leftTabs: rightTabs,
+            leftActive: rightActive,
+            rightTabs: [],
+            rightActive: null,
+            split: false,
+            activeGroup: 0,
+          });
+          persist();
+          return;
+        }
+        set({ tabs, leftTabs, leftActive, rightTabs, rightActive, split, activeGroup });
+      } else {
+        const rightTabs = s.rightTabs.filter((id) => id !== tabId);
+        const rightActive = neighborActive(rightTabs, tabId, s.rightActive);
+        if (rightTabs.length === 0) {
+          // right emptied → collapse the split
+          set({ tabs, rightTabs: [], rightActive: null, split: false, activeGroup: 0 });
+        } else {
+          set({ tabs, rightTabs, rightActive });
+        }
+      }
+      persist();
+    },
+
+    moveTab: (tabId, toGroup) => {
+      const from = groupOf(tabId);
+      if (from === -1 || from === toGroup) return;
+      const s = get();
+
+      if (toGroup === 1) {
+        // moving to the right creates the split if needed
+        const leftTabs = s.leftTabs.filter((id) => id !== tabId);
+        if (leftTabs.length === 0) return; // don't strand the left empty
+        set({
+          leftTabs,
+          leftActive: neighborActive(leftTabs, tabId, s.leftActive),
+          rightTabs: [...s.rightTabs, tabId],
+          rightActive: tabId,
+          split: true,
+          activeGroup: 1,
+        });
+      } else {
+        const rightTabs = s.rightTabs.filter((id) => id !== tabId);
+        set({
+          rightTabs,
+          rightActive: neighborActive(rightTabs, tabId, s.rightActive),
+          leftTabs: [...s.leftTabs, tabId],
+          leftActive: tabId,
+          activeGroup: 0,
+          split: rightTabs.length > 0,
+        });
+      }
+      persist();
+    },
+
+    closeAllTabs: () => {
+      set({
+        tabs: [],
+        leftTabs: [],
+        leftActive: null,
+        rightTabs: [],
+        rightActive: null,
+        split: false,
+        activeGroup: 0,
+      });
+      persist();
+    },
+
+    closeOtherTabs: (keepId) => {
+      const keep = get().tabs.find((t) => t.id === keepId);
+      if (!keep) return;
+      set({
+        tabs: [keep],
+        leftTabs: [keepId],
+        leftActive: keepId,
+        rightTabs: [],
+        rightActive: null,
+        split: false,
+        activeGroup: 0,
+      });
+      persist();
+    },
+
+    reorderTab: (tabId, group, beforeTabId) => {
+      const s = get();
+      const src = group === 0 ? s.leftTabs : s.rightTabs;
+      if (!src.includes(tabId)) {
+        // not in this group → treat as a cross-group move
+        get().moveTab(tabId, group);
+        return;
+      }
+      let arr = src.filter((t) => t !== tabId);
+      const idx = beforeTabId ? arr.indexOf(beforeTabId) : arr.length;
+      arr.splice(idx < 0 ? arr.length : idx, 0, tabId);
+      set(group === 0 ? { leftTabs: arr } : { rightTabs: arr });
+      persist();
+    },
+
+    toggleSplit: () => {
+      const s = get();
+      if (s.split) {
+        // merge the right group back into the left
+        set({
+          leftTabs: [...s.leftTabs, ...s.rightTabs],
+          leftActive: s.leftActive ?? s.rightActive,
+          rightTabs: [],
+          rightActive: null,
+          split: false,
+          activeGroup: 0,
+        });
+      } else {
+        if (s.leftTabs.length < 2) return; // need at least two tabs to split
+        const moving = s.leftActive ?? s.leftTabs[s.leftTabs.length - 1];
+        const leftTabs = s.leftTabs.filter((id) => id !== moving);
+        set({
+          leftTabs,
+          leftActive: leftTabs[leftTabs.length - 1] ?? null,
+          rightTabs: [moving],
+          rightActive: moving,
+          split: true,
+          activeGroup: 1,
+        });
+      }
+      persist();
+    },
+
+    renamePath: (oldPath, newPath) => {
+      set((s) => ({
+        tabs: s.tabs.map((t) => {
+          if (t.path === oldPath || t.path.startsWith(oldPath + '/')) {
+            const np = t.path.replace(oldPath, newPath);
+            t.store.getState().setFilePath(np);
+            return { ...t, path: np, title: base(np) };
+          }
+          return t;
+        }),
+      }));
+      persist();
+    },
+
+    closeByPath: (path) => {
+      const victims = get().tabs.filter((t) => t.path === path || t.path.startsWith(path + '/'));
+      victims.forEach((t) => get().closeTab(t.id));
+      // drop the deleted file (or anything under a deleted folder) from recents
+      set((s) => ({
+        recent: s.recent.filter((r) => r.path !== path && !r.path.startsWith(path + '/')),
+      }));
+      persist();
+    },
+
+    hydrate: (files, snap) => {
+      const pool = files.map((f) => makeTab(f.path, f.content));
+      const byPath = new Map(pool.map((t) => [t.path, t.id]));
+      const ids = (paths: string[]) =>
+        paths.map((p) => byPath.get(p)).filter((id): id is string => !!id);
+      const leftTabs = ids(snap.leftPaths);
+      const rightTabs = ids(snap.rightPaths);
+      const split = snap.split && rightTabs.length > 0;
+      set({
+        tabs: pool,
+        leftTabs,
+        leftActive: (snap.leftActivePath && byPath.get(snap.leftActivePath)) || leftTabs[0] || null,
+        rightTabs,
+        rightActive:
+          (snap.rightActivePath && byPath.get(snap.rightActivePath)) || rightTabs[0] || null,
+        split,
+        activeGroup: split ? snap.activeGroup : 0,
+      });
+    },
+  };
+});
