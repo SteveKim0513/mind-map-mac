@@ -17,6 +17,9 @@ export interface MindNode {
   reminderId?: string; // external Reminders id once created (sync key)
   reminderSyncedAt?: number; // ms — reminder's modification date at last reconcile
   updatedAt?: number; // ms — last local edit to a synced field (title/done/scheduleAt)
+  // Last agreed (synced) reminder content — the base for content-based change
+  // detection: a field changed iff its current value differs from this snapshot.
+  reminderBase?: { title: string; due: string | null; done: boolean };
   // Roots only: a manual anchor position (world coords). When set, the whole tree
   // is auto-laid-out relative to this point instead of being auto-stacked.
   manualPos?: { x: number; y: number };

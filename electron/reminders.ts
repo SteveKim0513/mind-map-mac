@@ -38,18 +38,36 @@ on isoOf(d)
 end isoOf
 `;
 
+export type OsaErrorKind = 'timeout' | 'denied' | 'error';
+
+/** Classify an execFile failure so the renderer can react (retry vs prompt vs back off).
+ * The kind is encoded as a message prefix because Error fields don't survive IPC. */
+function classify(err: unknown): { kind: OsaErrorKind; detail: string } {
+  const e = err as { killed?: boolean; signal?: string; stderr?: string; message?: string };
+  const stderr = String(e?.stderr ?? '');
+  if (e?.killed && e?.signal === 'SIGTERM') return { kind: 'timeout', detail: 'osascript timed out' };
+  if (/-1743|not authoriz|not allowed|-10004|Application isn.t running/i.test(stderr))
+    return { kind: 'denied', detail: stderr };
+  return { kind: 'error', detail: stderr || e?.message || 'unknown' };
+}
+
 // Reminders' AppleScript bridge wedges (hangs → SIGTERM timeout) when hit by
 // concurrent osascript processes. Serialize every call through one chain so at most
 // one osascript talks to Reminders at a time, regardless of caller.
 let osaChain: Promise<unknown> = Promise.resolve();
 
-async function osa(script: string, args: string[], timeout = 15000): Promise<string> {
+async function osa(script: string, args: string[], timeout = 6000): Promise<string> {
   const task = osaChain.then(async () => {
-    const { stdout } = await pexec('osascript', ['-e', script, ...args], {
-      timeout,
-      maxBuffer: 1024 * 1024 * 8,
-    });
-    return stdout.replace(/\n$/, '');
+    try {
+      const { stdout } = await pexec('osascript', ['-e', script, ...args], {
+        timeout,
+        maxBuffer: 1024 * 1024 * 8,
+      });
+      return stdout.replace(/\n$/, '');
+    } catch (err) {
+      const { kind, detail } = classify(err);
+      throw new Error(`OSA_${kind.toUpperCase()}: ${detail}`);
+    }
   });
   // keep the chain alive even if this call rejects
   osaChain = task.then(
@@ -57,6 +75,23 @@ async function osa(script: string, args: string[], timeout = 15000): Promise<str
     () => undefined,
   );
   return task;
+}
+
+/** Cheap liveness probe with a short timeout. Returns ok=false + kind on failure,
+ * never throwing — drives the renderer's heartbeat/backoff health loop. */
+export async function heartbeat(): Promise<{ ok: boolean; kind?: OsaErrorKind }> {
+  try {
+    await osa(`tell application "Reminders" to count lists`, [], 5000);
+    return { ok: true };
+  } catch (err) {
+    const msg = (err as Error).message || '';
+    const kind: OsaErrorKind = msg.includes('OSA_DENIED')
+      ? 'denied'
+      : msg.includes('OSA_TIMEOUT')
+        ? 'timeout'
+        : 'error';
+    return { ok: false, kind };
+  }
 }
 
 /** ISO → [year, month, day, hours, minutes] as strings (local time). */

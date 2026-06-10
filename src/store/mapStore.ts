@@ -466,7 +466,14 @@ export function createMapStore(): MapStore {
       const { doc } = get();
       const n = doc.nodes[id];
       if (!n) return;
-      const persistKeys = ['text', 'done', 'scheduleAt', 'reminderId', 'reminderOn'] as const;
+      const persistKeys = [
+        'text',
+        'done',
+        'scheduleAt',
+        'reminderId',
+        'reminderOn',
+        'reminderBase',
+      ] as const;
       const dirtied = persistKeys.some(
         (k) => k in fields && (fields as Record<string, unknown>)[k] !== n[k],
       );

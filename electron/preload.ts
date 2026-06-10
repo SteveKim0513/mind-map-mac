@@ -66,6 +66,8 @@ const api = {
   }): Promise<string | null> => ipcRenderer.invoke('reminders:update', opts),
   reminderDelete: (id: string): Promise<void> => ipcRenderer.invoke('reminders:delete', id),
   reminderQuery: (): Promise<ReminderInfo[]> => ipcRenderer.invoke('reminders:query'),
+  reminderHeartbeat: (): Promise<{ ok: boolean; kind?: 'timeout' | 'denied' | 'error' }> =>
+    ipcRenderer.invoke('reminders:heartbeat'),
 
   /** Subscribe to native menu commands. Returns an unsubscribe function. */
   onMenu: (cb: (action: string) => void) => {

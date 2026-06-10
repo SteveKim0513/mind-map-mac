@@ -31,6 +31,10 @@ interface UiState {
   openSchedule: (id: string) => void;
   closeSchedule: () => void;
 
+  // macOS Reminders sync health (drives a status indicator)
+  syncStatus: 'idle' | 'syncing' | 'ok' | 'down' | 'denied';
+  setSyncStatus: (s: 'idle' | 'syncing' | 'ok' | 'down' | 'denied') => void;
+
   // a tab currently being dragged (drives the pane split drop-zones)
   tabDragId: string | null;
   setTabDrag: (id: string | null) => void;
@@ -105,6 +109,9 @@ export const useUi = create<UiState>((set, get) => ({
   schedulePopoverId: null,
   openSchedule: (id) => set({ schedulePopoverId: id }),
   closeSchedule: () => set({ schedulePopoverId: null }),
+
+  syncStatus: 'idle',
+  setSyncStatus: (s) => set((cur) => (cur.syncStatus === s ? cur : { syncStatus: s })),
 
   tabDragId: null,
   setTabDrag: (id) => set({ tabDragId: id }),

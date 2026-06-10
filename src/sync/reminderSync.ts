@@ -2,11 +2,16 @@
 //
 // Outbound (app → Reminders) is event-driven: any edit to a synced node schedules a
 // reconcile. Inbound (Reminders → app) is polled, because Reminders gives no change
-// push — we reconcile on window focus and on a slow interval, but only while there
-// are tracked nodes and the window is visible, so idle cost is ~zero.
+// push — we reconcile on window focus and on a slow interval, only while there are
+// tracked nodes and the window is visible, so idle cost is ~zero.
 //
-// Conflict resolution is last-write-wins via timestamps: node.updatedAt (local edit)
-// vs the reminder's modification date. Whichever is newer wins.
+// Change detection is CONTENT-based: a field is "changed" iff its value differs from
+// the last agreed snapshot (node.reminderBase), independent of clocks. Only a genuine
+// both-sides conflict falls back to a timestamp tiebreak.
+//
+// A heartbeat/health layer guards the AppleScript bridge: osascript can hang or be
+// denied, so failures flip the engine to a "down/denied" state that pauses real work
+// and probes for recovery with exponential backoff instead of hammering.
 import { useSession } from '../store/sessionStore';
 import { useUi } from '../store/uiStore';
 import { setReminderDeleteHook, type MapStore } from '../store/mapStore';
@@ -15,20 +20,30 @@ import type { ReminderInfo } from '../../electron/preload';
 
 const POLL_MS = 45000;
 const DEBOUNCE_MS = 1200;
+const BACKOFF_MS = [5000, 15000, 45000, 120000]; // heartbeat retry schedule while down
+
+type Health = 'unknown' | 'ok' | 'down' | 'denied';
+type Base = { title: string; due: string | null; done: boolean };
 
 let started = false;
-let available: boolean | null = null;
+let health: Health = 'unknown';
 let warned = false;
 let syncing = false;
 let pending = false;
-// true while any reminder may still need reaping even if no node is currently
-// tracked (e.g. a registration was undone) — lets the poll keep running briefly.
+// keep polling a cycle longer if a reminder may still need reaping even with no
+// node currently tracked (e.g. a registration was undone)
 let pollUntracked = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+let backoffIndex = 0;
 
 // per-tab store subscriptions + the last doc we saw (to fire only on real mutations)
 const subs = new Map<string, { unsub: () => void; lastDoc: unknown }>();
+
+function setStatus(s: 'idle' | 'syncing' | 'ok' | 'down' | 'denied') {
+  useUi.getState().setSyncStatus(s);
+}
 
 function titleOf(n: MindNode): string {
   return (n.text || '').replace(/\s+/g, ' ').trim() || '제목 없음';
@@ -38,6 +53,10 @@ function ms(iso: string | undefined): number {
   if (!iso) return 0;
   const t = new Date(iso).getTime();
   return Number.isNaN(t) ? 0 : t;
+}
+
+function baseEq(a: Base | undefined, b: Base): boolean {
+  return !!a && a.title === b.title && a.due === b.due && a.done === b.done;
 }
 
 function scheduleReconcile() {
@@ -85,9 +104,63 @@ function refreshSubs() {
   }
 }
 
+// ── Health / heartbeat ────────────────────────────────────────────────────────
+
+function onFailure(err: unknown) {
+  const msg = String((err as Error)?.message ?? '');
+  const denied = msg.includes('OSA_DENIED');
+  health = denied ? 'denied' : 'down';
+  setStatus(health);
+  if (!warned) {
+    warned = true;
+    useUi
+      .getState()
+      .toast(
+        denied
+          ? '미리알림 권한이 필요합니다 — 시스템 설정 › 개인정보 보호 › 자동화'
+          : '미리알림 동기화 일시 중지 — 자동 재시도 중',
+      );
+  }
+  startHeartbeat();
+}
+
+function startHeartbeat() {
+  if (heartbeatTimer) return; // already probing
+  const delay = BACKOFF_MS[Math.min(backoffIndex, BACKOFF_MS.length - 1)];
+  heartbeatTimer = setTimeout(runHeartbeat, delay);
+}
+
+async function runHeartbeat() {
+  heartbeatTimer = null;
+  let res: { ok: boolean; kind?: string };
+  try {
+    res = await window.api.reminderHeartbeat();
+  } catch {
+    res = { ok: false, kind: 'error' };
+  }
+  if (res.ok) {
+    health = 'ok';
+    backoffIndex = 0;
+    warned = false; // allow a fresh warning if it breaks again
+    setStatus('ok');
+    void reconcile(); // catch up on anything we deferred
+  } else {
+    health = res.kind === 'denied' ? 'denied' : 'down';
+    setStatus(health);
+    backoffIndex = Math.min(backoffIndex + 1, BACKOFF_MS.length - 1);
+    startHeartbeat();
+  }
+}
+
+// ── Reconcile ──────────────────────────────────────────────────────────────────
+
 async function reconcile() {
   if (syncing) {
     pending = true;
+    return;
+  }
+  if (health === 'down' || health === 'denied') {
+    pending = true; // a heartbeat success will resume us
     return;
   }
   syncing = true;
@@ -103,25 +176,29 @@ async function reconcile() {
         if (n.reminderOn || n.reminderId) trackedCount++;
       }
     }
-    // Nothing to sync and no lingering reminders to reap → never touch osascript.
-    if (trackedCount === 0 && !pollUntracked) return;
-
-    // Re-probe until access is granted (so enabling permission in System Settings
-    // takes effect without an app restart); once true, trust it for the session.
-    if (available !== true) {
-      try {
-        available = await window.api.remindersAvailable();
-      } catch {
-        available = false;
-      }
-      if (available !== true) return;
+    if (trackedCount === 0 && !pollUntracked) {
+      setStatus('idle');
+      return;
     }
 
+    // First contact: a long-timeout availability probe handles the one-time
+    // permission dialog. Failures route through the heartbeat/backoff path.
+    if (health === 'unknown') {
+      const ok = await window.api.remindersAvailable();
+      if (!ok) {
+        health = 'denied';
+        setStatus('denied');
+        startHeartbeat();
+        return;
+      }
+      health = 'ok';
+    }
+
+    setStatus('syncing');
     const list = await window.api.reminderQuery();
     const byId = new Map<string, ReminderInfo>(list.map((r) => [r.id, r]));
-    // Reminder ownership is keyed by the node id stamped in the reminder body, so the
-    // link survives even when undo strips reminderId off the node. If two reminders
-    // share a tag (a duplicate slipped through), keep the newest and reap the rest.
+    // Ownership is keyed by the node id stamped in the reminder body, so the link
+    // survives even when undo strips reminderId. Duplicate tags → keep newest, reap rest.
     const byTag = new Map<string, ReminderInfo>();
     const dupes: ReminderInfo[] = [];
     for (const r of list) {
@@ -136,10 +213,11 @@ async function reconcile() {
       }
     }
     for (const d of dupes) {
-      if (d.tag && owners.has(d.tag)) await window.api.reminderDelete(d.id);
+      if (d.tag && owners.has(d.tag)) {
+        await window.api.reminderDelete(d.id);
+      }
     }
 
-    // Work set: nodes that want a reminder OR own an existing reminder.
     const workIds = new Set<string>();
     for (const [id, store] of owners) {
       const n = store.getState().doc.nodes[id];
@@ -153,17 +231,18 @@ async function reconcile() {
       if (!n) continue;
       const rem = byTag.get(id) ?? (n.reminderId ? byId.get(n.reminderId) : undefined);
 
+      // not wanted → delete the reminder (covers toggle-off and undone registration)
       if (!n.reminderOn) {
-        // reminder no longer wanted (toggled off, OR the registration was undone) →
-        // delete it so the Reminders app stays in sync.
-        if (rem) await window.api.reminderDelete(rem.id);
-        if (n.reminderId || n.reminderSyncedAt)
-          patch(store, id, { reminderId: undefined, reminderSyncedAt: undefined });
+        if (rem) {
+          await window.api.reminderDelete(rem.id);
+        }
+        if (n.reminderId || n.reminderBase)
+          patch(store, id, { reminderId: undefined, reminderSyncedAt: undefined, reminderBase: undefined });
         continue;
       }
 
+      // wanted but none exists → create (stamped with this node id)
       if (!rem) {
-        // wanted but no reminder exists yet → create (stamped with this node id)
         const res = await window.api.reminderCreate({
           title: titleOf(n),
           dueDate: n.scheduleAt ?? null,
@@ -171,59 +250,62 @@ async function reconcile() {
         });
         patch(store, id, {
           reminderId: res.id,
-          reminderSyncedAt: ms(res.modifiedAt),
           updatedAt: ms(res.modifiedAt),
+          reminderBase: { title: titleOf(n), due: n.scheduleAt ?? null, done: !!n.done },
         });
         continue;
       }
 
-      // wanted and a reminder exists → ensure the node caches its id, then reconcile
       if (n.reminderId !== rem.id) patch(store, id, { reminderId: rem.id });
 
-      const remMs = ms(rem.modifiedAt);
-      const synced = n.reminderSyncedAt ?? 0;
-      const local = n.updatedAt ?? 0;
-      const remoteChanged = remMs > synced;
-      const localChanged = local > synced;
+      // ── content-based change detection ──
+      const base = n.reminderBase;
+      const cur: Base = { title: titleOf(n), due: n.scheduleAt ?? null, done: !!n.done };
+      const remote: Base = { title: rem.title, due: rem.dueDate, done: rem.completed };
+      const localChanged = !baseEq(base, cur);
+      const remoteChanged = !baseEq(base, remote);
+      if (!localChanged && !remoteChanged) {
+        if (!base) patch(store, id, { reminderBase: remote }); // first link → record base
+        continue;
+      }
 
-      if (remoteChanged && (!localChanged || remMs >= local)) {
-        // pull: Reminders → node. Don't clobber the node's text when (a) it's being
-        // edited, or (b) the remote title is merely the whitespace-normalized form of
-        // the local text (which would silently strip newlines/extra spaces).
+      // both changed → tiebreak by recency; otherwise the changed side wins
+      const remMs = ms(rem.modifiedAt);
+      const local = n.updatedAt ?? 0;
+      const pull = remoteChanged && (!localChanged || remMs >= local);
+
+      if (pull) {
+        // Don't clobber the node's text while it's being edited, or when the remote
+        // title is merely the whitespace-normalized form of the local text.
         const editing = store.getState().editingId === id;
-        const titleIsNormalizedLocal = rem.title === titleOf(n);
+        const titleIsNormalizedLocal = remote.title === cur.title;
         const fields: Record<string, unknown> = {
-          done: rem.completed || undefined,
-          scheduleAt: rem.dueDate ?? undefined,
-          reminderSyncedAt: remMs,
-          updatedAt: remMs,
+          done: remote.done || undefined,
+          scheduleAt: remote.due ?? undefined,
+          reminderBase: remote,
         };
-        if (!editing && !titleIsNormalizedLocal) fields.text = rem.title;
+        if (!editing && !titleIsNormalizedLocal) fields.text = remote.title;
         patch(store, id, fields);
-      } else if (localChanged) {
-        // push: node → Reminders
+      } else {
         const newMod = await window.api.reminderUpdate({
           id: rem.id,
-          title: titleOf(n),
-          completed: !!n.done,
-          dueDate: n.scheduleAt ?? null,
+          title: cur.title,
+          completed: cur.done,
+          dueDate: cur.due,
         });
-        if (newMod === null) patch(store, id, { reminderId: undefined, reminderSyncedAt: undefined });
-        else patch(store, id, { reminderSyncedAt: ms(newMod) });
+        if (newMod === null)
+          patch(store, id, { reminderId: undefined, reminderBase: undefined });
+        else patch(store, id, { reminderBase: cur });
       }
     }
 
-    // Keep polling next cycle if any reminder remains that we could still act on
-    // (so an undo-orphaned reminder gets reaped even after the node is untracked).
     pollUntracked = [...byTag.keys()].some((tag) => owners.has(tag)) || workIds.size > 0;
-  } catch {
-    if (!warned) {
-      warned = true;
-      useUi.getState().toast('미리알림 동기화 오류 — 권한을 확인하세요');
-    }
+    setStatus('ok');
+  } catch (err) {
+    onFailure(err);
   } finally {
     syncing = false;
-    if (pending) {
+    if (pending && health === 'ok') {
       pending = false;
       scheduleReconcile();
     }
@@ -257,6 +339,7 @@ export function startReminderSync() {
 export function stopReminderSync() {
   if (pollTimer) clearInterval(pollTimer);
   if (debounceTimer) clearTimeout(debounceTimer);
+  if (heartbeatTimer) clearTimeout(heartbeatTimer);
   for (const [, s] of subs) s.unsub();
   subs.clear();
   setReminderDeleteHook(null);

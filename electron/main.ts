@@ -9,6 +9,7 @@ import {
   updateReminder,
   deleteReminder,
   queryReminders,
+  heartbeat,
 } from './reminders';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -395,3 +396,6 @@ ipcMain.handle(
 );
 ipcMain.handle('reminders:delete', async (_e, id: string) => deleteReminder(id));
 ipcMain.handle('reminders:query', async () => (isMac ? queryReminders() : []));
+ipcMain.handle('reminders:heartbeat', async () =>
+  isMac ? heartbeat() : { ok: false, kind: 'denied' as const },
+);
