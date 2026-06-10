@@ -15,6 +15,7 @@
 import { useSession } from '../store/sessionStore';
 import { useUi } from '../store/uiStore';
 import { setReminderDeleteHook, type MapStore } from '../store/mapStore';
+import { log } from '../lib/log';
 import type { MindNode } from '../types';
 import type { ReminderInfo } from '../../electron/preload';
 
@@ -110,6 +111,7 @@ function onFailure(err: unknown) {
   const msg = String((err as Error)?.message ?? '');
   const denied = msg.includes('OSA_DENIED');
   health = denied ? 'denied' : 'down';
+  log('warn', 'sync', `paused (${health}): ${msg.slice(0, 120)}`);
   setStatus(health);
   if (!warned) {
     warned = true;
@@ -142,6 +144,7 @@ async function runHeartbeat() {
     health = 'ok';
     backoffIndex = 0;
     warned = false; // allow a fresh warning if it breaks again
+    log('info', 'sync', 'recovered — resuming');
     setStatus('ok');
     void reconcile(); // catch up on anything we deferred
   } else {
@@ -164,6 +167,7 @@ async function reconcile() {
     return;
   }
   syncing = true;
+  const stats = { created: 0, pushed: 0, pulled: 0, deleted: 0 };
   try {
     // Map every open node id → its store, and note which nodes are reminder-related.
     const owners = new Map<string, MapStore>();
@@ -215,6 +219,7 @@ async function reconcile() {
     for (const d of dupes) {
       if (d.tag && owners.has(d.tag)) {
         await window.api.reminderDelete(d.id);
+        stats.deleted++;
       }
     }
 
@@ -235,6 +240,7 @@ async function reconcile() {
       if (!n.reminderOn) {
         if (rem) {
           await window.api.reminderDelete(rem.id);
+          stats.deleted++;
         }
         if (n.reminderId || n.reminderBase)
           patch(store, id, { reminderId: undefined, reminderSyncedAt: undefined, reminderBase: undefined });
@@ -253,6 +259,7 @@ async function reconcile() {
           updatedAt: ms(res.modifiedAt),
           reminderBase: { title: titleOf(n), due: n.scheduleAt ?? null, done: !!n.done },
         });
+        stats.created++;
         continue;
       }
 
@@ -286,6 +293,7 @@ async function reconcile() {
         };
         if (!editing && !titleIsNormalizedLocal) fields.text = remote.title;
         patch(store, id, fields);
+        stats.pulled++;
       } else {
         const newMod = await window.api.reminderUpdate({
           id: rem.id,
@@ -296,10 +304,18 @@ async function reconcile() {
         if (newMod === null)
           patch(store, id, { reminderId: undefined, reminderBase: undefined });
         else patch(store, id, { reminderBase: cur });
+        stats.pushed++;
       }
     }
 
     pollUntracked = [...byTag.keys()].some((tag) => owners.has(tag)) || workIds.size > 0;
+    const total = stats.created + stats.pushed + stats.pulled + stats.deleted;
+    if (total > 0)
+      log(
+        'info',
+        'sync',
+        `created ${stats.created}, pushed ${stats.pushed}, pulled ${stats.pulled}, deleted ${stats.deleted}`,
+      );
     setStatus('ok');
   } catch (err) {
     onFailure(err);

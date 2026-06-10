@@ -6,6 +6,7 @@
 // interpolated into the script) so arbitrary text can't break or inject AppleScript.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import log from './logger';
 
 const pexec = promisify(execFile);
 
@@ -66,6 +67,7 @@ async function osa(script: string, args: string[], timeout = 6000): Promise<stri
       return stdout.replace(/\n$/, '');
     } catch (err) {
       const { kind, detail } = classify(err);
+      log.warn(`[reminders] osascript ${kind}: ${detail.slice(0, 300)}`);
       throw new Error(`OSA_${kind.toUpperCase()}: ${detail}`);
     }
   });

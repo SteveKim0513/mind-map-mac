@@ -374,6 +374,7 @@ export const useSession = create<SessionState>((set, get) => {
         .filter((t): t is Tab => t !== null);
       const skipped = files.length - pool.length;
       if (skipped > 0) {
+        window.api?.log?.('warn', 'session', `restore skipped ${skipped} corrupt file(s)`);
         setTimeout(() => useUi.getState().toast(`${skipped}개 파일을 열 수 없어 건너뛰었습니다`), 0);
       }
       const byPath = new Map(pool.map((t) => [t.path, t.id]));

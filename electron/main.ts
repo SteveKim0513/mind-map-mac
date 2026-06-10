@@ -11,6 +11,7 @@ import {
   queryReminders,
   heartbeat,
 } from './reminders';
+import log, { logEvent, openLogsDir, type LogLevel } from './logger';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -102,6 +103,7 @@ function buildMenu() {
           click: () => send('menu', 'toggle-theme'),
         },
         { type: 'separator' },
+        { label: '로그 폴더 열기', click: () => void openLogsDir() },
         { role: 'toggleDevTools' },
         { role: 'togglefullscreen' },
       ],
@@ -129,12 +131,14 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  // Forward renderer console warnings/errors to the terminal for diagnostics.
+  // Forward renderer warnings/errors to the log file, minus the noisy dev-only
+  // Electron CSP security warning.
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
-    if (level >= 2) console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+    if (level >= 2 && !message.includes('Electron Security Warning'))
+      log.warn(`[renderer] ${message} (${sourceId}:${line})`);
   });
   win.webContents.on('render-process-gone', (_e, details) => {
-    console.log('[renderer gone]', details.reason);
+    log.error(`[renderer] process gone: ${details.reason}`);
   });
 
   if (VITE_DEV_SERVER_URL) {
@@ -145,11 +149,17 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  log.info(`[app] start v${app.getVersion()} on ${process.platform}`);
   buildMenu();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+// Renderer → file log bridge (fire-and-forget). Renderer logs events/metadata only.
+ipcMain.on('log:event', (_e, m: { level: LogLevel; scope: string; message: string }) => {
+  logEvent(m.level, m.scope, m.message);
 });
 
 app.on('window-all-closed', () => {
@@ -183,7 +193,12 @@ ipcMain.handle('file:save', async (_e, args: { path: string | null; content: str
     if (res.canceled || !res.filePath) return null;
     target = res.filePath;
   }
-  await fs.writeFile(target, args.content, 'utf-8');
+  try {
+    await fs.writeFile(target, args.content, 'utf-8');
+  } catch (err) {
+    log.error(`[file] save failed (${path.basename(target)}): ${(err as Error).message}`);
+    throw err;
+  }
   return target;
 });
 
@@ -333,6 +348,7 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
     try {
       await fs.access(next);
       next = await uniquePath(dir, base, ext); // collision → de-dupe like create/move
+      log.info(`[file] rename collision → de-duped to ${path.basename(next)}`);
     } catch {
       /* destination is free */
     }

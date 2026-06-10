@@ -69,6 +69,10 @@ const api = {
   reminderHeartbeat: (): Promise<{ ok: boolean; kind?: 'timeout' | 'denied' | 'error' }> =>
     ipcRenderer.invoke('reminders:heartbeat'),
 
+  /** Write a scoped event to the app log file (metadata only — never user content). */
+  log: (level: 'error' | 'warn' | 'info' | 'debug', scope: string, message: string): void =>
+    ipcRenderer.send('log:event', { level, scope, message }),
+
   /** Subscribe to native menu commands. Returns an unsubscribe function. */
   onMenu: (cb: (action: string) => void) => {
     const handler = (_e: unknown, action: string) => cb(action);

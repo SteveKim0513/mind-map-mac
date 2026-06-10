@@ -8,6 +8,9 @@ export default defineConfig({
     electron({
       main: {
         entry: 'electron/main.ts',
+        // Keep node-side deps external (required from node_modules at runtime) rather
+        // than bundled — electron-log relies on internal requires that don't bundle well.
+        vite: { build: { rollupOptions: { external: ['electron-log', 'electron-log/main'] } } },
       },
       preload: {
         input: 'electron/preload.ts',
