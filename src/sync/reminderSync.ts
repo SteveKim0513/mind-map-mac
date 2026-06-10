@@ -120,9 +120,24 @@ async function reconcile() {
     const list = await window.api.reminderQuery();
     const byId = new Map<string, ReminderInfo>(list.map((r) => [r.id, r]));
     // Reminder ownership is keyed by the node id stamped in the reminder body, so the
-    // link survives even when undo strips reminderId off the node.
+    // link survives even when undo strips reminderId off the node. If two reminders
+    // share a tag (a duplicate slipped through), keep the newest and reap the rest.
     const byTag = new Map<string, ReminderInfo>();
-    for (const r of list) if (r.tag) byTag.set(r.tag, r);
+    const dupes: ReminderInfo[] = [];
+    for (const r of list) {
+      if (!r.tag) continue;
+      const existing = byTag.get(r.tag);
+      if (!existing) {
+        byTag.set(r.tag, r);
+      } else {
+        const keep = ms(r.modifiedAt) >= ms(existing.modifiedAt) ? r : existing;
+        byTag.set(r.tag, keep);
+        dupes.push(keep === r ? existing : r);
+      }
+    }
+    for (const d of dupes) {
+      if (d.tag && owners.has(d.tag)) await window.api.reminderDelete(d.id);
+    }
 
     // Work set: nodes that want a reminder OR own an existing reminder.
     const workIds = new Set<string>();

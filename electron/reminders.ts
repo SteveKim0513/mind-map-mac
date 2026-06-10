@@ -38,12 +38,25 @@ on isoOf(d)
 end isoOf
 `;
 
-async function osa(script: string, args: string[], timeout = 20000): Promise<string> {
-  const { stdout } = await pexec('osascript', ['-e', script, ...args], {
-    timeout,
-    maxBuffer: 1024 * 1024 * 8,
+// Reminders' AppleScript bridge wedges (hangs → SIGTERM timeout) when hit by
+// concurrent osascript processes. Serialize every call through one chain so at most
+// one osascript talks to Reminders at a time, regardless of caller.
+let osaChain: Promise<unknown> = Promise.resolve();
+
+async function osa(script: string, args: string[], timeout = 15000): Promise<string> {
+  const task = osaChain.then(async () => {
+    const { stdout } = await pexec('osascript', ['-e', script, ...args], {
+      timeout,
+      maxBuffer: 1024 * 1024 * 8,
+    });
+    return stdout.replace(/\n$/, '');
   });
-  return stdout.replace(/\n$/, '');
+  // keep the chain alive even if this call rejects
+  osaChain = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
 }
 
 /** ISO → [year, month, day, hours, minutes] as strings (local time). */
