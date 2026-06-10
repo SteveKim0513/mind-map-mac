@@ -21,6 +21,9 @@ let available: boolean | null = null;
 let warned = false;
 let syncing = false;
 let pending = false;
+// true while any reminder may still need reaping even if no node is currently
+// tracked (e.g. a registration was undone) — lets the poll keep running briefly.
+let pollUntracked = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -82,11 +85,6 @@ function refreshSubs() {
   }
 }
 
-interface Tracked {
-  store: MapStore;
-  id: string;
-}
-
 async function reconcile() {
   if (syncing) {
     pending = true;
@@ -94,16 +92,19 @@ async function reconcile() {
   }
   syncing = true;
   try {
-    // gather nodes that are (or should be) mirrored, across all open tabs
-    const tracked: Tracked[] = [];
+    // Map every open node id → its store, and note which nodes are reminder-related.
+    const owners = new Map<string, MapStore>();
+    let trackedCount = 0;
     for (const t of useSession.getState().tabs) {
       const nodes = t.store.getState().doc.nodes;
       for (const id in nodes) {
+        owners.set(id, t.store);
         const n = nodes[id];
-        if (n.reminderOn || n.reminderId) tracked.push({ store: t.store, id });
+        if (n.reminderOn || n.reminderId) trackedCount++;
       }
     }
-    if (tracked.length === 0) return; // nothing to sync — never touch osascript
+    // Nothing to sync and no lingering reminders to reap → never touch osascript.
+    if (trackedCount === 0 && !pollUntracked) return;
 
     // Re-probe until access is granted (so enabling permission in System Settings
     // takes effect without an app restart); once true, trust it for the session.
@@ -118,87 +119,88 @@ async function reconcile() {
 
     const list = await window.api.reminderQuery();
     const byId = new Map<string, ReminderInfo>(list.map((r) => [r.id, r]));
-    // node id → its existing reminder (stamped in the reminder body) — lets create
-    // be idempotent so undo/redo can't spawn duplicate reminders.
+    // Reminder ownership is keyed by the node id stamped in the reminder body, so the
+    // link survives even when undo strips reminderId off the node.
     const byTag = new Map<string, ReminderInfo>();
     for (const r of list) if (r.tag) byTag.set(r.tag, r);
 
-    for (const { store, id } of tracked) {
+    // Work set: nodes that want a reminder OR own an existing reminder.
+    const workIds = new Set<string>();
+    for (const [id, store] of owners) {
+      const n = store.getState().doc.nodes[id];
+      if (n && (n.reminderOn || n.reminderId)) workIds.add(id);
+    }
+    for (const tag of byTag.keys()) if (owners.has(tag)) workIds.add(tag);
+
+    for (const id of workIds) {
+      const store = owners.get(id)!;
       const n = store.getState().doc.nodes[id];
       if (!n) continue;
+      const rem = byTag.get(id) ?? (n.reminderId ? byId.get(n.reminderId) : undefined);
 
-      if (n.reminderOn && !n.reminderId) {
-        const existing = byTag.get(id);
-        if (existing) {
-          // a reminder for this node already exists (e.g. after undo) — adopt it
-          patch(store, id, { reminderId: existing.id, reminderSyncedAt: ms(existing.modifiedAt) });
-        } else {
-          const res = await window.api.reminderCreate({
-            title: titleOf(n),
-            dueDate: n.scheduleAt ?? null,
-            nodeId: id,
-          });
-          patch(store, id, {
-            reminderId: res.id,
-            reminderSyncedAt: ms(res.modifiedAt),
-            updatedAt: ms(res.modifiedAt),
-          });
-        }
-      } else if (!n.reminderOn && n.reminderId) {
-        // user turned it off but id lingered — clean up
-        await window.api.reminderDelete(n.reminderId);
-        patch(store, id, { reminderId: undefined, reminderSyncedAt: undefined });
-      } else if (n.reminderOn && n.reminderId) {
-        const rem = byId.get(n.reminderId);
-        if (!rem) {
-          // deleted in the Reminders app → reflect by turning the toggle off
-          patch(store, id, {
-            reminderOn: undefined,
-            reminderId: undefined,
-            reminderSyncedAt: undefined,
-          });
-          continue;
-        }
-        const remMs = ms(rem.modifiedAt);
-        const synced = n.reminderSyncedAt ?? 0;
-        const local = n.updatedAt ?? 0;
-        const remoteChanged = remMs > synced;
-        const localChanged = local > synced;
+      if (!n.reminderOn) {
+        // reminder no longer wanted (toggled off, OR the registration was undone) →
+        // delete it so the Reminders app stays in sync.
+        if (rem) await window.api.reminderDelete(rem.id);
+        if (n.reminderId || n.reminderSyncedAt)
+          patch(store, id, { reminderId: undefined, reminderSyncedAt: undefined });
+        continue;
+      }
 
-        if (remoteChanged && (!localChanged || remMs >= local)) {
-          // pull: Reminders → node. Don't clobber the node's text when (a) it's being
-          // edited, or (b) the remote title is merely the whitespace-normalized form of
-          // the local text (which would silently strip newlines/extra spaces).
-          const editing = store.getState().editingId === id;
-          const titleIsNormalizedLocal = rem.title === titleOf(n);
-          const fields: Record<string, unknown> = {
-            done: rem.completed || undefined,
-            scheduleAt: rem.dueDate ?? undefined,
-            reminderSyncedAt: remMs,
-            updatedAt: remMs,
-          };
-          if (!editing && !titleIsNormalizedLocal) fields.text = rem.title;
-          patch(store, id, fields);
-        } else if (localChanged) {
-          // push: node → Reminders
-          const newMod = await window.api.reminderUpdate({
-            id: n.reminderId,
-            title: titleOf(n),
-            completed: !!n.done,
-            dueDate: n.scheduleAt ?? null,
-          });
-          if (newMod === null) {
-            patch(store, id, {
-              reminderOn: undefined,
-              reminderId: undefined,
-              reminderSyncedAt: undefined,
-            });
-          } else {
-            patch(store, id, { reminderSyncedAt: ms(newMod) });
-          }
-        }
+      if (!rem) {
+        // wanted but no reminder exists yet → create (stamped with this node id)
+        const res = await window.api.reminderCreate({
+          title: titleOf(n),
+          dueDate: n.scheduleAt ?? null,
+          nodeId: id,
+        });
+        patch(store, id, {
+          reminderId: res.id,
+          reminderSyncedAt: ms(res.modifiedAt),
+          updatedAt: ms(res.modifiedAt),
+        });
+        continue;
+      }
+
+      // wanted and a reminder exists → ensure the node caches its id, then reconcile
+      if (n.reminderId !== rem.id) patch(store, id, { reminderId: rem.id });
+
+      const remMs = ms(rem.modifiedAt);
+      const synced = n.reminderSyncedAt ?? 0;
+      const local = n.updatedAt ?? 0;
+      const remoteChanged = remMs > synced;
+      const localChanged = local > synced;
+
+      if (remoteChanged && (!localChanged || remMs >= local)) {
+        // pull: Reminders → node. Don't clobber the node's text when (a) it's being
+        // edited, or (b) the remote title is merely the whitespace-normalized form of
+        // the local text (which would silently strip newlines/extra spaces).
+        const editing = store.getState().editingId === id;
+        const titleIsNormalizedLocal = rem.title === titleOf(n);
+        const fields: Record<string, unknown> = {
+          done: rem.completed || undefined,
+          scheduleAt: rem.dueDate ?? undefined,
+          reminderSyncedAt: remMs,
+          updatedAt: remMs,
+        };
+        if (!editing && !titleIsNormalizedLocal) fields.text = rem.title;
+        patch(store, id, fields);
+      } else if (localChanged) {
+        // push: node → Reminders
+        const newMod = await window.api.reminderUpdate({
+          id: rem.id,
+          title: titleOf(n),
+          completed: !!n.done,
+          dueDate: n.scheduleAt ?? null,
+        });
+        if (newMod === null) patch(store, id, { reminderId: undefined, reminderSyncedAt: undefined });
+        else patch(store, id, { reminderSyncedAt: ms(newMod) });
       }
     }
+
+    // Keep polling next cycle if any reminder remains that we could still act on
+    // (so an undo-orphaned reminder gets reaped even after the node is untracked).
+    pollUntracked = [...byTag.keys()].some((tag) => owners.has(tag)) || workIds.size > 0;
   } catch {
     if (!warned) {
       warned = true;
