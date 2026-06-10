@@ -1,0 +1,23 @@
+# 결정 기록 (Decisions)
+
+"왜 이렇게 했더라"를 재논의하지 않기 위한 경량 기록. **번복 가능성이 있는 결정이면 3줄이라도 남긴다.**
+
+## 형식
+
+파일명: `NNNN-kebab-case-제목.md` (번호는 순번)
+
+```markdown
+# NNNN. 결정 제목
+
+날짜: YYYY-MM-DD · 상태: 채택 | 대체됨(→NNNN) | 폐기
+
+## 맥락 — 어떤 문제/선택지가 있었나 (2~3줄)
+## 결정 — 무엇을 택했나
+## 결과 — 감수한 트레이드오프, 다시 볼 조건
+```
+
+## 목록
+
+- [0001 — 노드 색은 hex가 아닌 시맨틱 키로 저장](0001-semantic-color-keys.md)
+- [0002 — 리마인더 AppleScript 호출 직렬화 + 본문 태그 소유권](0002-reminder-osascript-serialization.md)
+- [0003 — 노트는 독립 Markdown 파일 + 명시적 노드 링크](0003-notes-as-standalone-files.md)

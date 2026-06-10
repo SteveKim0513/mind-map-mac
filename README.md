@@ -2,6 +2,14 @@
 
 키보드 중심의 macOS 마인드맵 앱. Electron + React + TypeScript, d3-hierarchy 자동 정렬, Notion 디자인 시스템.
 
+## 문서
+
+제품·디자인·결정·릴리즈 문서는 [docs/](docs/README.md)에서 시작한다.
+- 무엇이 어떻게 동작하나 → [기능 인벤토리](docs/product/FEATURE-INVENTORY.md)
+- 왜 이 제품인가 → [제품 정의](docs/product/PRODUCT-DEFINITION.md)
+- 새 기능을 만들기 전에 → [기능 명세 템플릿](docs/product/TEMPLATE-feature-spec.md)
+- 배포하기 전에 → [릴리즈 프로세스](docs/release/RELEASE-PROCESS.md)
+
 ## 개발
 
 ```bash
