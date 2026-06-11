@@ -57,6 +57,32 @@ export async function addLinkToNoteFile(notePath: string, link: NoteLink): Promi
   reindexFromNote(notePath, note);
 }
 
+/**
+ * Remove a node link from a note FILE — symmetric with addLinkToNoteFile, so
+ * the node side can unlink too (spec: docs/product/specs/2026-06-11-entrypoint-matrix.md).
+ */
+export async function removeLinkFromNoteFile(
+  notePath: string,
+  mapId: string,
+  nodeId: string,
+): Promise<void> {
+  const tab = useSession.getState().tabs.find((t) => t.kind === 'note' && t.path === notePath);
+  if (tab) {
+    const store = tab.store as NoteStore;
+    store.getState().removeLink(mapId, nodeId);
+    await useSession.getState().flushSaves(notePath);
+    reindexFromNote(notePath, store.getState().note);
+    return;
+  }
+
+  // closed note → read / modify / write the file directly
+  const content = await window.api.readFile(notePath);
+  const note = parseNote(content, noteName(notePath));
+  note.links = note.links.filter((l) => !(l.mapId === mapId && l.nodeId === nodeId));
+  await window.api.save(notePath, serializeNote(note));
+  reindexFromNote(notePath, note);
+}
+
 /** Open (or focus) the map a link points at and center the linked node. */
 export async function revealNode(link: NoteLink): Promise<void> {
   const sess = useSession.getState();

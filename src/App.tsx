@@ -143,6 +143,9 @@ export default function App() {
         case 'toggle-sidebar':
           setSidebarVisible((v) => !v);
           break;
+        case 'toggle-split':
+          useSession.getState().toggleSplit();
+          break;
         case 'toggle-theme':
           useUi.getState().toggleTheme();
           break;

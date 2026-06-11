@@ -252,7 +252,13 @@ export function NodeView({
               onClick={(e) => {
                 e.stopPropagation();
                 const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                useUi.getState().openNotePopup([m.path], { x: r.left, y: r.bottom });
+                useUi
+                  .getState()
+                  .openNotePopup(
+                    [m.path],
+                    { x: r.left, y: r.bottom },
+                    docId ? { mapId: docId, nodeId: node.id } : undefined,
+                  );
               }}
             >
               <Icon name="note" />

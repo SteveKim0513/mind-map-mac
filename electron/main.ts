@@ -15,6 +15,12 @@ import log, { logEvent, openLogsDir, type LogLevel } from './logger';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Test/E2E isolation: redirect userData (settings.json, localStorage session)
+// so automated runs can never read or write the real user's state.
+if (process.env.MINDMAP_USER_DATA) {
+  app.setPath('userData', process.env.MINDMAP_USER_DATA);
+}
+
 // vite-plugin-electron injects these env vars during dev
 process.env.APP_ROOT = path.join(__dirname, '..');
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
@@ -96,6 +102,10 @@ function buildMenu() {
         {
           label: '사이드바 토글',
           click: () => send('menu', 'toggle-sidebar'),
+        },
+        {
+          label: '화면 분할 토글',
+          click: () => send('menu', 'toggle-split'),
         },
         {
           label: '다크 모드 전환',

@@ -3794,6 +3794,16 @@ textarea:focus-visible,
 }
 .note-popup-btn:hover { background: var(--canvas-soft); color: var(--ink); }
 .note-popup-btn .ic { width: 14px; height: 14px; }
+/* text variant — 연동 해제 */
+.note-popup-btn.unlink {
+  width: auto;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--ink-muted);
+}
+.note-popup-btn.unlink:hover { color: var(--state-danger); background: color-mix(in srgb, var(--state-danger) 10%, transparent); }
 .note-popup-switch {
   flex: none;
   display: flex;

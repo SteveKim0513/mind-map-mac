@@ -46,8 +46,17 @@ interface UiState {
 
   // note peek popup (opened from a node's link chip) — paths + the screen point
   // it was launched from (so the peek anchors near the node, not screen-center)
-  notePopup: { paths: string[]; anchor?: { x: number; y: number } } | null;
-  openNotePopup: (paths: string[], anchor?: { x: number; y: number }) => void;
+  notePopup: {
+    paths: string[];
+    anchor?: { x: number; y: number };
+    /** the node the popup was opened from — enables unlinking from the node side */
+    link?: { mapId: string; nodeId: string };
+  } | null;
+  openNotePopup: (
+    paths: string[],
+    anchor?: { x: number; y: number },
+    link?: { mapId: string; nodeId: string },
+  ) => void;
   closeNotePopup: () => void;
 
   // node→note link picker target (set from a node's "노트 연결" menu)
@@ -141,7 +150,8 @@ export const useUi = create<UiState>((set, get) => ({
   closeContextMenu: () => set({ contextMenu: null }),
 
   notePopup: null,
-  openNotePopup: (paths, anchor) => set({ notePopup: paths.length ? { paths, anchor } : null }),
+  openNotePopup: (paths, anchor, link) =>
+    set({ notePopup: paths.length ? { paths, anchor, link } : null }),
   closeNotePopup: () => set({ notePopup: null }),
 
   linkTarget: null,

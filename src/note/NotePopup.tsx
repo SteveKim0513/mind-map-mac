@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { useUi } from '../store/uiStore';
 import { useSession } from '../store/sessionStore';
 import { parseNote } from '../io/noteFormat';
+import { removeLinkFromNoteFile } from './noteLinks';
 import { renderMarkdown } from './markdown';
 import { Icon } from '../ui/Icon';
 import type { NoteDoc } from '../types';
@@ -103,6 +104,26 @@ export function NotePopup() {
     close();
   };
 
+  // unlink THIS note from the node the popup was opened from (symmetric with
+  // the note pane's 연동 해제) — stay open on the remaining notes if any
+  const unlink = async () => {
+    if (!popup.link) return;
+    try {
+      await removeLinkFromNoteFile(path, popup.link.mapId, popup.link.nodeId);
+    } catch {
+      useUi.getState().toast('연동을 해제하지 못했습니다');
+      return;
+    }
+    useUi.getState().toast('노트 연동을 해제했습니다');
+    const rest = popup.paths.filter((p) => p !== path);
+    if (rest.length) {
+      setIdx(0);
+      useUi.getState().openNotePopup(rest, anchor, popup.link);
+    } else {
+      requestClose();
+    }
+  };
+
   // anchored peek floats beside the node chip; the position is measured in the
   // layout effect above. Keep it hidden for the first (unmeasured) frame so it
   // never flashes at the wrong spot. No anchor → fall back to a centered modal.
@@ -137,6 +158,11 @@ export function NotePopup() {
             <Icon name="note" />
           </span>
           <span className="note-popup-title">{note?.title || nameOf(path)}</span>
+          {popup.link && (
+            <button className="note-popup-btn unlink" title="이 노드와의 연동 해제" onClick={() => void unlink()}>
+              연동 해제
+            </button>
+          )}
           <button className="note-popup-btn" title="수정 (오른쪽 분할로 열기)" onClick={() => void editInSplit()}>
             <Icon name="edit" />
           </button>

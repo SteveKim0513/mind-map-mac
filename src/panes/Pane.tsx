@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContext, useMap, useMapStore, type MapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
+import { useWorkspace } from '../store/workspaceStore';
 import { serialize } from '../io/formats';
+import { isUntitledName, fileNameFromTitle } from '../io/autoName';
 import { Canvas, type CanvasHandle } from '../canvas/Canvas';
 import { NodePopover } from '../inspector/NodePopover';
 import { SchedulePopover } from '../inspector/SchedulePopover';
@@ -10,7 +12,7 @@ import { ContextMenu } from '../menu/ContextMenu';
 import { Breadcrumb } from '../ui/Breadcrumb';
 import { Icon } from '../ui/Icon';
 import { tagVar } from '../theme/palette';
-import type { Tab } from '../store/sessionStore';
+import { useSession, type Tab } from '../store/sessionStore';
 
 interface Props {
   tab: Tab;
@@ -69,6 +71,34 @@ function PaneBody({
   useEffect(() => {
     onControls(isActive ? handle : null);
   }, [isActive, handle, onControls]);
+
+  // An untitled map takes its file name from the first center topic the user
+  // types (spec: docs/product/specs/2026-06-11-untitled-autoname.md). Fires at
+  // most once per file — after the rename the name no longer matches the pattern.
+  const editingId = useMap((s) => s.editingId);
+  const autoNaming = useRef(false);
+  useEffect(() => {
+    if (!filePath || autoNaming.current) return;
+    const base = (filePath.split('/').pop() ?? '').replace(/\.mind$/, '');
+    if (!isUntitledName(base)) return;
+    const rootId = doc.rootIds[0];
+    if (!rootId || editingId === rootId) return; // not while the title is being typed
+    const title = fileNameFromTitle(doc.nodes[rootId]?.text ?? '');
+    if (!title || title === base) return;
+    autoNaming.current = true;
+    void (async () => {
+      try {
+        await useSession.getState().flushSaves(filePath);
+        const newPath = await window.api.rename(filePath, `${title}.mind`);
+        useSession.getState().renamePath(filePath, newPath);
+        await useWorkspace.getState().refresh();
+      } catch {
+        /* keep the untitled name; a later edit retries */
+      } finally {
+        autoNaming.current = false;
+      }
+    })();
+  }, [doc, filePath, editingId]);
 
   // debounced autosave to this tab's file
   useEffect(() => {
