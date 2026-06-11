@@ -171,6 +171,13 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   divider: <path d="M3.4 10h3.1M8.9 10h2.2M13.5 10h3.1" />,
+  image: (
+    <>
+      <rect x="3.2" y="4.2" width="13.6" height="11.6" rx="2" />
+      <circle cx="7.3" cy="8.1" r="1.3" />
+      <path d="M4 14.2l3.8-3.6 2.7 2.4 2.5-2.2 3 2.8" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;

@@ -15,18 +15,25 @@ const k = () => `md${keySeq++}`;
 /** Inline spans within a line of text. */
 function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))/g;
+  // image ![alt](src) must precede link [text](url) so the "!" isn't left dangling
+  const re =
+    /(!\[([^\]]*)\]\(([^)]+)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     if (m.index > last) out.push(text.slice(last, m.index));
-    if (m[2] !== undefined) out.push(<strong key={k()}>{m[2]}</strong>);
-    else if (m[4] !== undefined) out.push(<em key={k()}>{m[4]}</em>);
-    else if (m[6] !== undefined) out.push(<code key={k()}>{m[6]}</code>);
-    else if (m[8] !== undefined)
+    if (m[1] !== undefined) {
+      // only inline base64 data images render — block remote/file src as a guard
+      const src = m[3];
+      if (/^data:image\//.test(src)) out.push(<img key={k()} src={src} alt={m[2]} />);
+      else out.push(<span key={k()}>{m[2] || '이미지'}</span>);
+    } else if (m[5] !== undefined) out.push(<strong key={k()}>{m[5]}</strong>);
+    else if (m[7] !== undefined) out.push(<em key={k()}>{m[7]}</em>);
+    else if (m[9] !== undefined) out.push(<code key={k()}>{m[9]}</code>);
+    else if (m[11] !== undefined)
       out.push(
-        <a key={k()} href={m[9]} target="_blank" rel="noreferrer">
-          {m[8]}
+        <a key={k()} href={m[12]} target="_blank" rel="noreferrer">
+          {m[11]}
         </a>,
       );
     last = m.index + m[0].length;

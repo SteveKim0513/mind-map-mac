@@ -4,9 +4,11 @@ import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
+import Image from '@tiptap/extension-image';
 import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 import { EditorToolbar } from './EditorToolbar';
 import { SlashMenu, type SlashItem } from './SlashMenu';
+import { fileToDataUrl, imageFilesFrom } from './imageInsert';
 
 interface Props {
   /** Initial Markdown body. The editor owns the document after mount; the parent
@@ -48,6 +50,23 @@ export function NoteEditor({ body, onChange }: Props) {
     query: '',
   });
   const editorRef = useRef<Editor | null>(null);
+
+  // Insert one or more images as size-capped base64 (paste / drop / toolbar).
+  // Returns true when it took over the event so the editor skips default paste.
+  const insertImages = (files: File[]): boolean => {
+    if (!files.length) return false;
+    void (async () => {
+      for (const file of files) {
+        try {
+          const src = await fileToDataUrl(file);
+          editorRef.current?.chain().focus().setImage({ src }).run();
+        } catch {
+          /* skip an unreadable image */
+        }
+      }
+    })();
+    return true;
+  };
 
   const close = () => {
     if (!m.current.open) return;
@@ -96,10 +115,13 @@ export function NoteEditor({ body, onChange }: Props) {
       TaskList,
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: PLACEHOLDER }),
+      Image.configure({ inline: false, allowBase64: true }),
       Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
     ],
     content: body,
     editorProps: {
+      handlePaste: (_view, event) => insertImages(imageFilesFrom(event.clipboardData)),
+      handleDrop: (_view, event) => insertImages(imageFilesFrom(event.dataTransfer)),
       // Cmd/Ctrl-click a link to open it externally (plain click keeps editing).
       // openOnClick stays false so a bare click never navigates the Electron shell.
       handleClick: (_view, _pos, event) => {

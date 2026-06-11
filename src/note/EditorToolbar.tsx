@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useEditorState, type Editor } from '@tiptap/react';
 import { Icon } from '../ui/Icon';
+import { fileToDataUrl } from './imageInsert';
 
 // Toolbar bound to the live TipTap editor. Buttons run editor commands and light
 // up when the cursor sits inside the matching formatting.
@@ -27,6 +28,19 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
   })!;
 
   const chain = () => editor.chain().focus();
+
+  const fileRef = useRef<HTMLInputElement>(null);
+  const onPickImages = async (files: FileList | null) => {
+    for (const file of Array.from(files ?? [])) {
+      try {
+        const src = await fileToDataUrl(file);
+        editor.chain().focus().setImage({ src }).run();
+      } catch {
+        /* skip */
+      }
+    }
+    if (fileRef.current) fileRef.current.value = '';
+  };
 
   const onLinkClick = () => {
     if (active.link) {
@@ -147,7 +161,16 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
       <span className="md-tb-sep" aria-hidden="true" />
       <div className="md-tb-group">
         <Btn on={active.link} title="링크" onClick={onLinkClick}><Icon name="link" /></Btn>
+        <Btn title="이미지" onClick={() => fileRef.current?.click()}><Icon name="image" /></Btn>
         <Btn title="구분선" onClick={() => chain().setHorizontalRule().run()}><Icon name="divider" /></Btn>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => void onPickImages(e.target.files)}
+        />
       </div>
     </div>
   );

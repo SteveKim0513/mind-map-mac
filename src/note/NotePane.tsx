@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NoteContext, useNote, useNoteStore, type NoteStore } from '../store/noteStore';
 import { serializeNote } from '../io/noteFormat';
+import { fileNameFromTitle } from '../io/autoName';
 import { NoteEditor } from './NoteEditor';
 import { NodePicker } from './NodePicker';
 import { addLinkToNoteFile, reindexFromNote, revealNode } from './noteLinks';
@@ -73,6 +74,34 @@ function NotePaneBody() {
     }, 800);
     return () => clearTimeout(t);
   }, [dirty, note, filePath, markSaved, store]);
+
+  // The title drives the file name (spec: note-title-filename-sync). Debounced
+  // rename, one-directional: editing the title renames the .md so the sidebar
+  // and tab follow. Attached notes stay in .notes/ (rename keeps the dirname).
+  const renaming = useRef(false);
+  useEffect(() => {
+    if (!filePath || renaming.current) return;
+    const base = (filePath.split('/').pop() ?? '').replace(/\.md$/, '');
+    const wanted = fileNameFromTitle(note.title);
+    if (!wanted || wanted === base) return;
+    const t = setTimeout(() => {
+      renaming.current = true;
+      void (async () => {
+        const sess = useSession.getState();
+        try {
+          await sess.flushSaves(filePath); // write frontmatter before moving the file
+          const newPath = await window.api.rename(filePath, `${wanted}.md`);
+          sess.renamePath(filePath, newPath);
+          await useWorkspace.getState().refresh();
+        } catch {
+          /* keep the current name; a later edit retries */
+        } finally {
+          renaming.current = false;
+        }
+      })();
+    }, 600);
+    return () => clearTimeout(t);
+  }, [note.title, filePath]);
 
   return (
     <div className="note-doc">

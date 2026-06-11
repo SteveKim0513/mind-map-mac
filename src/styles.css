@@ -3336,6 +3336,19 @@ textarea:focus-visible,
 .note-preview { color: var(--ink-secondary); }
 .note-rich .ProseMirror > :first-child,
 .note-preview > :first-child { margin-top: 0; }
+/* embedded images never overflow the column; centered with a soft frame */
+.note-rich .ProseMirror img,
+.note-preview img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 12px auto;
+  border-radius: var(--r-md);
+}
+.note-rich .ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
 .note-rich .ProseMirror h1, .note-rich .ProseMirror h2, .note-rich .ProseMirror h3, .note-rich .ProseMirror h4,
 .note-preview h1, .note-preview h2, .note-preview h3, .note-preview h4 {
   color: var(--ink);
