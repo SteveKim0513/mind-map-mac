@@ -23,6 +23,6 @@
 
 ## 패키징 전 점검 (코드)
 
-- [ ] DevTools 메뉴가 배포 빌드에서 숨겨지는가 (`app.isPackaged` 분기) — **현재 미구현, 첫 배포 전 필수**
+- [x] DevTools 메뉴가 배포 빌드에서 숨겨지는가 (`app.isPackaged` 분기) — 2026-06-11 구현
 - [ ] 로그 레벨이 배포에 적절한가 (electron-log)
 - [ ] `npm run typecheck && npm test` 통과

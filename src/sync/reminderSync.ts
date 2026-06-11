@@ -124,7 +124,14 @@ function onFailure(err: unknown) {
           : '동기화 일시 중지 — 자동 재시도 중',
       );
   }
-  startHeartbeat();
+  // Escalate per real failure, not per failed probe: the heartbeat is a cheap
+  // "count lists" while reconcile does the expensive query, so a passing probe
+  // must not reset the schedule — that pinned the loop at the shortest interval
+  // (probe ok → reconcile times out → probe ok → …) burning a timeout each cycle.
+  if (!heartbeatTimer) {
+    startHeartbeat(); // schedules with the CURRENT index…
+    backoffIndex = Math.min(backoffIndex + 1, BACKOFF_MS.length - 1); // …next failure waits longer
+  }
 }
 
 function startHeartbeat() {
@@ -143,11 +150,10 @@ async function runHeartbeat() {
   }
   if (res.ok) {
     health = 'ok';
-    backoffIndex = 0;
     warned = false; // allow a fresh warning if it breaks again
-    log('info', 'sync', 'recovered — resuming');
+    log('info', 'sync', 'probe ok — retrying reconcile');
     setStatus('ok');
-    void reconcile(); // catch up on anything we deferred
+    void reconcile(); // the real recovery test — resets the backoff on success
   } else {
     health = res.kind === 'denied' ? 'denied' : 'down';
     setStatus(health);
@@ -320,6 +326,7 @@ async function reconcile() {
         `created ${stats.created}, pushed ${stats.pushed}, pulled ${stats.pulled}, deleted ${stats.deleted}`,
       );
     setStatus('ok');
+    backoffIndex = 0; // only a REAL successful pass proves recovery (see onFailure)
   } catch (err) {
     onFailure(err);
   } finally {

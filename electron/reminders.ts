@@ -245,30 +245,37 @@ export async function deleteReminder(id: string): Promise<void> {
 
 /** All reminders currently in the MindMap list. */
 export async function queryReminders(): Promise<ReminderInfo[]> {
+  // Fetch each property as ONE batched Apple Event (reference form `… of reminders`).
+  // The Reminders bridge costs hundreds of ms per event, so the per-item loop this
+  // replaces took ~23s for a 3-item list (measured) — past any timeout. Batched: <1s.
   const out = await osa(
     `on run argv
       set outStr to ""
       tell application "Reminders"
         if not (exists list "${LIST}") then return ""
-        set rs to reminders of list "${LIST}"
-        repeat with r in rs
-          set rid to id of r
-          set nm to name of r
-          set comp to completed of r
-          set md to modification date of r
-          set dueStr to ""
-          set dd to due date of r
-          if dd is not missing value then set dueStr to my isoOf(dd)
-          set bodyStr to ""
-          set bd to body of r
-          if bd is not missing value then set bodyStr to bd
-          set outStr to outStr & rid & (character id 31) & nm & (character id 31) & (comp as string) & (character id 31) & (my isoOf(md)) & (character id 31) & dueStr & (character id 31) & bodyStr & (character id 30)
-        end repeat
+        tell list "${LIST}"
+          set ids to id of reminders
+          set nms to name of reminders
+          set comps to completed of reminders
+          set mds to modification date of reminders
+          set dds to due date of reminders
+          set bds to body of reminders
+        end tell
       end tell
+      repeat with i from 1 to count of ids
+        set dueStr to ""
+        set dd to item i of dds
+        if dd is not missing value then set dueStr to my isoOf(dd)
+        set bodyStr to ""
+        set bd to item i of bds
+        if bd is not missing value then set bodyStr to bd
+        set outStr to outStr & (item i of ids) & (character id 31) & (item i of nms) & (character id 31) & ((item i of comps) as string) & (character id 31) & (my isoOf(item i of mds)) & (character id 31) & dueStr & (character id 31) & bodyStr & (character id 30)
+      end repeat
       return outStr
     end run
     ${SUFFIX}`,
     [],
+    15000, // headroom for large lists — batching keeps per-item growth cheap
   );
   if (!out) return [];
   return out

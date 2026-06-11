@@ -114,7 +114,8 @@ function buildMenu() {
         },
         { type: 'separator' },
         { label: '로그 폴더 열기', click: () => void openLogsDir() },
-        { role: 'toggleDevTools' },
+        // dev-only: keep DevTools out of distributed builds
+        ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' } as MenuItemConstructorOptions]),
         { role: 'togglefullscreen' },
       ],
     },
