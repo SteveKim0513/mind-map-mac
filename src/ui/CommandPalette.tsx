@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Icon, type IconName } from './Icon';
 
 export interface Command {
   id: string;
   label: string;
   hint?: string;
-  icon?: string;
+  icon?: IconName;
   run: () => void;
 }
 
@@ -31,7 +32,7 @@ export function CommandPalette({
       id: `file:${f.path}`,
       label: f.name,
       hint: f.folder,
-      icon: '🗒',
+      icon: 'file',
       run: f.run,
       group: '파일',
     }));
@@ -96,7 +97,11 @@ export function CommandPalette({
                     onClick={() => choose(i)}
                   >
                     <span className="qo-name">
-                      {it.icon ? `${it.icon} ` : ''}
+                      {it.icon && (
+                        <span className="qo-ic">
+                          <Icon name={it.icon} />
+                        </span>
+                      )}
                       {it.label}
                     </span>
                     {it.hint && <span className="qo-folder">{it.hint}</span>}

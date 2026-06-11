@@ -46,23 +46,23 @@ function buildMenu() {
         ]
       : []),
     {
-      label: 'File',
+      label: '파일',
       submenu: [
-        { label: 'New', accelerator: 'CmdOrCtrl+N', click: () => send('menu', 'new') },
-        { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: () => send('menu', 'open') },
+        { label: '새로 만들기', accelerator: 'CmdOrCtrl+N', click: () => send('menu', 'new') },
+        { label: '열기…', accelerator: 'CmdOrCtrl+O', click: () => send('menu', 'open') },
         { type: 'separator' },
-        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => send('menu', 'save') },
-        { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('menu', 'saveAs') },
+        { label: '저장', accelerator: 'CmdOrCtrl+S', click: () => send('menu', 'save') },
+        { label: '다른 이름으로 저장…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('menu', 'saveAs') },
         { type: 'separator' },
         {
-          label: 'Import',
+          label: '가져오기',
           submenu: [
             { label: 'Markdown (.md)…', click: () => send('menu', 'import-markdown') },
             { label: 'OPML (.opml)…', click: () => send('menu', 'import-opml') },
           ],
         },
         {
-          label: 'Export',
+          label: '내보내기',
           submenu: [
             { label: 'Markdown (.md)…', click: () => send('menu', 'export-markdown') },
             { label: 'OPML (.opml)…', click: () => send('menu', 'export-opml') },
@@ -73,12 +73,12 @@ function buildMenu() {
       ],
     },
     {
-      label: 'Edit',
+      label: '편집',
       submenu: [
-        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => send('menu', 'undo') },
-        { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => send('menu', 'redo') },
+        { label: '실행 취소', accelerator: 'CmdOrCtrl+Z', click: () => send('menu', 'undo') },
+        { label: '다시 실행', accelerator: 'CmdOrCtrl+Shift+Z', click: () => send('menu', 'redo') },
         { type: 'separator' },
-        { label: 'Find…', accelerator: 'CmdOrCtrl+F', click: () => send('menu', 'find') },
+        { label: '찾기…', accelerator: 'CmdOrCtrl+F', click: () => send('menu', 'find') },
         { type: 'separator' },
         { role: 'cut' },
         { role: 'copy' },
@@ -87,18 +87,18 @@ function buildMenu() {
       ],
     },
     {
-      label: 'View',
+      label: '보기',
       submenu: [
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: () => send('menu', 'zoom-in') },
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => send('menu', 'zoom-out') },
-        { label: 'Fit to Screen', accelerator: 'CmdOrCtrl+0', click: () => send('menu', 'zoom-fit') },
+        { label: '확대', accelerator: 'CmdOrCtrl+=', click: () => send('menu', 'zoom-in') },
+        { label: '축소', accelerator: 'CmdOrCtrl+-', click: () => send('menu', 'zoom-out') },
+        { label: '화면에 맞추기', accelerator: 'CmdOrCtrl+0', click: () => send('menu', 'zoom-fit') },
         { type: 'separator' },
         {
-          label: 'Toggle Sidebar',
+          label: '사이드바 토글',
           click: () => send('menu', 'toggle-sidebar'),
         },
         {
-          label: 'Toggle Dark Mode',
+          label: '다크 모드 전환',
           accelerator: 'CmdOrCtrl+Shift+L',
           click: () => send('menu', 'toggle-theme'),
         },
@@ -264,7 +264,7 @@ interface TreeNode {
   children?: TreeNode[];
 }
 
-/** Recursively list folders and .mind files (hidden entries skipped). */
+/** Recursively list folders, .mind maps, and .md notes (hidden entries skipped). */
 async function walk(dir: string): Promise<TreeNode[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const nodes: TreeNode[] = [];
@@ -273,7 +273,7 @@ async function walk(dir: string): Promise<TreeNode[]> {
     const full = path.join(dir, ent.name);
     if (ent.isDirectory()) {
       nodes.push({ name: ent.name, path: full, type: 'dir', children: await walk(full) });
-    } else if (ent.name.endsWith('.mind')) {
+    } else if (ent.name.endsWith('.mind') || ent.name.endsWith('.md')) {
       nodes.push({ name: ent.name, path: full, type: 'file' });
     }
   }
@@ -325,10 +325,26 @@ ipcMain.handle('fs:read', async (_e, filePath: string) => {
   return fs.readFile(filePath, 'utf-8');
 });
 
-ipcMain.handle('fs:createFile', async (_e, args: { dir: string; name: string; content: string }) => {
-  const full = await uniquePath(args.dir, args.name, '.mind');
-  await fs.writeFile(full, args.content, 'utf-8');
-  return full;
+ipcMain.handle(
+  'fs:createFile',
+  async (_e, args: { dir: string; name: string; content: string; ext?: string }) => {
+    await fs.mkdir(args.dir, { recursive: true }); // auto-create dir (e.g. hidden .notes)
+    const full = await uniquePath(args.dir, args.name, args.ext ?? '.mind');
+    await fs.writeFile(full, args.content, 'utf-8');
+    return full;
+  },
+);
+
+// List the hidden attached-notes folder (.notes/*.md) — these never appear in the
+// sidebar tree (walk skips dot-folders) but must still be indexed for node chips.
+ipcMain.handle('attached:list', async () => {
+  const dir = path.join(await getWorkspace(), '.notes');
+  try {
+    const ents = await fs.readdir(dir);
+    return ents.filter((n) => n.endsWith('.md')).map((n) => path.join(dir, n));
+  } catch {
+    return [];
+  }
 });
 
 ipcMain.handle('fs:createFolder', async (_e, args: { dir: string; name: string }) => {
@@ -343,7 +359,11 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
   // Guard against clobbering an existing different file (fs.rename overwrites silently).
   // Skip when it's the same file (e.g. a case-only rename on a case-insensitive FS).
   if (next.toLowerCase() !== args.path.toLowerCase()) {
-    const ext = args.newName.endsWith('.mind') ? '.mind' : '';
+    const ext = args.newName.endsWith('.mind')
+      ? '.mind'
+      : args.newName.endsWith('.md')
+        ? '.md'
+        : '';
     const base = ext ? args.newName.slice(0, -ext.length) : args.newName;
     try {
       await fs.access(next);
@@ -415,3 +435,29 @@ ipcMain.handle('reminders:query', async () => (isMac ? queryReminders() : []));
 ipcMain.handle('reminders:heartbeat', async () =>
   isMac ? heartbeat() : { ok: false, kind: 'denied' as const },
 );
+
+// ─── Web fetch (for "URL → note") — runs in main so there's no CORS ──────────
+ipcMain.handle('web:fetch', async (_e, rawUrl: string) => {
+  let url = (rawUrl ?? '').trim();
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 MindMap/1.0',
+        Accept: 'text/html,application/xhtml+xml,*/*',
+      },
+    });
+    const html = await res.text();
+    return { ok: true as const, finalUrl: res.url || url, status: res.status, html };
+  } catch (err) {
+    log.warn(`[web] fetch failed (${url}): ${(err as Error).message}`);
+    return { ok: false as const, error: (err as Error).message };
+  } finally {
+    clearTimeout(timer);
+  }
+});

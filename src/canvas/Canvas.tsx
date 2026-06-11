@@ -203,13 +203,31 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       interaction.current = { mode: 'idle' };
     };
 
+    // pointercancel (OS gesture / window blur / touch interruption) aborts the
+    // interaction cleanly — without this the drag state would be left stuck.
+    const onCancel = () => {
+      setDraggingId(null);
+      setDragPos(null);
+      setRootDrag(null);
+      setDropTargetId(null);
+      setPanning(false);
+      interaction.current = { mode: 'idle' };
+    };
+
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
     };
   }, [doc.nodes, result.nodes, reparent, reparentMany, setManualPos, setView, toWorld, mapStore]);
+
+  // The selection toolbar is suppressed after a drag and restored on the next
+  // genuine click (onUp's pending-drag branch flips it back). We deliberately do
+  // NOT clear it on every selectedIds change — the spurious click that can follow
+  // a small drag would otherwise re-show the toolbar right after a drag.
 
   const handleNodePointerDown = (id: string, e: React.PointerEvent) => {
     e.stopPropagation();
@@ -408,7 +426,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
     if (!c) return null;
     return { id, sx: c.cx * zoom + panX, sy: (c.cy - c.h / 2) * zoom + panY };
   })();
-  const lod = zoom < 0.55; // semantic zoom: hide chips/badges when zoomed out
+  const lod = zoom < 0.42; // semantic zoom: hide chips/badges only when truly zoomed out
 
   return (
     <div

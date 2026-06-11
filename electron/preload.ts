@@ -35,8 +35,10 @@ const api = {
   workspaceTree: (): Promise<{ root: string; tree: TreeNode[] }> =>
     ipcRenderer.invoke('workspace:tree'),
   readFile: (filePath: string): Promise<string> => ipcRenderer.invoke('fs:read', filePath),
-  createFile: (dir: string, name: string, content: string): Promise<string> =>
-    ipcRenderer.invoke('fs:createFile', { dir, name, content }),
+  /** Hidden attached-notes (.notes/*.md) — indexed but not shown in the sidebar. */
+  attachedNotes: (): Promise<string[]> => ipcRenderer.invoke('attached:list'),
+  createFile: (dir: string, name: string, content: string, ext?: string): Promise<string> =>
+    ipcRenderer.invoke('fs:createFile', { dir, name, content, ext }),
   createFolder: (dir: string, name: string): Promise<string> =>
     ipcRenderer.invoke('fs:createFolder', { dir, name }),
   rename: (filePath: string, newName: string): Promise<string> =>
@@ -72,6 +74,13 @@ const api = {
   /** Write a scoped event to the app log file (metadata only — never user content). */
   log: (level: 'error' | 'warn' | 'info' | 'debug', scope: string, message: string): void =>
     ipcRenderer.send('log:event', { level, scope, message }),
+
+  /** Fetch a web page's HTML in the main process (no CORS), for "URL → note". */
+  webFetch: (
+    url: string,
+  ): Promise<
+    { ok: true; finalUrl: string; status: number; html: string } | { ok: false; error: string }
+  > => ipcRenderer.invoke('web:fetch', url),
 
   /** Subscribe to native menu commands. Returns an unsubscribe function. */
   onMenu: (cb: (action: string) => void) => {

@@ -44,6 +44,26 @@ interface UiState {
   openContextMenu: (id: string, x: number, y: number) => void;
   closeContextMenu: () => void;
 
+  // note peek popup (opened from a node's link chip) — paths + the screen point
+  // it was launched from (so the peek anchors near the node, not screen-center)
+  notePopup: { paths: string[]; anchor?: { x: number; y: number } } | null;
+  openNotePopup: (paths: string[], anchor?: { x: number; y: number }) => void;
+  closeNotePopup: () => void;
+
+  // node→note link picker target (set from a node's "노트 연결" menu)
+  linkTarget: { mapId: string; nodeId: string; nodeText: string; mapPath: string } | null;
+  openLinkNote: (t: { mapId: string; nodeId: string; nodeText: string; mapPath: string }) => void;
+  closeLinkNote: () => void;
+
+  // "링크 추가" target — a node id (the owning pane renders the input)
+  addLinkFor: string | null;
+  openAddLink: (id: string) => void;
+  closeAddLink: () => void;
+
+  // node whose inline memo should be focused for editing (e.g. just created)
+  memoEditFor: string | null;
+  setMemoEditFor: (id: string | null) => void;
+
   // ⌘P quick-open palette
   quickOpen: boolean;
   setQuickOpen: (b: boolean) => void;
@@ -119,6 +139,21 @@ export const useUi = create<UiState>((set, get) => ({
   contextMenu: null,
   openContextMenu: (id, x, y) => set({ contextMenu: { id, x, y } }),
   closeContextMenu: () => set({ contextMenu: null }),
+
+  notePopup: null,
+  openNotePopup: (paths, anchor) => set({ notePopup: paths.length ? { paths, anchor } : null }),
+  closeNotePopup: () => set({ notePopup: null }),
+
+  linkTarget: null,
+  openLinkNote: (t) => set({ linkTarget: t }),
+  closeLinkNote: () => set({ linkTarget: null }),
+
+  addLinkFor: null,
+  openAddLink: (id) => set({ addLinkFor: id }),
+  closeAddLink: () => set({ addLinkFor: null }),
+
+  memoEditFor: null,
+  setMemoEditFor: (id) => set({ memoEditFor: id }),
 
   quickOpen: false,
   setQuickOpen: (b) => set({ quickOpen: b }),

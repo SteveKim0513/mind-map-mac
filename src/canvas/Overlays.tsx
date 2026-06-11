@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMap } from '../store/mapStore';
+import { Icon } from '../ui/Icon';
+import { TAG_KEYS, tagVar } from '../theme/palette';
 import type { Connection, Section } from '../types';
 
 // stable empty refs so selectors never return a fresh array (avoids render loops)
@@ -17,7 +19,7 @@ export type Centers = Record<string, Center>;
 const SECTION_PAD = 14; // ink padding around each member (tighter → less bleed onto neighbours)
 const BRIDGE_W = 22; // thickness of the bridges that connect members
 
-const SECTION_COLORS = ['#62aef0', '#d6b6f6', '#ff64c8', '#dd5b00', '#2a9d99', '#1aae39'];
+// sections share the node-tag palette (theme/palette.ts)
 
 /** Closest point on the section ink (nearest member's padded rect) to a point. */
 function nearestEdge(p: { x: number; y: number }, nodeIds: string[], centers: Centers) {
@@ -150,7 +152,8 @@ export function OverlaysBack({
         const rects = memberRects(sec.nodeIds, centers);
         if (!rects.length) return null;
         const lines = bridgeLines(sec.nodeIds, centers);
-        const fill = sec.color ?? '#8b8b93';
+        // CSS fill/stroke (not the SVG attribute) so the var() resolves & auto-themes
+        const fill = tagVar(sec.color) ?? 'var(--edge)';
         const fid = `goo-${sec.id}`;
         const label =
           sectionDrag?.id === sec.id
@@ -169,7 +172,7 @@ export function OverlaysBack({
                 />
               </filter>
             </defs>
-            <g filter={`url(#${fid})`} fill={fill} stroke={fill} opacity={0.17}>
+            <g filter={`url(#${fid})`} style={{ fill, stroke: fill }} opacity={0.17}>
               {rects.map((r, i) => (
                 <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} rx={30} ry={30} />
               ))}
@@ -192,7 +195,7 @@ export function OverlaysBack({
                 y1={label.y + 9}
                 x2={anchor.x}
                 y2={anchor.y}
-                stroke={fill}
+                style={{ stroke: fill }}
               />
             )}
           </svg>
@@ -340,10 +343,10 @@ export function OverlaysFront({
               onPointerDown={(e) => e.stopPropagation()}
             >
               <button className="conn-add" title="메모 추가" onClick={() => setEditing(c.id)}>
-                ＋
+                <Icon name="plus" />
               </button>
               <button className="conn-del" title="연결 삭제" onClick={() => removeConnection(c.id)}>
-                ✕
+                <Icon name="close" />
               </button>
             </div>
           );
@@ -462,16 +465,16 @@ function SectionLabel({
         onPointerDown={(e) => e.stopPropagation()}
         onClick={onDelete}
       >
-        ✕
+        <Icon name="close" />
       </button>
 
       {showColors && (
         <div className="section-swatches" onPointerDown={(e) => e.stopPropagation()}>
-          {SECTION_COLORS.map((c) => (
+          {TAG_KEYS.map((c) => (
             <button
               key={c}
               className="section-swatch"
-              style={{ background: c }}
+              style={{ background: tagVar(c) }}
               onClick={() => {
                 onColor(c);
                 setShowColors(false);
@@ -563,7 +566,7 @@ function ConnMemo({
         onPointerDown={(e) => e.stopPropagation()}
         onClick={onDelete}
       >
-        ✕
+        <Icon name="close" />
       </button>
     </div>
   );

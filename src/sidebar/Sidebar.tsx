@@ -3,7 +3,12 @@ import type { TreeNode } from '../../electron/preload';
 import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
 import { useSession } from '../store/sessionStore';
-import { emptyDoc, serialize } from '../io/formats';
+import { emptyDoc, serialize, newId } from '../io/formats';
+import { emptyNote, serializeNote } from '../io/noteFormat';
+import { extractArticle } from '../note/extractArticle';
+import { UrlImportModal } from '../note/UrlImportModal';
+import type { NoteDoc } from '../types';
+import { Icon } from '../ui/Icon';
 
 interface Props {
   openPaths: string[];
@@ -22,7 +27,10 @@ function basename(p: string): string {
   return p.slice(p.lastIndexOf('/') + 1);
 }
 function displayName(node: TreeNode): string {
-  return node.type === 'file' ? node.name.replace(/\.mind$/, '') : node.name;
+  return node.type === 'file' ? node.name.replace(/\.(mind|md)$/, '') : node.name;
+}
+function isNoteFile(node: TreeNode): boolean {
+  return node.type === 'file' && node.name.endsWith('.md');
 }
 
 export function Sidebar({
@@ -85,14 +93,69 @@ export function Sidebar({
     return selected.type === 'dir' ? selected.path : dirname(selected.path);
   };
 
-  const newFile = async () => {
+  const newMindmap = async () => {
     const dir = targetDir();
-    const path = await window.api.createFile(dir, '제목 없음', serialize(emptyDoc()));
+    const path = await window.api.createFile(dir, '제목 없음', serialize(emptyDoc()), '.mind');
     if (dir !== root) setExpanded(dir, true);
     await refresh();
     setSelected({ path, type: 'file' });
     onOpenFile(path);
     setRenaming({ path, isFile: true });
+  };
+
+  const newNote = async () => {
+    const dir = targetDir();
+    const path = await window.api.createFile(
+      dir,
+      '제목 없음',
+      serializeNote(emptyNote('제목 없음')),
+      '.md',
+    );
+    if (dir !== root) setExpanded(dir, true);
+    await refresh();
+    setSelected({ path, type: 'file' });
+    onOpenFile(path);
+    setRenaming({ path, isFile: true });
+  };
+
+  // ── URL → note: fetch the page, extract the article, save as a linked note ──
+  const [urlImport, setUrlImport] = useState<{ busy: boolean; error: string | null } | null>(null);
+
+  const importNoteFromUrl = async (rawUrl: string) => {
+    setUrlImport({ busy: true, error: null });
+    const res = await window.api.webFetch(rawUrl);
+    if (!res.ok) {
+      setUrlImport({ busy: false, error: '링크를 가져오지 못했습니다. 주소를 확인하세요.' });
+      return;
+    }
+    const { title, markdown, siteName } = extractArticle(res.html, res.finalUrl);
+    let host = res.finalUrl;
+    try {
+      host = new URL(res.finalUrl).host;
+    } catch {
+      /* keep full url */
+    }
+    window.api?.log?.(
+      'info',
+      'web',
+      `extract host=${host} status=${res.status} htmlLen=${res.html.length} mdLen=${markdown.length}`,
+    );
+    const body =
+      `[원본 링크](${res.finalUrl})\n` +
+      (siteName ? `\n_${siteName}_\n` : '') +
+      `\n---\n\n` +
+      (markdown || '_본문을 가져오지 못했습니다. 원본 링크를 참고하세요._');
+    const note: NoteDoc = { id: newId(), title: title || '링크 노트', body, links: [] };
+    const fileName =
+      (title || '링크 노트').replace(/[\\/:*?"<>|\n\r]+/g, ' ').trim().slice(0, 60) || '링크 노트';
+    const dir = targetDir();
+    const path = await window.api.createFile(dir, fileName, serializeNote(note), '.md');
+    if (dir !== root) setExpanded(dir, true);
+    await refresh();
+    setSelected({ path, type: 'file' });
+    onOpenFile(path);
+    window.api?.log?.('info', 'web', 'imported url → note');
+    setUrlImport(null);
   };
 
   const newFolder = async () => {
@@ -109,7 +172,8 @@ export function Sidebar({
     setRenaming(null);
     const trimmed = draft.trim();
     if (!trimmed || trimmed === displayName(node)) return;
-    const newName = node.type === 'file' ? `${trimmed}.mind` : trimmed;
+    const ext = isNoteFile(node) ? '.md' : '.mind';
+    const newName = node.type === 'file' ? `${trimmed}${ext}` : trimmed;
     // Flush pending autosaves of affected tabs before moving the file on disk,
     // so a debounced write can't land on the old path mid-rename.
     await useSession.getState().flushSaves(node.path);
@@ -146,8 +210,60 @@ export function Sidebar({
     setSelected(null);
   };
 
+  // Order a folder's children: folders, then mind maps, then notes (each name-sorted).
+  const rank = (n: TreeNode) => (n.type === 'dir' ? 0 : isNoteFile(n) ? 2 : 1);
+  const ordered = (nodes: TreeNode[]) => [...nodes].sort((a, b) => rank(a) - rank(b));
+
+  // Collapsible 마인드맵 / 노트 sections (persisted) so a long list of one kind
+  // doesn't push the other off-screen.
+  const [folded, setFolded] = useState<{ maps: boolean; notes: boolean }>(() => {
+    try {
+      return { maps: false, notes: false, ...JSON.parse(localStorage.getItem('sidebarFolded') ?? '{}') };
+    } catch {
+      return { maps: false, notes: false };
+    }
+  });
+  const toggleFold = (key: 'maps' | 'notes') =>
+    setFolded((f) => {
+      const next = { ...f, [key]: !f[key] };
+      localStorage.setItem('sidebarFolded', JSON.stringify(next));
+      return next;
+    });
+
+  const sectionHeader = (key: 'maps' | 'notes', label: string, count: number) => (
+    <button className="tree-section" onClick={() => toggleFold(key)}>
+      <Icon name={folded[key] ? 'chevronRight' : 'chevronDown'} />
+      <span className="tree-section-lbl">{label}</span>
+      <span className="tree-section-count">{count}</span>
+    </button>
+  );
+
+  // At the root, separate maps and notes under their own collapsible headings.
+  const renderTree = (nodes: TreeNode[]) => {
+    const dirs = nodes.filter((n) => n.type === 'dir');
+    const maps = nodes.filter((n) => n.type === 'file' && !isNoteFile(n));
+    const notes = nodes.filter((n) => isNoteFile(n));
+    return (
+      <>
+        {renderNodes(ordered(dirs), 0)}
+        {maps.length > 0 && (
+          <>
+            {sectionHeader('maps', '마인드맵', maps.length)}
+            {!folded.maps && renderNodes(maps, 0)}
+          </>
+        )}
+        {notes.length > 0 && (
+          <>
+            {sectionHeader('notes', '노트', notes.length)}
+            {!folded.notes && renderNodes(notes, 0)}
+          </>
+        )}
+      </>
+    );
+  };
+
   const renderNodes = (nodes: TreeNode[], depth: number) =>
-    nodes.map((node) => {
+    ordered(nodes).map((node) => {
       const isSel = selected?.path === node.path;
       const isOpen = node.type === 'file' && openPaths.includes(node.path);
       const isActiveFile = node.type === 'file' && node.path === activePath;
@@ -211,9 +327,17 @@ export function Sidebar({
             }}
           >
             <span className="twisty">
-              {node.type === 'dir' ? (expanded[node.path] ? '▾' : '▸') : ''}
+              {node.type === 'dir' && (
+                <Icon name={expanded[node.path] ? 'chevronDown' : 'chevronRight'} />
+              )}
             </span>
-            <span className="ficon">{node.type === 'dir' ? '📁' : '🗒'}</span>
+            <span
+              className={`ficon ficon--${
+                node.type === 'dir' ? 'dir' : isNoteFile(node) ? 'note' : 'map'
+              }`}
+            >
+              <Icon name={node.type === 'dir' ? 'folder' : isNoteFile(node) ? 'note' : 'mindmap'} />
+            </span>
 
             {isRenaming ? (
               <RenameInput
@@ -234,7 +358,7 @@ export function Sidebar({
                   setRenaming({ path: node.path, isFile: node.type === 'file' });
                 }}
               >
-                ✎
+                <Icon name="edit" />
               </button>
               <button
                 className="row-act"
@@ -244,7 +368,7 @@ export function Sidebar({
                   void removeNode(node);
                 }}
               >
-                🗑
+                <Icon name="trash" />
               </button>
             </span>
           </div>
@@ -260,19 +384,32 @@ export function Sidebar({
     <div className="sidebar">
       <div className="sidebar-top">
         <button className="ws-name" title="워크스페이스 폴더 변경" onClick={() => void choose()}>
-          📂 {root ? basename(root) : '워크스페이스'}
+          <Icon name="folder" />
+          <span className="ws-name-txt">{root ? basename(root) : '워크스페이스'}</span>
         </button>
         <button className="collapse-sidebar" title="사이드바 숨기기" onClick={onToggle}>
-          ⟨
+          <Icon name="chevronLeft" />
         </button>
       </div>
 
       <div className="sidebar-actions">
-        <button className="tool-btn" onClick={() => void newFile()}>
-          ＋ 파일
+        <button className="tool-btn" title="새 마인드맵" onClick={() => void newMindmap()}>
+          <Icon name="plus" />
+          마인드맵
         </button>
-        <button className="tool-btn" onClick={() => void newFolder()}>
-          ＋ 폴더
+        <button className="tool-btn" title="새 노트" onClick={() => void newNote()}>
+          <Icon name="note" />
+          노트
+        </button>
+        <button
+          className="tool-btn icon"
+          title="링크로 노트 만들기"
+          onClick={() => setUrlImport({ busy: false, error: null })}
+        >
+          <Icon name="link" />
+        </button>
+        <button className="tool-btn icon" title="새 폴더" onClick={() => void newFolder()}>
+          <Icon name="folder" />
         </button>
       </div>
 
@@ -308,9 +445,9 @@ export function Sidebar({
       >
         <div onClick={(e) => e.stopPropagation()}>
           {tree.length === 0 ? (
-            <div className="tree-empty">＋ 파일로 첫 마인드맵을 만드세요</div>
+            <div className="tree-empty">위 ＋ 마인드맵 / 노트로 시작하세요</div>
           ) : (
-            renderNodes(tree, 0)
+            renderTree(tree)
           )}
         </div>
       </div>
@@ -325,13 +462,15 @@ export function Sidebar({
                   className={`seg-btn${theme === 'light' ? ' on' : ''}`}
                   onClick={() => useUi.getState().setTheme('light')}
                 >
-                  ☀ 라이트
+                  <Icon name="sun" />
+                  라이트
                 </button>
                 <button
                   className={`seg-btn${theme === 'dark' ? ' on' : ''}`}
                   onClick={() => useUi.getState().setTheme('dark')}
                 >
-                  ☾ 다크
+                  <Icon name="moon" />
+                  다크
                 </button>
               </div>
             </div>
@@ -339,41 +478,63 @@ export function Sidebar({
             <div className="settings-row">
               <span className="settings-label">글자 크기</span>
               <div className="fs-stepper">
-                <button className="fs-btn" title="작게" onClick={() => useUi.getState().setFontScale(fontScale - 0.1)}>
-                  A−
+                <button
+                  className="fs-btn"
+                  title="작게"
+                  onClick={() => useUi.getState().setFontScale(fontScale - 0.1)}
+                >
+                  <span className="fs-a sm">A</span>
                 </button>
                 <span className="fs-val">{Math.round(fontScale * 100)}%</span>
-                <button className="fs-btn" title="크게" onClick={() => useUi.getState().setFontScale(fontScale + 0.1)}>
-                  A+
+                <button
+                  className="fs-btn"
+                  title="크게"
+                  onClick={() => useUi.getState().setFontScale(fontScale + 0.1)}
+                >
+                  <span className="fs-a lg">A</span>
                 </button>
               </div>
             </div>
 
             <div className="settings-sub">단축키</div>
             <div className="help-panel">
-              <Row k="Tab" d="자식 노드" />
-              <Row k="Enter" d="형제 노드" />
+              <Row k="Tab" d="자식 노드 추가" />
+              <Row k="Enter" d="형제 노드 추가" />
               <Row k="Space" d="편집" />
-              <Row k="Delete" d="삭제" />
-              <Row k="↑ ↓ ← →" d="노드 이동" />
+              <Row k="↑ ↓ ← →" d="노드 사이 이동" />
+              <Row k="⌥↑ ⌥↓" d="형제 순서 변경" />
               <Row k="⌘← ⌘→" d="접기 / 펼치기" />
-              <Row k="⌥↑ ⌥↓" d="순서 바꾸기" />
-              <Row k="Z" d="노드로 확대" />
-              <Row k="Shift+클릭" d="다중 선택" />
+              <Row k="⌘Enter" d="완료 표시 / 해제" />
+              <Row k="Z" d="선택한 노드 확대" />
+              <Row k="Delete" d="삭제" />
               <Row k="⌘C ⌘V" d="복사 / 붙여넣기" />
-              <Row k="⌘Enter" d="완료 표시" />
+              <Row k="⌘Z ⌘⇧Z" d="실행 취소 / 다시 실행" />
+              <Row k="Shift+클릭" d="다중 선택" />
               <Row k="⌘F" d="검색" />
-              <Row k="⌘P / ⌘K" d="빠른 열기 / 명령" />
+              <Row k="⌘P ⌘K" d="파일 열기 / 명령 팔레트" />
+              <Row k="Esc" d="선택·집중 해제" />
               <Row k="우클릭" d="노드 메뉴" />
-              <Row k="더블클릭" d="새 중심 주제" />
+              <Row k="더블클릭" d="빈 곳에 새 중심 주제" />
             </div>
           </div>
         )}
         <button className="help-toggle" onClick={() => setShowHelp((v) => !v)}>
-          <span>⚙ 설정</span>
-          <span>{showHelp ? '▾' : '▸'}</span>
+          <span className="help-toggle-lbl">
+            <Icon name="settings" />
+            설정
+          </span>
+          <Icon name={showHelp ? 'chevronDown' : 'chevronRight'} />
         </button>
       </div>
+
+      {urlImport && (
+        <UrlImportModal
+          busy={urlImport.busy}
+          error={urlImport.error}
+          onSubmit={(url) => void importNoteFromUrl(url)}
+          onClose={() => setUrlImport(null)}
+        />
+      )}
     </div>
   );
 }

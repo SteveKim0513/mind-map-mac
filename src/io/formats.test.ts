@@ -9,7 +9,8 @@ import {
 import type { MindMapDoc } from '../types';
 
 function docWith(nodes: MindMapDoc['nodes'], rootIds: string[]): MindMapDoc {
-  return { version: 1, rootIds, nodes, view: { zoom: 1, panX: 0, panY: 0 } };
+  // a fixed id keeps round-trip equality exact (deserialize backfills one if missing)
+  return { version: 1, id: 'doc-test', rootIds, nodes, view: { zoom: 1, panX: 0, panY: 0 } };
 }
 
 describe('serialize / deserialize', () => {

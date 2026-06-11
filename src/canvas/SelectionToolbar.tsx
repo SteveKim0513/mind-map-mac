@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { useMap } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
 import { Icon } from '../ui/Icon';
-
-const COLORS = ['#62aef0', '#d6b6f6', '#ff64c8', '#dd5b00', '#2a9d99', '#1aae39'];
+import { TAG_KEYS, tagVar } from '../theme/palette';
 
 /** Floating action bar shown above the single selected node. */
 export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: number; sy: number }) {
@@ -13,6 +12,8 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
   const addChild = useMap((s) => s.addChild);
   const deleteNode = useMap((s) => s.deleteNode);
   const setScheduled = useMap((s) => s.setScheduled);
+  const docId = useMap((s) => s.doc.id);
+  const filePath = useMap((s) => s.filePath);
   const [showColors, setShowColors] = useState(false);
 
   if (!node) return null;
@@ -29,7 +30,7 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
         title="색상"
         onClick={() => setShowColors((v) => !v)}
       >
-        <span className="st-dot" style={{ background: node.color ?? 'var(--ink-faint)' }} />
+        <span className="st-dot" style={{ background: tagVar(node.color) ?? 'var(--ink-faint)' }} />
       </button>
       <button
         className={`st-btn${node.done ? ' on' : ''}`}
@@ -38,12 +39,30 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
       >
         <Icon name="check" />
       </button>
-      <button className="st-btn" title="노트·링크" onClick={() => useUi.getState().openNote(nodeId)}>
+      <span className="st-sep" />
+      <button className="st-btn" title="메모" onClick={() => useUi.getState().setMemoEditFor(nodeId)}>
+        <Icon name="memo" />
+      </button>
+      <button className="st-btn" title="링크" onClick={() => useUi.getState().openAddLink(nodeId)}>
+        <Icon name="link" />
+      </button>
+      <button
+        className="st-btn"
+        title="노트"
+        onClick={() =>
+          useUi.getState().openLinkNote({
+            mapId: docId ?? '',
+            nodeId,
+            nodeText: node.text,
+            mapPath: filePath ?? '',
+          })
+        }
+      >
         <Icon name="note" />
       </button>
       <button
         className={`st-btn${node.scheduled ? ' on' : ''}`}
-        title="스케줄"
+        title="일정"
         onClick={() => {
           if (!node.scheduled) setScheduled(nodeId, true);
           useUi.getState().openSchedule(nodeId);
@@ -61,11 +80,11 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
 
       {showColors && (
         <div className="st-swatches">
-          {COLORS.map((c) => (
+          {TAG_KEYS.map((c) => (
             <button
               key={c}
               className="st-swatch"
-              style={{ background: c }}
+              style={{ background: tagVar(c) }}
               onClick={() => {
                 setColor(nodeId, node.color === c ? undefined : c);
                 setShowColors(false);

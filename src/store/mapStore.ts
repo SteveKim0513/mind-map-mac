@@ -79,6 +79,8 @@ interface MapState {
   setColor: (id: string, color: string | undefined) => void;
   setNote: (id: string, note: string) => void;
   setLink: (id: string, link: string | undefined) => void;
+  addNodeLink: (id: string, url: string) => void;
+  removeNodeLink: (id: string, url: string) => void;
   setIcon: (id: string, icon: string | undefined) => void;
   toggleDone: (id: string) => void;
   // schedule / reminders
@@ -253,7 +255,9 @@ export function createMapStore(): MapStore {
       commit((d) => {
         const n = d.nodes[id];
         if (n) {
-          n.text = text;
+          // trim so a whitespace-only commit equals an empty one (undeletable
+          // nodes, e.g. a sole root, would otherwise keep an invisible " " title)
+          n.text = text.trim();
           n.updatedAt = Date.now(); // mark for reminder push
         }
       });
@@ -397,6 +401,23 @@ export function createMapStore(): MapStore {
     setLink: (id, link) =>
       commit((d) => {
         if (d.nodes[id]) d.nodes[id].link = link || undefined;
+      }),
+
+    addNodeLink: (id, url) =>
+      commit((d) => {
+        const n = d.nodes[id];
+        const u = url.trim();
+        if (!n || !u) return;
+        const list = n.links ?? [];
+        if (u !== n.link && !list.includes(u)) n.links = [...list, u];
+      }),
+
+    removeNodeLink: (id, url) =>
+      commit((d) => {
+        const n = d.nodes[id];
+        if (!n) return;
+        if (n.link === url) n.link = undefined;
+        if (n.links) n.links = n.links.filter((u) => u !== url);
       }),
 
     setIcon: (id, icon) =>

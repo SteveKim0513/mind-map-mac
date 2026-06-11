@@ -1,13 +1,23 @@
 import { create } from 'zustand';
 import { createMapStore, type MapStore } from './mapStore';
+import { createNoteStore, type NoteStore } from './noteStore';
 import { deserialize, serialize, newId } from './../io/formats';
+import { parseNote, serializeNote } from './../io/noteFormat';
 import { useUi } from './uiStore';
+
+export type TabKind = 'map' | 'note';
 
 export interface Tab {
   id: string;
   path: string;
   title: string;
-  store: MapStore;
+  kind: TabKind;
+  store: MapStore | NoteStore;
+}
+
+/** true when this path should open as a Markdown note (vs a .mind map). */
+export function isNotePath(path: string): boolean {
+  return path.endsWith('.md');
 }
 
 export interface RecentFile {
@@ -31,11 +41,13 @@ interface SessionState {
 
   // queries
   activeTab: () => Tab | null;
-  activeStore: () => MapStore | null;
+  activeStore: () => MapStore | null; // map-only (null when a note tab is active)
+  activeNoteStore: () => NoteStore | null;
   tabById: (id: string | null) => Tab | undefined;
 
   // actions
   openPath: (path: string, content: string) => void;
+  openInRight: (path: string, content: string) => void; // open/activate beside (right split)
   selectTab: (tabId: string, group: GroupIndex) => void;
   closeTab: (tabId: string) => void;
   closeAllTabs: () => void;
@@ -51,13 +63,18 @@ interface SessionState {
 }
 
 function base(path: string): string {
-  return (path.split('/').pop() ?? path).replace(/\.mind$/, '');
+  return (path.split('/').pop() ?? path).replace(/\.(mind|md)$/, '');
 }
 
 function makeTab(path: string, content: string): Tab {
+  if (isNotePath(path)) {
+    const store = createNoteStore();
+    store.getState().loadNote(parseNote(content, base(path)), path);
+    return { id: newId(), path, title: base(path), kind: 'note', store };
+  }
   const store = createMapStore();
   store.getState().loadDoc(deserialize(content), path);
-  return { id: newId(), path, title: base(path), store };
+  return { id: newId(), path, title: base(path), kind: 'map', store };
 }
 
 /** makeTab that returns null (instead of throwing) when the file is corrupt. */
@@ -144,7 +161,14 @@ export const useSession = create<SessionState>((set, get) => {
       const id = split && activeGroup === 1 ? rightActive : leftActive;
       return get().tabs.find((t) => t.id === id) ?? null;
     },
-    activeStore: () => get().activeTab()?.store ?? null,
+    activeStore: () => {
+      const t = get().activeTab();
+      return t && t.kind === 'map' ? (t.store as MapStore) : null;
+    },
+    activeNoteStore: () => {
+      const t = get().activeTab();
+      return t && t.kind === 'note' ? (t.store as NoteStore) : null;
+    },
 
     openPath: (path, content) => {
       const existing = get().tabs.find((t) => t.path === path);
@@ -158,7 +182,7 @@ export const useSession = create<SessionState>((set, get) => {
       }
       const tab = tryMakeTab(path, content);
       if (!tab) {
-        useUi.getState().toast('파일을 열 수 없습니다 (손상된 .mind)');
+        useUi.getState().toast('파일을 열 수 없습니다 — 손상된 마인드맵');
         return;
       }
       const toRight = get().split && get().activeGroup === 1;
@@ -168,6 +192,43 @@ export const useSession = create<SessionState>((set, get) => {
           ? { rightTabs: [...s.rightTabs, tab.id], rightActive: tab.id, activeGroup: 1 as const }
           : { leftTabs: [...s.leftTabs, tab.id], leftActive: tab.id, activeGroup: 0 as const }),
       }));
+      pushRecent(path);
+      persist();
+    },
+
+    openInRight: (path, content) => {
+      let tab = get().tabs.find((t) => t.path === path);
+      let tabs = get().tabs;
+      if (!tab) {
+        const made = tryMakeTab(path, content);
+        if (!made) {
+          useUi.getState().toast('파일을 열 수 없습니다');
+          return;
+        }
+        tab = made;
+        tabs = [...tabs, made];
+      }
+      const id = tab.id;
+      const s = get();
+      const leftTabs = s.leftTabs.filter((t) => t !== id);
+      if (leftTabs.length === 0) {
+        // nothing to split against → open/activate in the single (left) group
+        const lt = s.leftTabs.includes(id) ? s.leftTabs : [...s.leftTabs, id];
+        set({ tabs, leftTabs: lt, leftActive: id, activeGroup: 0 });
+        pushRecent(path);
+        persist();
+        return;
+      }
+      const rightTabs = s.rightTabs.includes(id) ? s.rightTabs : [...s.rightTabs, id];
+      set({
+        tabs,
+        leftTabs,
+        leftActive: neighborActive(leftTabs, id, s.leftActive),
+        rightTabs,
+        rightActive: id,
+        split: true,
+        activeGroup: 1,
+      });
       pushRecent(path);
       persist();
     },
@@ -348,10 +409,18 @@ export const useSession = create<SessionState>((set, get) => {
       );
       await Promise.all(
         affected.map(async (t) => {
-          const st = t.store.getState();
-          if (st.dirty && st.filePath) {
-            const p = await window.api.save(st.filePath, serialize(st.doc));
-            if (p) t.store.getState().markSaved(p);
+          if (t.kind === 'note') {
+            const st = (t.store as NoteStore).getState();
+            if (st.dirty && st.filePath) {
+              const p = await window.api.save(st.filePath, serializeNote(st.note));
+              if (p) (t.store as NoteStore).getState().markSaved(p);
+            }
+          } else {
+            const st = (t.store as MapStore).getState();
+            if (st.dirty && st.filePath) {
+              const p = await window.api.save(st.filePath, serialize(st.doc));
+              if (p) (t.store as MapStore).getState().markSaved(p);
+            }
           }
         }),
       );

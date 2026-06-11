@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MapContext, useMap, useMapStore } from '../store/mapStore';
+import { MapContext, useMap, useMapStore, type MapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
 import { serialize } from '../io/formats';
 import { Canvas, type CanvasHandle } from '../canvas/Canvas';
 import { NodePopover } from '../inspector/NodePopover';
 import { SchedulePopover } from '../inspector/SchedulePopover';
+import { LinkAddPopover } from '../inspector/LinkAddPopover';
 import { ContextMenu } from '../menu/ContextMenu';
 import { Breadcrumb } from '../ui/Breadcrumb';
+import { Icon } from '../ui/Icon';
+import { tagVar } from '../theme/palette';
 import type { Tab } from '../store/sessionStore';
 
 interface Props {
@@ -18,7 +21,7 @@ interface Props {
 
 export function Pane({ tab, isActive, onActivate, onControls }: Props) {
   return (
-    <MapContext.Provider value={tab.store}>
+    <MapContext.Provider value={tab.store as MapStore}>
       <div
         className={`pane${isActive ? ' active' : ''}`}
         onPointerDownCapture={onActivate}
@@ -49,6 +52,7 @@ function PaneBody({
   const toggleFilterDescendants = useMap((s) => s.toggleFilterDescendants);
   const notePopoverId = useUi((s) => s.notePopoverId);
   const schedulePopoverId = useUi((s) => s.schedulePopoverId);
+  const addLinkFor = useUi((s) => s.addLinkFor);
   const contextMenu = useUi((s) => s.contextMenu);
 
   const usedColors = useMemo(() => {
@@ -96,21 +100,25 @@ function PaneBody({
       )}
 
       <div className="toolbar">
-        <button className="tool-btn" title="축소" onClick={() => handle?.zoomOut()}>
-          −
+        <button className="tool-btn icon" title="축소" onClick={() => handle?.zoomOut()}>
+          <Icon name="minus" />
         </button>
-        <button className="tool-btn zoom-label" onClick={() => handle?.fit()}>
+        <button className="tool-btn zoom-label" title="화면 맞춤" onClick={() => handle?.fit()}>
           {Math.round(doc.view.zoom * 100)}%
         </button>
-        <button className="tool-btn" title="확대" onClick={() => handle?.zoomIn()}>
-          ＋
+        <button className="tool-btn icon" title="확대" onClick={() => handle?.zoomIn()}>
+          <Icon name="plus" />
         </button>
         <span className="sep" />
-        <button className="tool-btn" title="화면 맞춤" onClick={() => handle?.fit()}>
-          맞춤
+        <button className="tool-btn icon" title="화면 맞춤" onClick={() => handle?.fit()}>
+          <Icon name="expand" />
         </button>
-        <button className="tool-btn" title="새로고침 (재배치)" onClick={() => useUi.getState().relayout()}>
-          ↻
+        <button
+          className="tool-btn icon"
+          title="새로고침 (재배치)"
+          onClick={() => useUi.getState().relayout()}
+        >
+          <Icon name="refresh" />
         </button>
         {usedColors.length > 0 && (
           <>
@@ -120,7 +128,7 @@ function PaneBody({
                 <button
                   key={c}
                   className={`filter-dot${colorFilter === c ? ' on' : ''}`}
-                  style={{ background: c }}
+                  style={{ background: tagVar(c) }}
                   title={colorFilter === c ? '필터 해제' : '이 색만 보기'}
                   onClick={() => setColorFilter(colorFilter === c ? null : c)}
                 />
@@ -133,14 +141,16 @@ function PaneBody({
                   title="상위 노드 포함"
                   onClick={toggleFilterAncestors}
                 >
-                  ↑ 상위
+                  <Icon name="chevronUp" />
+                  상위
                 </button>
                 <button
                   className={`tool-btn small${filterDescendants ? ' on' : ''}`}
                   title="하위 노드 포함"
                   onClick={toggleFilterDescendants}
                 >
-                  ↓ 하위
+                  <Icon name="chevronDown" />
+                  하위
                 </button>
               </>
             )}
@@ -153,6 +163,9 @@ function PaneBody({
       )}
       {schedulePopoverId && doc.nodes[schedulePopoverId] && (
         <SchedulePopover id={schedulePopoverId} onClose={() => useUi.getState().closeSchedule()} />
+      )}
+      {addLinkFor && doc.nodes[addLinkFor] && (
+        <LinkAddPopover id={addLinkFor} onClose={() => useUi.getState().closeAddLink()} />
       )}
       {contextMenu && doc.nodes[contextMenu.id] && (
         <ContextMenu

@@ -6,10 +6,11 @@ export interface MindNode {
   children: string[]; // ordered child ids
   collapsed: boolean; // when true, descendants are hidden
   done?: boolean; // marked complete (strikethrough + faded)
-  color?: string; // optional sticker-palette color tag (left accent bar)
+  color?: string; // tag-palette key ('red'…'brown'); see theme/palette.ts
   icon?: string; // optional emoji/icon prefix
   note?: string; // optional long-form note
-  link?: string; // optional URL
+  link?: string; // legacy single URL (still editable via the note·link popover)
+  links?: string[]; // attached URLs shown as satellites
   // ── Schedule / Reminders sync ──
   scheduled?: boolean; // marked as a schedule node (shows date + reminder options)
   scheduleAt?: string; // local-time ISO ("2026-06-15T09:00:00"); date/time of the schedule
@@ -40,18 +41,45 @@ export interface Section {
   id: string;
   nodeIds: string[]; // member nodes — the region hugs these
   title?: string;
-  color?: string;
+  color?: string; // tag-palette key — see theme/palette.ts
   labelPos?: { x: number; y: number }; // draggable title position (world coords)
 }
 
 /** The full document — a flat node map plus an ordered list of roots. */
 export interface MindMapDoc {
   version: 1;
+  // Stable document id — survives file rename/move so notes can link to a node
+  // by (mapId, nodeId). Backfilled on load for older files.
+  id?: string;
   rootIds: string[]; // supports multiple root topics on one canvas
   nodes: Record<string, MindNode>;
   connections?: Connection[]; // node-to-node cross links
   sections?: Section[]; // grouping regions
   view: { zoom: number; panX: number; panY: number };
+}
+
+/** A link from a note to one specific mind-map node. Stored only in the note. */
+export interface NoteLink {
+  mapId: string; // MindMapDoc.id of the target map (stable match key)
+  nodeId: string; // MindNode.id within that map
+  nodeText?: string; // snapshot of the node's text (for display when map isn't open)
+  mapPath?: string; // best-effort file path hint, to open the map when it isn't already
+}
+
+/** A standalone note document, stored as a Markdown file (.md) with frontmatter. */
+export interface NoteDoc {
+  id: string; // stable note id (frontmatter)
+  title: string;
+  body: string; // Markdown body
+  links: NoteLink[]; // nodes this note is linked to
+}
+
+/** Lightweight note record for the workspace link index (frontmatter only). */
+export interface NoteMeta {
+  path: string;
+  id: string;
+  title: string;
+  links: NoteLink[];
 }
 
 /** A node with its computed on-canvas position. `x` is the node's LEFT edge;

@@ -15,8 +15,13 @@ export function useKeyboard() {
       if (!store) return; // home screen — no active document
       const s = store.getState();
 
-      // never intercept while typing in a field (textarea, input, or contentEditable)
+      // Never intercept while typing in a field. Check the event TARGET (not
+      // document.activeElement): a field that blurs/closes on Enter (memo, link
+      // input, pickers…) changes activeElement before this window handler runs,
+      // which used to leak the Enter through to addSibling. e.target stays the field.
       if (s.editingId) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
       const ae = document.activeElement as HTMLElement | null;
       if (ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
 
@@ -27,7 +32,7 @@ export function useKeyboard() {
         if (e.key === 'c' && sel) {
           e.preventDefault();
           s.copyNode(sel);
-          useUi.getState().toast('복사됨');
+          useUi.getState().toast('복사함');
         } else if (e.key === 'v') {
           e.preventDefault();
           if (s.hasClipboard()) {

@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sidebar } from './sidebar/Sidebar';
 import { TabBar } from './panes/TabBar';
 import { Pane } from './panes/Pane';
+import { NotePane } from './note/NotePane';
+import { NotePopup } from './note/NotePopup';
+import { NoteLinkPicker } from './note/NoteLinkPicker';
 import { Home } from './panes/Home';
 import { Search } from './search/Search';
 import { Toasts } from './ui/Toasts';
@@ -50,7 +53,8 @@ export default function App() {
   const leftTab = tabs.find((t) => t.id === leftActive) ?? null;
   const rightTab = tabs.find((t) => t.id === rightActive) ?? null;
   const activeTab = effectiveGroup === 1 ? rightTab : leftTab;
-  const activeStore: MapStore | null = activeTab?.store ?? null;
+  const activeStore: MapStore | null =
+    activeTab?.kind === 'map' ? (activeTab.store as MapStore) : null;
 
   // ── File helpers ────────────────────────────────────────────────────────────
   const openByPath = useCallback(async (path: string) => {
@@ -58,7 +62,8 @@ export default function App() {
       const content = await window.api.readFile(path);
       useSession.getState().openPath(path, content);
     } catch (err) {
-      useUi.getState().toast(`파일을 열 수 없습니다: ${(err as Error).message}`);
+      console.error('open failed', err);
+      useUi.getState().toast('파일을 열 수 없습니다');
     }
   }, []);
 
@@ -66,6 +71,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
+      if (useUi.getState().linkTarget) return; // note-link picker is modal
       if (e.code === 'KeyP') {
         e.preventDefault();
         useUi.getState().setQuickOpen(true);
@@ -166,7 +172,8 @@ export default function App() {
             try {
               await createFromDoc('가져온 마인드맵', fromOpml(res.content));
             } catch (err) {
-              useUi.getState().toast(`OPML을 열 수 없습니다: ${(err as Error).message}`);
+              console.error('OPML import failed', err);
+              useUi.getState().toast('OPML을 가져올 수 없습니다');
             }
           }
           break;
@@ -235,13 +242,22 @@ export default function App() {
 
   const renderPane = (tab: Tab | null, group: 0 | 1) =>
     tab ? (
-      <Pane
-        key={tab.id}
-        tab={tab}
-        isActive={effectiveGroup === group}
-        onActivate={() => useSession.getState().setActiveGroup(group)}
-        onControls={handleControls}
-      />
+      tab.kind === 'note' ? (
+        <NotePane
+          key={tab.id}
+          tab={tab}
+          isActive={effectiveGroup === group}
+          onActivate={() => useSession.getState().setActiveGroup(group)}
+        />
+      ) : (
+        <Pane
+          key={tab.id}
+          tab={tab}
+          isActive={effectiveGroup === group}
+          onActivate={() => useSession.getState().setActiveGroup(group)}
+          onControls={handleControls}
+        />
+      )
     ) : (
       <div className="pane" onPointerDownCapture={() => useSession.getState().setActiveGroup(group)}>
         <Home recent={recent} onNew={() => void newMindmap()} onOpenRecent={(p) => void openByPath(p)} />
@@ -328,6 +344,8 @@ export default function App() {
         />
       )}
       <Toasts />
+      <NotePopup />
+      <NoteLinkPicker />
     </div>
   );
 }
@@ -340,26 +358,26 @@ function buildCommands(o: {
   toggleSidebar: () => void;
 }): Command[] {
   const cmds: Command[] = [
-    { id: 'new', icon: '＋', label: '새 마인드맵', run: o.newMindmap },
-    { id: 'quickopen', icon: '🗂', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
-    { id: 'theme', icon: '☾', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },
-    { id: 'sidebar', icon: '▥', label: '사이드바 토글', run: o.toggleSidebar },
-    { id: 'split', icon: '⊟', label: o.split ? '화면 분할 해제' : '화면 분할', run: () => useSession.getState().toggleSplit() },
-    { id: 'relayout', icon: '↻', label: '새로고침 (재배치)', run: () => useUi.getState().relayout() },
+    { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
+    { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
+    { id: 'theme', icon: 'moon', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },
+    { id: 'sidebar', icon: 'menu', label: '사이드바 토글', run: o.toggleSidebar },
+    { id: 'split', icon: 'expand', label: o.split ? '화면 분할 해제' : '화면 분할', run: () => useSession.getState().toggleSplit() },
+    { id: 'relayout', icon: 'refresh', label: '새로고침 (재배치)', run: () => useUi.getState().relayout() },
   ];
   if (o.hasActive) {
     cmds.splice(1, 0, {
       id: 'search',
-      icon: '🔍',
+      icon: 'search',
       label: '노드 검색',
       hint: '⌘F',
       run: () => useUi.getState().setSearchOpen(true),
     });
     cmds.push(
-      { id: 'fit', icon: '⤢', label: '화면 맞춤', hint: '⌘0', run: o.fit },
+      { id: 'fit', icon: 'expand', label: '화면 맞춤', hint: '⌘0', run: o.fit },
       {
         id: 'export-md',
-        icon: '⬇',
+        icon: 'download',
         label: 'Markdown 내보내기',
         run: async () => {
           const sess = useSession.getState();
@@ -369,7 +387,7 @@ function buildCommands(o: {
       },
       {
         id: 'export-opml',
-        icon: '⬇',
+        icon: 'download',
         label: 'OPML 내보내기',
         run: async () => {
           const sess = useSession.getState();

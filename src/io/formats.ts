@@ -1,4 +1,5 @@
 import type { MindMapDoc, MindNode } from '../types';
+import { normalizeColor } from '../theme/palette';
 
 export function newId(): string {
   return crypto.randomUUID();
@@ -8,6 +9,7 @@ export function emptyDoc(): MindMapDoc {
   // Start on a blank canvas — the first Enter creates the center topic.
   return {
     version: 1,
+    id: newId(),
     rootIds: [],
     nodes: {},
     view: { zoom: 1, panX: 0, panY: 0 },
@@ -25,14 +27,17 @@ export function deserialize(text: string): MindMapDoc {
   try {
     parsed = JSON.parse(text) as MindMapDoc;
   } catch {
-    throw new Error('손상된 .mind 파일 (JSON 파싱 실패)');
+    throw new Error('파일을 열 수 없습니다 — 손상된 마인드맵');
   }
   if (!parsed || !parsed.nodes || !parsed.rootIds) throw new Error('Invalid .mind file');
   // Backfill defaults defensively.
+  parsed.id ??= newId(); // stable doc id (persisted on next save) for note links
   for (const n of Object.values(parsed.nodes)) {
     n.children ??= [];
     n.collapsed ??= false;
+    if (n.color) n.color = normalizeColor(n.color); // legacy raw-hex tags → semantic keys
   }
+  for (const s of parsed.sections ?? []) if (s.color) s.color = normalizeColor(s.color);
   parsed.view ??= { zoom: 1, panX: 0, panY: 0 };
   return parsed;
 }

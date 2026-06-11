@@ -13,7 +13,7 @@ export function measureNode(el: HTMLElement): { w: number; h: number; below: num
   let below = h; // box top → lowest accessory bottom (defaults to the box itself)
   for (const child of Array.from(el.children) as HTMLElement[]) {
     if (
-      child.classList.contains('node-meta') ||
+      child.classList.contains('node-gutter') ||
       child.classList.contains('progress-badge') ||
       child.classList.contains('count-badge')
     ) {

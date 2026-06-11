@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { PositionedNode } from '../types';
 import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
+import { useWorkspace } from '../store/workspaceStore';
 import { measureNode } from '../layout/measure';
-import { Icon } from '../ui/Icon';
+import { Icon, isIconName } from '../ui/Icon';
+import { tagVar } from '../theme/palette';
 
 interface Props {
   p: PositionedNode;
@@ -35,21 +37,41 @@ export function NodeView({
   const deleteNode = useMap((s) => s.deleteNode);
   const toggleCollapse = useMap((s) => s.toggleCollapse);
   const addChild = useMap((s) => s.addChild);
+  const removeNodeLink = useMap((s) => s.removeNodeLink);
+  const setNote = useMap((s) => s.setNote);
   const mapStore = useMapStore();
   const isMatch = useUi((s) => s.matchIds.includes(node.id));
   const isActiveMatch = useUi((s) => s.activeMatchId === node.id);
+  const memoEditing = useUi((s) => s.memoEditFor === node.id);
 
+  // notes linked to this node (resolved from the workspace link index)
+  const docId = useMap((s) => s.doc.id);
+  const noteIndex = useWorkspace((s) => s.noteIndex);
+  const linkedNotes = useMemo(
+    () =>
+      docId
+        ? noteIndex.filter((m) => m.links.some((l) => l.mapId === docId && l.nodeId === node.id))
+        : [],
+    [noteIndex, docId, node.id],
+  );
+  // legacy single link + new multi links, de-duplicated
+  const allLinks = useMemo(() => {
+    const out: string[] = [];
+    if (node.link) out.push(node.link);
+    for (const u of node.links ?? []) if (!out.includes(u)) out.push(u);
+    return out;
+  }, [node.link, node.links]);
+
+  const sched = node.scheduled ? scheduleInfo(node.scheduleAt) : null;
   const hasChildren = node.children.length > 0;
 
-  // measure the node's full footprint (box + chips/badges) so the layout can
-  // reserve real space to its right and below — never overlapping neighbours.
+  // measure the node's full footprint (box + memo + gutter) so the layout can
+  // reserve real space and never let a neighbour overlap it.
   const rootRef = useRef<HTMLDivElement>(null);
-  // signature of accessory-bearing fields: when these change the chip row
-  // grows/shrinks, so we must re-measure (a ResizeObserver on the box alone
-  // wouldn't fire — the chips live outside it).
-  const metaSig = `${node.note ? 1 : 0}|${node.link ? 1 : 0}|${node.scheduled ? 1 : 0}|${
-    node.scheduleAt ?? ''
-  }|${p.childDone}/${p.childTotal}|${node.collapsed ? p.hiddenCount : 0}`;
+  const memoTitles = linkedNotes.map((m) => m.title).join('');
+  const metaSig = `${node.note ? 1 : 0}|${memoEditing ? 1 : 0}|${sched?.label ?? ''}|${
+    sched?.urg ?? ''
+  }|${p.childDone}/${p.childTotal}|${node.collapsed ? p.hiddenCount : 0}|${linkedNotes.length}|${allLinks.length}|${memoTitles}`;
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -60,10 +82,29 @@ export function NodeView({
     report();
     const ro = new ResizeObserver(report);
     ro.observe(el);
-    el.querySelectorAll<HTMLElement>('.node-meta').forEach((c) => ro.observe(c));
+    el.querySelectorAll<HTMLElement>('.node-gutter').forEach((c) => ro.observe(c));
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id, onMeasure, metaSig]);
+
+  // ── FLIP: glide to a new layout position instead of jumping ────────────────
+  const prevPos = useRef<{ x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const prev = prevPos.current;
+    prevPos.current = { x: p.x, y: p.y };
+    if (!prev || isDragging) return;
+    const dx = prev.x - p.x;
+    const dy = prev.y - p.y;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px, ${dy}px) translateY(-50%)`;
+    requestAnimationFrame(() => {
+      el.style.transition = 'transform 0.28s var(--spring)';
+      el.style.transform = '';
+    });
+  }, [p.x, p.y, isDragging]);
 
   const cls = [
     'node',
@@ -83,10 +124,9 @@ export function NodeView({
 
   const style: React.CSSProperties = { left: p.x, top: p.y };
   if (node.color) {
-    (style as Record<string, string>)['--tint-bg'] =
-      `color-mix(in srgb, ${node.color} 13%, var(--surface))`;
-    (style as Record<string, string>)['--tint-border'] =
-      `color-mix(in srgb, ${node.color} 40%, var(--hairline))`;
+    const tint = tagVar(node.color);
+    (style as Record<string, string>)['--tint-bg'] = `color-mix(in srgb, ${tint} 13%, var(--surface))`;
+    (style as Record<string, string>)['--tint-border'] = `color-mix(in srgb, ${tint} 40%, var(--hairline))`;
   }
 
   return (
@@ -112,27 +152,43 @@ export function NodeView({
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        // keep an existing multi-selection if right-clicking one of its members
         const sel = mapStore.getState().selectedIds;
         if (!(sel.length > 1 && sel.includes(node.id))) select(node.id);
         useUi.getState().openContextMenu(node.id, e.clientX, e.clientY);
       }}
     >
-      {node.icon && <span className="icon">{node.icon}</span>}
+      {/* title row */}
+      <div className="node-line">
+        {node.icon && (
+          <span className="icon">{isIconName(node.icon) ? <Icon name={node.icon} /> : node.icon}</span>
+        )}
+        {editing ? (
+          <NodeEditor
+            initial={node.text}
+            deletable={
+              node.children.length === 0 &&
+              (node.parentId !== null || mapStore.getState().doc.rootIds.length > 1)
+            }
+            onCommit={(text) => commitText(node.id, text)}
+            onCancel={cancelEdit}
+            onDelete={() => deleteNode(node.id)}
+          />
+        ) : (
+          <span className="text">{node.text || ' '}</span>
+        )}
+      </div>
 
-      {editing ? (
-        <NodeEditor
-          initial={node.text}
-          deletable={
-            node.children.length === 0 &&
-            (node.parentId !== null || mapStore.getState().doc.rootIds.length > 1)
-          }
-          onCommit={(text) => commitText(node.id, text)}
-          onCancel={cancelEdit}
-          onDelete={() => deleteNode(node.id)}
+      {/* ① MEMO = the node's own body (a light inline line), not an attachment */}
+      {!editing && (node.note || memoEditing) && (
+        <NodeMemo
+          key={memoEditing ? 'edit' : 'view'}
+          initial={node.note ?? ''}
+          autoFocus={memoEditing}
+          onCommit={(t) => {
+            setNote(node.id, t.trim());
+            if (memoEditing) useUi.getState().setMemoEditFor(null);
+          }}
         />
-      ) : (
-        <span className="text">{node.text || ' '}</span>
       )}
 
       {!editing && p.childTotal > 0 && p.childDone > 0 && (
@@ -146,58 +202,63 @@ export function NodeView({
         </span>
       )}
 
-      {!editing && (node.link || node.note || node.scheduled) && (
-        <div className="node-meta" onPointerDown={(e) => e.stopPropagation()}>
-          {node.scheduled && (
+      {/* ②③ STATUS GUTTER — one compact row: schedule (urgency) · links · notes */}
+      {!editing && (sched || allLinks.length > 0 || linkedNotes.length > 0) && (
+        <div className="node-gutter" onPointerDown={(e) => e.stopPropagation()}>
+          {sched && (
             <button
-              className={`meta-pill sched${node.reminderOn ? ' reminding' : ''}`}
-              title={
-                node.scheduleAt
-                  ? `${fmtSchedule(node.scheduleAt)}${node.reminderOn ? ' · 미리알림' : ''}`
-                  : '스케줄 설정'
-              }
+              className={`gchip sched urg-${sched.urg}${node.reminderOn ? ' reminding' : ''}`}
+              title={node.scheduleAt ? fmtSchedule(node.scheduleAt) : '스케줄 설정'}
               onClick={(e) => {
                 e.stopPropagation();
                 select(node.id);
                 useUi.getState().openSchedule(node.id);
               }}
             >
-              <span className="meta-pi">
-                <Icon name={node.reminderOn ? 'alarm' : 'calendar'} />
-              </span>
-              {node.scheduleAt && <span className="meta-pt">{fmtSchedule(node.scheduleAt)}</span>}
+              <Icon name={node.reminderOn ? 'alarm' : 'calendar'} />
+              <span className="gchip-t">{sched.label}</span>
             </button>
           )}
-          {node.note && (
-            <button
-              className="meta-pill note icon-only"
-              title={node.note}
-              onClick={(e) => {
-                e.stopPropagation();
-                select(node.id);
-                useUi.getState().openNote(node.id);
-              }}
-            >
-              <span className="meta-pi">
-                <Icon name="note" />
-              </span>
-            </button>
-          )}
-          {node.link && (
-            <button
-              className="meta-pill link"
-              title={node.link}
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(node.link, '_blank');
-              }}
-            >
-              <span className="meta-pi">
+          {allLinks.map((url) => (
+            <span key={url} className="gchip link">
+              <button
+                className="gchip-open"
+                title={url}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(url, '_blank');
+                }}
+              >
                 <Icon name="link" />
-              </span>
-              {!node.note && <span className="meta-pt">{hostOf(node.link)}</span>}
+                <span className="gchip-t">{hostOf(url)}</span>
+              </button>
+              <button
+                className="gchip-x"
+                title="링크 제거"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeNodeLink(node.id, url);
+                }}
+              >
+                <Icon name="close" />
+              </button>
+            </span>
+          ))}
+          {linkedNotes.map((m) => (
+            <button
+              key={m.path}
+              className="gchip note"
+              title={m.title}
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                useUi.getState().openNotePopup([m.path], { x: r.left, y: r.bottom });
+              }}
+            >
+              <Icon name="note" />
+              <span className="gchip-t">{m.title}</span>
             </button>
-          )}
+          ))}
         </div>
       )}
 
@@ -234,7 +295,7 @@ export function NodeView({
   );
 }
 
-/** Compact local date/time label for a schedule badge, e.g. "6/15 09:00". */
+/** Compact local date/time label, e.g. "6/15 09:00". */
 function fmtSchedule(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -246,12 +307,81 @@ function fmtSchedule(iso: string): string {
   return `${md} ${hh}:${mm}`;
 }
 
+/** Relative, urgency-aware schedule label so the whole map reads "what's hot". */
+function scheduleInfo(scheduleAt?: string): { label: string; urg: string } {
+  if (!scheduleAt) return { label: '일정', urg: 'later' };
+  const d = new Date(scheduleAt);
+  if (Number.isNaN(d.getTime())) return { label: '일정', urg: 'later' };
+  const now = new Date();
+  const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((d0.getTime() - t0.getTime()) / 86400000);
+  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+  const time = hasTime
+    ? ` ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    : '';
+  if (d.getTime() < now.getTime()) {
+    return { label: days === 0 ? `오늘${time}` : days === -1 ? '어제' : `${-days}일 지남`, urg: 'over' };
+  }
+  if (days === 0) return { label: `오늘${time}`, urg: 'today' };
+  if (days === 1) return { label: `내일${time}`, urg: 'soon' };
+  if (days <= 6) return { label: `${days}일 후`, urg: 'later' };
+  return { label: `${d.getMonth() + 1}/${d.getDate()}`, urg: 'later' };
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
     return url.length > 20 ? url.slice(0, 20) + '…' : url;
   }
+}
+
+/** Inline memo — a light second line of body text living on the node itself. */
+function NodeMemo({
+  initial,
+  autoFocus,
+  onCommit,
+}: {
+  initial: string;
+  autoFocus: boolean;
+  onCommit: (text: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.textContent = initial;
+    if (autoFocus) {
+      el.focus();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className="node-memo"
+      contentEditable
+      suppressContentEditableWarning
+      data-placeholder="메모…"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onBlur={(e) => onCommit(e.currentTarget.textContent ?? '')}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Escape') {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
 }
 
 /**
@@ -274,7 +404,6 @@ function NodeEditor({
   const ref = useRef<HTMLDivElement>(null);
   const done = useRef(false);
 
-  // set initial text, focus, and select all on mount
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -310,10 +439,6 @@ function NodeEditor({
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
-        // Enter commits; Shift+Enter inserts a newline.
-        // Stop native propagation BEFORE finish(): committing re-renders synchronously
-        // (zustand) and unmounts this element, so the window keydown listener would
-        // otherwise fire afterwards and create an extra sibling.
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           e.stopPropagation();
@@ -328,7 +453,6 @@ function NodeEditor({
           finish(false);
           return;
         }
-        // stop global shortcuts (Tab, arrows, Delete) from firing while typing
         e.stopPropagation();
       }}
     />

@@ -40,6 +40,15 @@ describe('tree mutations', () => {
     expect(s.getState().doc.nodes[root].parentId).toBeNull();
     expect(s.getState().doc.nodes[c].parentId).toBe(root);
   });
+
+  it('commitText trims so a whitespace-only title equals an empty one', () => {
+    const s = createMapStore();
+    const [root] = rootWithChildren(s, 0);
+    s.getState().commitText(root, '  ');
+    expect(s.getState().doc.nodes[root].text).toBe('');
+    s.getState().commitText(root, ' 출시 준비 ');
+    expect(s.getState().doc.nodes[root].text).toBe('출시 준비');
+  });
 });
 
 describe('schedule + reminder', () => {

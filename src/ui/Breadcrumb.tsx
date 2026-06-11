@@ -1,4 +1,5 @@
 import { useMap } from '../store/mapStore';
+import { Icon } from './Icon';
 
 export function Breadcrumb() {
   const focusRootId = useMap((s) => s.focusRootId);
@@ -11,11 +12,12 @@ export function Breadcrumb() {
   return (
     <div className="breadcrumb">
       <button className="bc-exit" onClick={() => setFocus(null)} title="포커스 해제 (Esc)">
-        ⌂ 전체
+        <Icon name="home" />
+        전체
       </button>
       {parentId && (
         <button className="bc-up" title="상위로" onClick={() => setFocus(parentId)}>
-          ↑
+          <Icon name="chevronUp" />
         </button>
       )}
       <span className="bc-label">집중</span>

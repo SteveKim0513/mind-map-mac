@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMap } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
+import { Icon } from '../ui/Icon';
 
 export function Search({ onClose }: { onClose: () => void }) {
   const nodes = useMap((s) => s.doc.nodes);
@@ -65,14 +66,14 @@ export function Search({ onClose }: { onClose: () => void }) {
         }}
       />
       <span className="count">{matches.length ? `${index + 1}/${matches.length}` : '0'}</span>
-      <button title="이전 (⇧Enter)" onClick={() => go(-1)}>
-        ↑
+      <button className="search-nav" title="이전 (⇧Enter)" onClick={() => go(-1)}>
+        <Icon name="chevronUp" />
       </button>
-      <button title="다음 (Enter)" onClick={() => go(1)}>
-        ↓
+      <button className="search-nav" title="다음 (Enter)" onClick={() => go(1)}>
+        <Icon name="chevronDown" />
       </button>
-      <button title="닫기 (Esc)" onClick={onClose}>
-        ✕
+      <button className="search-nav" title="닫기 (Esc)" onClick={onClose}>
+        <Icon name="close" />
       </button>
     </div>
   );

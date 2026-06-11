@@ -28,7 +28,8 @@ export interface LayoutResult {
  * Auto-layout. Nodes are anchored by their LEFT edge and grow rightward, so a
  * node's text can lengthen without ever covering the connector to its parent.
  * Each child's left edge = parent's right edge + H_GAP (no overlap, ever).
- * Vertical placement comes from d3's tidy-tree breadth assignment.
+ * Vertical placement uses block-packing: every subtree reserves a disjoint
+ * vertical band, so branches never overlap regardless of node/chip sizes.
  */
 export function layout(
   doc: MindMapDoc,
@@ -92,10 +93,11 @@ export function layout(
   const aboveExt = (id: string) =>
     half(id) + (sectionMembers.has(id) ? SECTION_MARGIN : 0);
 
-  const countDescendants = (id: string): number => {
+  const countDescendants = (id: string, seen = new Set<string>()): number => {
     const n = doc.nodes[id];
-    if (!n) return 0;
-    return n.children.reduce((sum, c) => sum + 1 + countDescendants(c), 0);
+    if (!n || seen.has(id)) return 0; // guard against a cyclic parent/child graph
+    seen.add(id);
+    return n.children.reduce((sum, c) => sum + 1 + countDescendants(c, seen), 0);
   };
 
   const positioned: PositionedNode[] = [];
@@ -139,11 +141,17 @@ export function layout(
 
     const ownBand = (id: string) => aboveExt(id) + belowExt(id);
 
-    // subtree block height: max of the node's own footprint and its children stacked
+    // subtree block height: max of the node's own footprint and its children
+    // stacked. `inProgress` guards a cyclic parent/child graph (corrupt data) —
+    // the memo is written only after recursion, so without this a cycle would
+    // recurse forever; on re-entry we treat the node as a leaf.
     const bhMemo = new Map<string, number>();
+    const inProgress = new Set<string>();
     const bh = (id: string): number => {
       const cached = bhMemo.get(id);
       if (cached !== undefined) return cached;
+      if (inProgress.has(id)) return ownBand(id);
+      inProgress.add(id);
       const n = doc.nodes[id];
       const kids = n ? visKids(n) : [];
       let h: number;
@@ -156,14 +164,19 @@ export function layout(
         });
         h = Math.max(ownBand(id), sum);
       }
+      inProgress.delete(id);
       bhMemo.set(id, h);
       return h;
     };
 
     // place a subtree whose block starts at vertical offset `top`; returns the
-    // node's centre y. The node is centred on its children's span; the children
-    // block is centred within the node's (possibly taller) own block.
+    // node's centre y. The node is centred on its children's span, but its own
+    // band is then CLAMPED to stay inside its reserved block so a tall below-chip
+    // can never spill past the block edge into a sibling branch.
+    const placed = new Set<string>();
     const place = (id: string, top: number, depth: number, left: number): number => {
+      if (placed.has(id)) return centerYOf.get(id) ?? top; // cycle / duplicate id
+      placed.add(id);
       depthOf.set(id, depth);
       leftOf.set(id, left);
       const n = doc.nodes[id];
@@ -173,18 +186,21 @@ export function layout(
         centerYOf.set(id, cy);
         return cy;
       }
+      const block = bh(id);
       let childSum = 0;
       kids.forEach((c, i) => {
         childSum += bh(c.id) + (i ? V_GAP : 0);
       });
       const childLeft = left + W(id) + H_GAP;
-      let cursor = top + (bh(id) - childSum) / 2; // centre children within the block
+      let cursor = top + (block - childSum) / 2; // centre children within the block
       const centers: number[] = [];
       kids.forEach((c) => {
         centers.push(place(c.id, cursor, depth + 1, childLeft));
         cursor += bh(c.id) + V_GAP;
       });
-      const cy = (centers[0] + centers[centers.length - 1]) / 2;
+      const mid = (centers[0] + centers[centers.length - 1]) / 2;
+      // keep the node's band [cy-aboveExt, cy+belowExt] within [top, top+block]
+      const cy = Math.max(top + aboveExt(id), Math.min(mid, top + block - belowExt(id)));
       centerYOf.set(id, cy);
       return cy;
     };

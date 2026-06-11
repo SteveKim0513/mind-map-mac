@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMap } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
-
-const COLORS = ['#62aef0', '#d6b6f6', '#ff64c8', '#dd5b00', '#2a9d99', '#1aae39'];
+import { TAG_KEYS, tagVar } from '../theme/palette';
 
 interface Props {
   id: string;
@@ -21,9 +20,11 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
+    // 76px bottom inset keeps the menu clear of the floating zoom toolbar,
+    // which paints above us (the pane's stacking context outranks the canvas's)
     setPos({
       left: Math.min(x, window.innerWidth - r.width - 8),
-      top: Math.min(y, window.innerHeight - r.height - 8),
+      top: Math.min(y, window.innerHeight - r.height - 76),
     });
   }, [x, y]);
 
@@ -61,11 +62,11 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
               className="ctx-item"
               onClick={run(() => map.addConnection(map.selectedIds[0], map.selectedIds[1]))}
             >
-              <span>🔗 두 노드 연결</span>
+              <span>두 노드 연결</span>
             </button>
           )}
           <button className="ctx-item" onClick={run(() => map.addSection(map.selectedIds))}>
-            <span>▢ 섹션으로 묶기 ({map.selectedIds.length})</span>
+            <span>섹션으로 묶기 ({map.selectedIds.length})</span>
           </button>
           <div className="ctx-sep" />
         </>
@@ -85,23 +86,46 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       <div className="ctx-sep" />
 
       <div className="ctx-colors">
-        {COLORS.map((c) => (
+        {TAG_KEYS.map((c) => (
           <button
             key={c}
-            className="ctx-swatch"
-            style={{ background: c }}
+            className={`ctx-swatch${node.color === c ? ' on' : ''}`}
+            style={{ background: tagVar(c), ['--sw' as string]: tagVar(c) }}
             onClick={run(() => map.setColor(id, node.color === c ? undefined : c))}
           />
         ))}
         <button
-          className="ctx-swatch none"
+          className={`ctx-swatch none${!node.color ? ' on' : ''}`}
           title="색 제거"
           onClick={run(() => map.setColor(id, undefined))}
         />
       </div>
 
-      <button className="ctx-item" onClick={run(() => useUi.getState().openNote(id))}>
-        <span>노트·링크</span>
+      <button
+        className="ctx-item"
+        onClick={run(() => useUi.getState().setMemoEditFor(id))}
+        disabled={!!node.note}
+      >
+        <span>{node.note ? '메모 있음' : '메모 추가'}</span>
+      </button>
+      <button className="ctx-item" onClick={run(() => useUi.getState().openAddLink(id))}>
+        <span>링크 추가</span>
+      </button>
+      <button
+        className="ctx-item"
+        onClick={run(() =>
+          useUi.getState().openLinkNote({
+            mapId: map.doc.id ?? '',
+            nodeId: id,
+            nodeText: node.text,
+            mapPath: map.filePath ?? '',
+          }),
+        )}
+      >
+        <span>노트 추가·연결</span>
+      </button>
+      <button className="ctx-item subtle" onClick={run(() => useUi.getState().openNote(id))}>
+        <span>아이콘…</span>
       </button>
       <button className="ctx-item" onClick={run(() => map.toggleDone(id))}>
         <span>{node.done ? '완료 해제' : '완료 표시'}</span>
@@ -111,15 +135,15 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       {node.scheduled ? (
         <>
           <button className="ctx-item" onClick={run(() => useUi.getState().openSchedule(id))}>
-            <span>📅 스케줄 설정…</span>
+            <span>날짜·시간 설정…</span>
           </button>
           <button className="ctx-item" onClick={run(() => map.setScheduled(id, false))}>
-            <span>스케줄 해제{hasChildren ? ' (하위 포함)' : ''}</span>
+            <span>{hasChildren ? '하위까지 스케줄 해제' : '스케줄 해제'}</span>
           </button>
         </>
       ) : (
         <button className="ctx-item" onClick={run(() => map.setScheduled(id, true))}>
-          <span>📅 스케줄 노드로 지정{hasChildren ? ' (하위 포함)' : ''}</span>
+          <span>{hasChildren ? '하위까지 스케줄 노드로 지정' : '스케줄 노드로 지정'}</span>
         </button>
       )}
       {hasChildren && (

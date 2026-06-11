@@ -1,36 +1,50 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMap } from '../store/mapStore';
+import { Icon, type IconName } from '../ui/Icon';
 
-const ICONS = ['⭐', '✅', '❗', '💡', '📌', '🎯'];
+const ICONS: { name: IconName; label: string }[] = [
+  { name: 'star', label: '별표' },
+  { name: 'check', label: '완료' },
+  { name: 'flag', label: '깃발' },
+  { name: 'bulb', label: '아이디어' },
+  { name: 'pin', label: '핀' },
+  { name: 'target', label: '목표' },
+];
+
+// migrate emoji icons saved by the old picker to the new line-icon names
+const LEGACY_ICONS: Record<string, IconName> = {
+  '⭐': 'star',
+  '✅': 'check',
+  '❗': 'flag',
+  '💡': 'bulb',
+  '📌': 'pin',
+  '🎯': 'target',
+};
 
 interface Props {
   id: string;
   onClose: () => void;
 }
 
-/** Note / link / icon editor floated beside its node. Autosaves as you type. */
+/** Icon picker floated beside its node. (Memo · link · note now have their own
+ *  dedicated paths — this popover is icon-only.) */
 export function NodePopover({ id, onClose }: Props) {
   const node = useMap((s) => s.doc.nodes[id]);
   const setIcon = useMap((s) => s.setIcon);
-  const setLink = useMap((s) => s.setLink);
-  const setNote = useMap((s) => s.setNote);
 
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
   useLayoutEffect(() => {
     const el = document.querySelector(`[data-node-id="${id}"]`) as HTMLElement | null;
-    const W = 300;
-    const H = 280;
+    const W = 220;
     if (!el) {
       setPos({ left: window.innerWidth - W - 24, top: 80 });
       return;
     }
     const r = el.getBoundingClientRect();
-    let left = Math.max(12, Math.min(r.left, window.innerWidth - W - 12));
-    let top = r.bottom + 10;
-    if (top + H > window.innerHeight - 12) top = Math.max(12, r.top - H - 10);
-    setPos({ left, top });
+    const left = Math.max(12, Math.min(r.left, window.innerWidth - W - 12));
+    setPos({ left, top: r.bottom + 10 });
   }, [id]);
 
   useEffect(() => {
@@ -46,124 +60,45 @@ export function NodePopover({ id, onClose }: Props) {
     };
   }, [onClose]);
 
+  // one-time upgrade: a node saved with the old emoji picker → its line-icon name
+  const legacyIcon = node?.icon ? LEGACY_ICONS[node.icon] : undefined;
+  useEffect(() => {
+    if (legacyIcon) setIcon(id, legacyIcon);
+  }, [id, legacyIcon, setIcon]);
+
   if (!node || !pos) return null;
 
   return (
     <div
       ref={ref}
-      className="note-pop"
+      className="note-pop icon-pop"
       style={{ left: pos.left, top: pos.top }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="note-pop-head">
-        <span className="note-pop-title" title={node.text}>
-          {node.text || '제목 없음'}
-        </span>
+        <span className="note-pop-title">아이콘</span>
         <button className="note-pop-x" title="닫기 (Esc)" onClick={onClose}>
-          ✕
+          <Icon name="close" />
         </button>
       </div>
 
-      <Fields
-        id={id}
-        initialLink={node.link}
-        initialNote={node.note}
-        setLink={setLink}
-        setNote={setNote}
-      />
-
       <div className="note-pop-icons">
-        {ICONS.map((ic) => (
+        {ICONS.map(({ name, label }) => (
           <button
-            key={ic}
-            className={`icon-opt${node.icon === ic ? ' on' : ''}`}
-            onClick={() => setIcon(id, node.icon === ic ? undefined : ic)}
+            key={name}
+            className={`icon-opt${node.icon === name ? ' on' : ''}`}
+            title={label}
+            onClick={() => setIcon(id, node.icon === name ? undefined : name)}
           >
-            {ic}
+            <Icon name={name} />
           </button>
         ))}
         {node.icon && (
           <button className="icon-opt clear" title="아이콘 제거" onClick={() => setIcon(id, undefined)}>
-            ✕
+            <Icon name="close" />
           </button>
         )}
       </div>
     </div>
-  );
-}
-
-function Fields({
-  id,
-  initialLink,
-  initialNote,
-  setLink,
-  setNote,
-}: {
-  id: string;
-  initialLink?: string;
-  initialNote?: string;
-  setLink: (id: string, v: string | undefined) => void;
-  setNote: (id: string, v: string) => void;
-}) {
-  const [link, setLinkLocal] = useState(initialLink ?? '');
-  const [note, setNoteLocal] = useState(initialNote ?? '');
-  const linkTimer = useRef<ReturnType<typeof setTimeout>>();
-  const noteTimer = useRef<ReturnType<typeof setTimeout>>();
-  const noteRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    noteRef.current?.focus();
-    return () => {
-      clearTimeout(linkTimer.current);
-      clearTimeout(noteTimer.current);
-    };
-  }, []);
-
-  const onLink = (v: string) => {
-    setLinkLocal(v);
-    clearTimeout(linkTimer.current);
-    linkTimer.current = setTimeout(() => setLink(id, v.trim() || undefined), 400);
-  };
-  const onNote = (v: string) => {
-    setNoteLocal(v);
-    clearTimeout(noteTimer.current);
-    noteTimer.current = setTimeout(() => setNote(id, v), 400);
-  };
-
-  const openable = /^https?:\/\/|^www\./i.test(link.trim());
-
-  return (
-    <>
-      <textarea
-        ref={noteRef}
-        className="note-pop-area"
-        placeholder="노트를 입력하세요…"
-        value={note}
-        onChange={(e) => onNote(e.target.value)}
-        onBlur={() => setNote(id, note)}
-      />
-      <div className="note-pop-linkrow">
-        <span className="note-pop-link-ic">🔗</span>
-        <input
-          className="note-pop-link"
-          placeholder="링크 추가 (https://…)"
-          value={link}
-          onChange={(e) => onLink(e.target.value)}
-          onBlur={() => setLink(id, link.trim() || undefined)}
-        />
-        {openable && (
-          <button
-            className="note-pop-open"
-            title="링크 열기"
-            onClick={() => {
-              const url = link.trim();
-              window.open(/^https?:\/\//i.test(url) ? url : `https://${url}`, '_blank');
-            }}
-          >
-            ↗
-          </button>
-        )}
-      </div>
-    </>
   );
 }

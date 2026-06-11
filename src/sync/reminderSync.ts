@@ -82,7 +82,8 @@ function patch(store: MapStore, id: string, fields: Record<string, unknown>) {
 
 /** Keep one subscription per open tab; reconcile when a tab's document mutates. */
 function refreshSubs() {
-  const tabs = useSession.getState().tabs;
+  // only map tabs carry schedulable nodes; note tabs are ignored by sync
+  const tabs = useSession.getState().tabs.filter((t) => t.kind === 'map');
   const live = new Set(tabs.map((t) => t.id));
   for (const [id, s] of subs) {
     if (!live.has(id)) {
@@ -92,7 +93,7 @@ function refreshSubs() {
   }
   for (const t of tabs) {
     if (subs.has(t.id)) continue;
-    const store = t.store;
+    const store = t.store as MapStore;
     const entry = { lastDoc: store.getState().doc, unsub: () => {} };
     entry.unsub = store.subscribe(() => {
       const d = store.getState().doc;
@@ -119,8 +120,8 @@ function onFailure(err: unknown) {
       .getState()
       .toast(
         denied
-          ? '미리알림 권한이 필요합니다 — 시스템 설정 › 개인정보 보호 › 자동화'
-          : '미리알림 동기화 일시 중지 — 자동 재시도 중',
+          ? '미리알림 권한 필요 — 설정 › 개인정보 보호 및 보안 › 자동화'
+          : '동기화 일시 중지 — 자동 재시도 중',
       );
   }
   startHeartbeat();
@@ -173,9 +174,11 @@ async function reconcile() {
     const owners = new Map<string, MapStore>();
     let trackedCount = 0;
     for (const t of useSession.getState().tabs) {
-      const nodes = t.store.getState().doc.nodes;
+      if (t.kind !== 'map') continue;
+      const store = t.store as MapStore;
+      const nodes = store.getState().doc.nodes;
       for (const id in nodes) {
-        owners.set(id, t.store);
+        owners.set(id, store);
         const n = nodes[id];
         if (n.reminderOn || n.reminderId) trackedCount++;
       }

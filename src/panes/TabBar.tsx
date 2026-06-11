@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useStore } from 'zustand';
 import { useUi } from '../store/uiStore';
+import { Icon } from '../ui/Icon';
 import type { Tab, GroupIndex } from '../store/sessionStore';
 import type { MapStore } from '../store/mapStore';
+import type { NoteStore } from '../store/noteStore';
 
-function TabDirty({ store }: { store: MapStore }) {
-  const dirty = useStore(store, (s) => s.dirty);
+function TabDirty({ store }: { store: MapStore | NoteStore }) {
+  // both map and note stores expose `dirty`
+  const dirty = useStore(store as MapStore, (s) => s.dirty);
   return dirty ? <span className="tab-dirty" title="저장되지 않음" /> : null;
 }
 
@@ -89,6 +92,12 @@ export function TabBar(p: Props) {
               setMenu({ x: e.clientX, y: e.clientY, id });
             }}
           >
+            <span
+              className={`tab-ic tab-ic--${t.kind === 'note' ? 'note' : 'map'}`}
+              title={t.kind === 'note' ? '노트' : '마인드맵'}
+            >
+              <Icon name={t.kind === 'note' ? 'note' : 'mindmap'} />
+            </span>
             <span className="tab-title">{t.title || '제목 없음'}</span>
             <TabDirty store={t.store} />
             <button
@@ -99,7 +108,7 @@ export function TabBar(p: Props) {
                 p.onCloseTab(id);
               }}
             >
-              ✕
+              <Icon name="close" />
             </button>
           </div>
         );
@@ -114,7 +123,7 @@ export function TabBar(p: Props) {
     >
       {!p.sidebarVisible && (
         <button className="tab-tool" title="사이드바 보기" onClick={p.onShowSidebar}>
-          ☰
+          <Icon name="menu" />
         </button>
       )}
 
