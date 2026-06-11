@@ -261,7 +261,11 @@ async function getWorkspace(): Promise<string> {
   const s = await readSettings();
   let ws = s.workspace;
   if (!ws) {
-    ws = path.join(app.getPath('documents'), 'MindMaps');
+    // "MindMap Dev" test builds (npm run dist:dev) get their own default
+    // workspace too — sharing ~/Documents/MindMaps with the real install
+    // would mix test files into the user's actual maps.
+    const wsName = app.getName() === 'MindMap Dev' ? 'MindMaps Dev' : 'MindMaps';
+    ws = path.join(app.getPath('documents'), wsName);
     await writeSettings({ ...s, workspace: ws });
   }
   await fs.mkdir(ws, { recursive: true });

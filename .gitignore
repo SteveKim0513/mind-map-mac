@@ -4,4 +4,5 @@ node_modules/
 /release/
 *.log
 .DS_Store
-/build/icon.iconset/
+/build/*.iconset/
+/release-dev/

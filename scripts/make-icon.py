@@ -52,19 +52,21 @@ def bezier(p0, c1, c2, p1, steps=64):
     return pts
 
 
-def main():
+def render(dev: bool) -> Image.Image:
+    """The release icon, or the dev variant (inverted: dark slate, light root)."""
     img = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
 
     # squircle mask (Big Sur grid: 824/1024, centered)
     mask = Image.new("L", (CANVAS, CANVAS), 0)
     ImageDraw.Draw(mask).polygon(superellipse(512 * S, 512 * S, 412 * S), fill=255)
 
-    # subtle warm-paper vertical gradient
+    # subtle vertical gradient — warm paper, or dark slate for the dev build
+    top, bottom = ((47, 46, 44), (31, 31, 31)) if dev else (PAPER_TOP, PAPER_BOTTOM)
     grad = Image.new("RGBA", (CANVAS, CANVAS))
     gd = ImageDraw.Draw(grad)
     for y in range(CANVAS):
         t = y / CANVAS
-        col = tuple(round(a + (b - a) * t) for a, b in zip(PAPER_TOP, PAPER_BOTTOM))
+        col = tuple(round(a + (b - a) * t) for a, b in zip(top, bottom))
         gd.line([(0, y), (CANVAS, y)], fill=col + (255,))
     img.paste(grad, (0, 0), mask)
 
@@ -95,18 +97,16 @@ def main():
         x0, y0, x1, y1 = (v * S for v in box)
         d.rounded_rectangle((x0, y0, x1, y1), radius=radius * S, fill=fill)
 
-    node(root, INK, 54)
+    node(root, PAPER_TOP if dev else INK, 54)
     for box, color in kids:
         node(box, color, 44)
 
-    img = img.resize((1024, 1024), Image.LANCZOS)
+    return img.resize((1024, 1024), Image.LANCZOS)
 
-    out_dir = os.path.join(os.path.dirname(__file__), "..", "build")
-    os.makedirs(out_dir, exist_ok=True)
-    master = os.path.join(out_dir, "icon.png")
-    img.save(master)
 
-    iconset = os.path.join(out_dir, "icon.iconset")
+def write_icns(img: Image.Image, out_dir: str, stem: str) -> None:
+    img.save(os.path.join(out_dir, f"{stem}.png"))
+    iconset = os.path.join(out_dir, f"{stem}.iconset")
     shutil.rmtree(iconset, ignore_errors=True)
     os.makedirs(iconset)
     for size in (16, 32, 128, 256, 512):
@@ -117,10 +117,17 @@ def main():
             os.path.join(iconset, f"icon_{size}x{size}@2x.png")
         )
     subprocess.run(
-        ["iconutil", "-c", "icns", iconset, "-o", os.path.join(out_dir, "icon.icns")],
+        ["iconutil", "-c", "icns", iconset, "-o", os.path.join(out_dir, f"{stem}.icns")],
         check=True,
     )
-    print("wrote build/icon.png + build/icon.icns")
+
+
+def main():
+    out_dir = os.path.join(os.path.dirname(__file__), "..", "build")
+    os.makedirs(out_dir, exist_ok=True)
+    write_icns(render(dev=False), out_dir, "icon")
+    write_icns(render(dev=True), out_dir, "icon-dev")
+    print("wrote build/icon.{png,icns} + build/icon-dev.{png,icns}")
 
 
 if __name__ == "__main__":

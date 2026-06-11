@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run build && electron-builder --config.extraMetadata.productName=MindMap",
+    "dist:dev": "npm run build && electron-builder --config.productName='MindMap Dev' --config.extraMetadata.productName='MindMap Dev' --config.appId=co.imaginefutures.mindmap.dev --config.mac.icon=build/icon-dev.icns --config.directories.output=release-dev",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

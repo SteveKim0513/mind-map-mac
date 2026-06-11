@@ -32,6 +32,21 @@
 - [x] **앱 아이콘** — `scripts/make-icon.py`가 코드로 생성 (팔레트 변경 시 재실행 → `build/icon.icns`). 2026-06-11 v0.2.0에 포함
 - [ ] **코드 서명·공증** — Developer ID 인증서 없음 → 서명 생략됨. 외부 배포 시 Gatekeeper 경고 발생. Apple Developer Program 가입 + `notarize` 설정 필요
 
+## 테스트용 빌드 — `npm run dist:dev`
+
+배포본과 헷갈리지 않도록 테스트 패키지는 **별도 정체성**으로 빌드한다:
+- 이름 "MindMap Dev" + 다크 아이콘 (`build/icon-dev.icns`) → Spotlight·독에서 즉시 구분
+- appId `co.imaginefutures.mindmap.dev`, 산출물은 `release-dev/`
+- **데이터 완전 분리**: userData `~/Library/Application Support/MindMap Dev`, 기본 워크스페이스 `~/Documents/MindMaps Dev`
+
+세 실행 형태의 정체성 (extraMetadata가 asar의 package.json에 productName을 기록해야 `app.getName()`이 따라온다 — dist 스크립트에 포함됨):
+
+| 형태 | 이름 | userData | 기본 워크스페이스 |
+|---|---|---|---|
+| 설치본 (`dist`) | MindMap | `…/MindMap` | `~/Documents/MindMaps` |
+| 테스트 (`dist:dev`) | MindMap Dev | `…/MindMap Dev` | `~/Documents/MindMaps Dev` |
+| 개발 (`npm run dev`) | mind-map | `…/mind-map` | settings.json 따름 |
+
 ## 자동화 스모크 (선택)
 
 패키징된 앱도 드라이버로 검증 가능: `MINDMAP_USER_DATA`로 격리하고 실행 파일을 `release/mac-arm64/MindMap.app/Contents/MacOS/MindMap`으로 지정. v0.2.0에서 검증한 항목: 실행/홈, isPackaged, DevTools 메뉴 부재, 키보드 트리 작성, 자동 명명, ⌘K, 세션 복원.
