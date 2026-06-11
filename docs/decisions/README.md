@@ -21,3 +21,4 @@
 - [0001 — 노드 색은 hex가 아닌 시맨틱 키로 저장](0001-semantic-color-keys.md)
 - [0002 — 리마인더 AppleScript 호출 직렬화 + 본문 태그 소유권](0002-reminder-osascript-serialization.md)
 - [0003 — 노트는 독립 Markdown 파일 + 명시적 노드 링크](0003-notes-as-standalone-files.md)
+- [0004 — 진입점 매트릭스 채택 + 우클릭 메뉴 그룹 구분선](0004-entrypoint-matrix.md)

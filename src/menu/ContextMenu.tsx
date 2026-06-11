@@ -85,6 +85,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       </button>
       <div className="ctx-sep" />
 
+      {/* 속성: 색상 · 아이콘 · 완료 — 그룹 구분은 decisions/0004 (진입점 매트릭스 A안) */}
       <div className="ctx-colors">
         {TAG_KEYS.map((c) => (
           <button
@@ -100,7 +101,16 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
           onClick={run(() => map.setColor(id, undefined))}
         />
       </div>
+      <button className="ctx-item subtle" onClick={run(() => useUi.getState().openNote(id))}>
+        <span>아이콘…</span>
+      </button>
+      <button className="ctx-item" onClick={run(() => map.toggleDone(id))}>
+        <span>{node.done ? '완료 해제' : '완료 표시'}</span>
+        <kbd>⌘↵</kbd>
+      </button>
+      <div className="ctx-sep" />
 
+      {/* 첨부: 메모 · 링크 · 노트 */}
       <button
         className="ctx-item"
         onClick={run(() => useUi.getState().setMemoEditFor(id))}
@@ -124,14 +134,9 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       >
         <span>노트 추가·연결</span>
       </button>
-      <button className="ctx-item subtle" onClick={run(() => useUi.getState().openNote(id))}>
-        <span>아이콘…</span>
-      </button>
-      <button className="ctx-item" onClick={run(() => map.toggleDone(id))}>
-        <span>{node.done ? '완료 해제' : '완료 표시'}</span>
-        <kbd>⌘↵</kbd>
-      </button>
       <div className="ctx-sep" />
+
+      {/* 일정 */}
       {node.scheduled ? (
         <>
           <button className="ctx-item" onClick={run(() => useUi.getState().openSchedule(id))}>
@@ -146,13 +151,14 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
           <span>{hasChildren ? '하위까지 스케줄 노드로 지정' : '스케줄 노드로 지정'}</span>
         </button>
       )}
+      <div className="ctx-sep" />
+
+      {/* 보기 · 기타 */}
       {hasChildren && (
         <button className="ctx-item" onClick={run(() => map.toggleCollapse(id))}>
           <span>{node.collapsed ? '펼치기' : '접기'}</span>
         </button>
       )}
-      <div className="ctx-sep" />
-
       <button className="ctx-item" onClick={run(() => map.setFocus(id))}>
         <span>이 노드에 집중</span>
       </button>
@@ -163,7 +169,6 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       <button className="ctx-item" onClick={run(() => map.duplicateNode(id))}>
         <span>복제</span>
       </button>
-      <div className="ctx-sep" />
       <button className="ctx-item danger" onClick={run(() => map.deleteNode(id))}>
         <span>삭제</span>
         <kbd>⌫</kbd>

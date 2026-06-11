@@ -1,6 +1,6 @@
 # 동작별 표준 진입점 매트릭스 — 기능 명세
 
-> 작성: 2026-06-11 · 작성자: 기획(Claude) · 상태: 1차 구현·검증 완료 (매트릭스 팀 합의 대기)
+> 작성: 2026-06-11 · 작성자: 기획(Claude) · 상태: **합의됨** ([decisions/0004](../../decisions/0004-entrypoint-matrix.md)) — 메뉴 그룹핑은 A안(구분선) 채택·구현
 > 출처: [UX-AUDIT-2026-06 U4](../UX-AUDIT-2026-06.md), [FEATURE-INVENTORY 부록 B](../FEATURE-INVENTORY.md)
 
 ## 1. 문제 (Why)
