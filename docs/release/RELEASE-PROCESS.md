@@ -31,8 +31,25 @@
 ## 외부 배포 전 추가 과제 (v0.2.0 기준 미해결 — 내부 배포는 무관)
 
 - [x] **앱 아이콘** — `scripts/make-icon.py`가 코드로 생성 (팔레트 변경 시 재실행 → `build/icon.icns`). 2026-06-11 v0.2.0에 포함
-- [ ] **코드 서명·공증** — Developer ID 인증서 없음 → 서명 생략됨. Apple Developer Program 가입 + `notarize` 설정 필요.
-  **증상 (2026-06-11 실확인)**: 다른 Mac에 전송·설치하면 격리(quarantine) 속성 때문에 *"손상되었기 때문에 휴지통으로 이동해야 합니다"* 팝업이 뜬다. 앱 결함이 아니라 미서명 앱의 Gatekeeper 기본 동작. 임시 우회는 설치 후 터미널에서 `xattr -cr /Applications/MindMap.app` (이 유형은 우클릭→열기로 안 풀림). 서명·공증 전까지 외부 배포 불가의 실질 원인.
+- [ ] **코드 서명·공증** — 멤버십 보유 확인(2026-06-11), 빌드 설정 완료(`hardenedRuntime`+`notarize`). 남은 것은 이 Mac에 자격 증명 설치 (아래 1회성 절차).
+  **증상 (2026-06-11 실확인)**: 미서명 dmg를 다른 Mac에 전송·설치하면 격리 속성 때문에 *"손상되었기 때문에 휴지통으로 이동"* 팝업. 임시 우회: `xattr -cr /Applications/MindMap.app` (우클릭→열기로는 안 풀림). 격리가 안 붙는 exFAT USB 전달도 가능.
+
+### 서명·공증 1회 설정 (Apple ID 필요 — 계정 주인이 직접)
+
+1. **CSR 생성**: 키체인 접근 → 메뉴 "키체인 접근 › 인증서 지원 › 인증 기관에서 인증서 요청" → 이메일 입력, "디스크에 저장됨" 선택 → `.certSigningRequest` 저장
+2. **인증서 발급**: developer.apple.com → Certificates → **+** → **"Developer ID Application"** → CSR 업로드 → `.cer` 다운로드 → 더블클릭(키체인에 설치). ※ 법인 계정이면 Account Holder 권한 필요
+3. **공증 자격 저장**: appleid.apple.com → 로그인 및 보안 → **앱 암호** 생성. Team ID는 developer.apple.com → Membership에서 확인. 그 후:
+   ```bash
+   xcrun notarytool store-credentials "mindmap-notary" \
+     --apple-id "본인@이메일" --team-id "TEAMID" --password "앱암호"
+   ```
+4. **이후 모든 릴리즈 빌드**:
+   ```bash
+   APPLE_KEYCHAIN_PROFILE=mindmap-notary npm run dist
+   ```
+   인증서는 키체인에서 자동 감지, 공증은 Apple 서버 확인으로 빌드당 수 분 추가. 자격 증명 env 없이 돌리면 기존처럼 미서명 빌드(경고만 출력).
+
+확인 방법: 빌드 로그에 `signing`·`notarization successful`이 보이고, `spctl -a -vv release/mac-arm64/MindMap.app` → `accepted, source=Notarized Developer ID`.
 
 ## 테스트용 빌드 — `npm run dist:dev`
 
