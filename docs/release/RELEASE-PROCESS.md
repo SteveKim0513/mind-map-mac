@@ -31,7 +31,8 @@
 ## 외부 배포 전 추가 과제 (v0.2.0 기준 미해결 — 내부 배포는 무관)
 
 - [x] **앱 아이콘** — `scripts/make-icon.py`가 코드로 생성 (팔레트 변경 시 재실행 → `build/icon.icns`). 2026-06-11 v0.2.0에 포함
-- [ ] **코드 서명·공증** — Developer ID 인증서 없음 → 서명 생략됨. 외부 배포 시 Gatekeeper 경고 발생. Apple Developer Program 가입 + `notarize` 설정 필요
+- [ ] **코드 서명·공증** — Developer ID 인증서 없음 → 서명 생략됨. Apple Developer Program 가입 + `notarize` 설정 필요.
+  **증상 (2026-06-11 실확인)**: 다른 Mac에 전송·설치하면 격리(quarantine) 속성 때문에 *"손상되었기 때문에 휴지통으로 이동해야 합니다"* 팝업이 뜬다. 앱 결함이 아니라 미서명 앱의 Gatekeeper 기본 동작. 임시 우회는 설치 후 터미널에서 `xattr -cr /Applications/MindMap.app` (이 유형은 우클릭→열기로 안 풀림). 서명·공증 전까지 외부 배포 불가의 실질 원인.
 
 ## 테스트용 빌드 — `npm run dist:dev`
 
