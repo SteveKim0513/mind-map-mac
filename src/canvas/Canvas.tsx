@@ -83,6 +83,18 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   const [dragSuppress, setDragSuppress] = useState(false);
   const [panning, setPanning] = useState(false);
 
+  // …or until the user navigates with the keyboard: arrow keys after a drag must
+  // bring the toolbar back too, not just a mouse click (keyboard-first app).
+  // Keyed on the keystroke, not on selection state — a selection-change effect
+  // would flush after the drag's own mouseup and undo the suppression.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.startsWith('Arrow')) setDragSuppress(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Mutable interaction state kept in a ref so window listeners see fresh values.
   const interaction = useRef<
     | { mode: 'idle' }

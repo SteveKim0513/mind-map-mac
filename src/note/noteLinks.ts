@@ -83,22 +83,65 @@ export async function removeLinkFromNoteFile(
   reindexFromNote(notePath, note);
 }
 
+/** Does this file content belong to the map we're looking for? */
+function isMapContent(content: string, mapId: string): boolean {
+  try {
+    return (JSON.parse(content) as { id?: string }).id === mapId;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find a map file by its document id — the link's path is only a hint and goes
+ * stale whenever the map is renamed (untitled auto-naming does this routinely).
+ */
+async function findMapPathById(mapId: string): Promise<{ path: string; content: string } | null> {
+  const mindPaths: string[] = [];
+  const walk = (nodes: { type: string; path: string; children?: unknown }[]) => {
+    for (const n of nodes) {
+      if (n.type === 'dir' && Array.isArray(n.children)) walk(n.children as typeof nodes);
+      else if (n.type === 'file' && n.path.endsWith('.mind')) mindPaths.push(n.path);
+    }
+  };
+  walk(useWorkspace.getState().tree);
+  for (const p of mindPaths) {
+    try {
+      const content = await window.api.readFile(p);
+      if (isMapContent(content, mapId)) return { path: p, content };
+    } catch {
+      /* unreadable → skip */
+    }
+  }
+  return null;
+}
+
 /** Open (or focus) the map a link points at and center the linked node. */
 export async function revealNode(link: NoteLink): Promise<void> {
   const sess = useSession.getState();
   const open = sess.tabs.find(
     (t) => t.kind === 'map' && (t.store as MapStore).getState().doc.id === link.mapId,
   );
-  const path = open?.path ?? link.mapPath;
-  if (!path) return;
-  if (open) {
-    sess.openPath(path, ''); // already open → just activates its tab/group
+  if (open && open.path) {
+    sess.openPath(open.path, ''); // already open → just activates its tab/group
   } else {
-    try {
-      sess.openPath(path, await window.api.readFile(path));
-    } catch {
+    // closed → try the path hint, fall back to resolving by doc id, and never
+    // fail silently (the user just clicked a chip and expects SOMETHING)
+    let found: { path: string; content: string } | null = null;
+    if (link.mapPath) {
+      try {
+        const content = await window.api.readFile(link.mapPath);
+        if (isMapContent(content, link.mapId)) found = { path: link.mapPath, content };
+      } catch {
+        /* stale hint */
+      }
+    }
+    if (!found) found = await findMapPathById(link.mapId);
+    if (!found) {
+      useUi.getState().toast('연결된 맵을 찾을 수 없습니다 — 이동되었거나 삭제된 것 같아요');
       return;
     }
+    sess.openPath(found.path, found.content);
   }
   const tab = useSession
     .getState()

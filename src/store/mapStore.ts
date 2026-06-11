@@ -8,6 +8,10 @@ const HISTORY_LIMIT = 100;
 export type NavDir = 'up' | 'down' | 'left' | 'right';
 
 /** A detached, id-free copy of a subtree, held on the in-app clipboard. */
+// Copy semantics (decisions/0005): a copy carries ALL of the node's content —
+// including schedule dates and links — but never the reminder identity
+// (reminderOn/reminderId), so a paste can't duplicate or steal a macOS reminder.
+// Mirrors duplicateNode, which clones everything and strips only reminder ids.
 interface ClipNode {
   text: string;
   done?: boolean;
@@ -15,6 +19,9 @@ interface ClipNode {
   icon?: string;
   note?: string;
   link?: string;
+  links?: string[];
+  scheduled?: boolean;
+  scheduleAt?: string;
   children: ClipNode[];
 }
 let clipboard: ClipNode | null = null;
@@ -530,6 +537,9 @@ export function createMapStore(): MapStore {
           icon: n.icon,
           note: n.note,
           link: n.link,
+          links: n.links ? [...n.links] : undefined,
+          scheduled: n.scheduled,
+          scheduleAt: n.scheduleAt,
           children: n.children.map(build).filter((c): c is ClipNode => c !== null),
         };
       };
@@ -553,6 +563,9 @@ export function createMapStore(): MapStore {
             icon: clip.icon,
             note: clip.note,
             link: clip.link,
+            links: clip.links ? [...clip.links] : undefined,
+            scheduled: clip.scheduled,
+            scheduleAt: clip.scheduleAt,
           };
           d.nodes[id].children = clip.children.map((c) => add(c, id));
           return id;

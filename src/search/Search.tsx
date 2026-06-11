@@ -23,7 +23,9 @@ export function Search({ onClose }: { onClose: () => void }) {
     if (!q) return [];
     return Object.values(nodes)
       .filter((n) =>
-        `${n.text} ${n.note ?? ''} ${n.link ?? ''}`.toLowerCase().includes(q),
+        `${n.text} ${n.note ?? ''} ${n.link ?? ''} ${(n.links ?? []).join(' ')}`
+          .toLowerCase()
+          .includes(q),
       )
       .map((n) => n.id);
   }, [query, nodes]);

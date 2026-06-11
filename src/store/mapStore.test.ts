@@ -41,6 +41,27 @@ describe('tree mutations', () => {
     expect(s.getState().doc.nodes[c].parentId).toBe(root);
   });
 
+  it('copy-paste keeps content (links, schedule) but never reminder identity (decisions/0005)', () => {
+    const s = createMapStore();
+    const [root, [c]] = rootWithChildren(s, 1);
+    s.getState().addNodeLink(c, 'https://a.example');
+    s.getState().addNodeLink(c, 'https://b.example');
+    s.getState().setScheduled(c, true);
+    s.getState().setScheduleAt(c, '2026-07-01T09:00:00');
+    s.getState().setReminderOn(c, true);
+
+    s.getState().copyNode(c);
+    s.getState().pasteNode(root);
+    const pasted = s.getState().doc.nodes[s.getState().selectedId!];
+
+    expect(pasted.id).not.toBe(c);
+    expect(pasted.links).toEqual(['https://a.example', 'https://b.example']);
+    expect(pasted.scheduled).toBe(true);
+    expect(pasted.scheduleAt).toBe('2026-07-01T09:00:00');
+    expect(pasted.reminderOn).toBeUndefined();
+    expect(pasted.reminderId).toBeUndefined();
+  });
+
   it('commitText trims so a whitespace-only title equals an empty one', () => {
     const s = createMapStore();
     const [root] = rootWithChildren(s, 0);

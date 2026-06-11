@@ -400,7 +400,9 @@ ipcMain.handle('fs:move', async (_e, args: { src: string; destDir: string }) => 
   const name = path.basename(src);
   if (path.dirname(src) === destDir) return null; // already there
   if (destDir === src || destDir.startsWith(src + path.sep)) return null; // into itself
-  const ext = name.endsWith('.mind') ? '.mind' : '';
+  // recognize BOTH app extensions — a bare '' ext would make uniquePath emit
+  // "foo.md 2" (no extension), invisible to the sidebar walk (= vanished note)
+  const ext = name.endsWith('.mind') ? '.mind' : name.endsWith('.md') ? '.md' : '';
   const base = ext ? name.slice(0, -ext.length) : name;
   let target = path.join(destDir, name);
   try {

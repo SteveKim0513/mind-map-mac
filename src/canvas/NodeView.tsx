@@ -4,6 +4,7 @@ import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { measureNode } from '../layout/measure';
+import { scheduleInfo } from './scheduleInfo';
 import { Icon, isIconName } from '../ui/Icon';
 import { tagVar } from '../theme/palette';
 
@@ -94,7 +95,9 @@ export function NodeView({
     if (!el) return;
     const prev = prevPos.current;
     prevPos.current = { x: p.x, y: p.y };
-    if (!prev || isDragging) return;
+    // No glide while the user is typing in this node — their own keystrokes
+    // resize it and re-center it, and a spring per line-wrap shakes the caret.
+    if (!prev || isDragging || editing || memoEditing) return;
     const dx = prev.x - p.x;
     const dy = prev.y - p.y;
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
@@ -104,7 +107,7 @@ export function NodeView({
       el.style.transition = 'transform 0.28s var(--spring)';
       el.style.transform = '';
     });
-  }, [p.x, p.y, isDragging]);
+  }, [p.x, p.y, isDragging, editing, memoEditing]);
 
   const cls = [
     'node',
@@ -311,28 +314,6 @@ function fmtSchedule(iso: string): string {
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${md} ${hh}:${mm}`;
-}
-
-/** Relative, urgency-aware schedule label so the whole map reads "what's hot". */
-function scheduleInfo(scheduleAt?: string): { label: string; urg: string } {
-  if (!scheduleAt) return { label: '일정', urg: 'later' };
-  const d = new Date(scheduleAt);
-  if (Number.isNaN(d.getTime())) return { label: '일정', urg: 'later' };
-  const now = new Date();
-  const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const days = Math.round((d0.getTime() - t0.getTime()) / 86400000);
-  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
-  const time = hasTime
-    ? ` ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-    : '';
-  if (d.getTime() < now.getTime()) {
-    return { label: days === 0 ? `오늘${time}` : days === -1 ? '어제' : `${-days}일 지남`, urg: 'over' };
-  }
-  if (days === 0) return { label: `오늘${time}`, urg: 'today' };
-  if (days === 1) return { label: `내일${time}`, urg: 'soon' };
-  if (days <= 6) return { label: `${days}일 후`, urg: 'later' };
-  return { label: `${d.getMonth() + 1}/${d.getDate()}`, urg: 'later' };
 }
 
 function hostOf(url: string): string {
