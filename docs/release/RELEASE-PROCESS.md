@@ -8,8 +8,12 @@
 2. **QA 1회전** — [QA-CHECKLIST.md](QA-CHECKLIST.md)를 처음부터 끝까지. 실패 항목은 고치거나, 알려진 이슈로 릴리즈 노트에 명시
 3. **릴리즈 노트 작성** — `release/notes/vX.Y.Z.md` (아래 형식)
 4. **태그** — `git tag vX.Y.Z && git push --tags`
-5. **패키징** — `npm run dist` → .dmg 산출, 새 기기(또는 새 사용자 계정)에서 설치 후 스모크 테스트
-6. **정리** — 스모크가 끝나면 압축 전 부산물 삭제: `rm -rf release/mac-arm64 release-dev/mac-arm64`. 안 지우면 Spotlight 검색에 설치본과 똑같은 "MindMap"이 하나 더 잡힌다 (dmg만 있으면 됨)
+5. **패키징** — `APPLE_KEYCHAIN_PROFILE=mindmap-notary npm run dist` → dmg + zip + `latest-mac.yml` 산출 (서명·공증). 새 기기에서 설치 후 스모크 테스트
+6. **퍼블리시 (자동 업데이트 필수)** — dmg·zip·blockmap·`latest-mac.yml`을 GitHub Release(태그 vX.Y.Z)에 업로드. 구버전 앱이 이 피드를 보고 업데이트한다.
+   - electron-builder로 한 번에: `APPLE_KEYCHAIN_PROFILE=mindmap-notary GH_TOKEN=<토큰> npm run dist -- --publish always`
+   - 또는 수동: `gh release create vX.Y.Z release/MindMap-*.dmg release/MindMap-*-mac.zip release/MindMap-*.blockmap release/latest-mac.yml -t vX.Y.Z -F docs/release/notes/vX.Y.Z.md`
+   - **`latest-mac.yml`을 빼먹으면 자동 업데이트가 동작하지 않는다** (앱이 이 파일로 최신 버전을 판단)
+7. **정리** — 압축 전 부산물 삭제: `rm -rf release/mac-arm64 release-dev/mac-arm64`. 안 지우면 Spotlight 검색에 설치본과 똑같은 "MindMap"이 하나 더 잡힌다
 
 ## 릴리즈 노트 형식 (`notes/vX.Y.Z.md`)
 

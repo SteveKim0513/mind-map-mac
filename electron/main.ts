@@ -12,6 +12,7 @@ import {
   heartbeat,
 } from './reminders';
 import log, { logEvent, openLogsDir, type LogLevel } from './logger';
+import { initAutoUpdate, checkForUpdatesManually } from './updater';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +42,7 @@ function buildMenu() {
             label: app.name,
             submenu: [
               { role: 'about' as const },
+              { label: '업데이트 확인…', click: () => checkForUpdatesManually() },
               { type: 'separator' as const },
               { role: 'hide' as const },
               { role: 'hideOthers' as const },
@@ -163,6 +165,7 @@ app.whenReady().then(() => {
   log.info(`[app] start v${app.getVersion()} on ${process.platform}`);
   buildMenu();
   createWindow();
+  initAutoUpdate(() => win);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
