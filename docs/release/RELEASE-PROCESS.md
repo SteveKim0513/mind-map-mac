@@ -31,7 +31,7 @@
 ## 외부 배포 전 추가 과제 (v0.2.0 기준 미해결 — 내부 배포는 무관)
 
 - [x] **앱 아이콘** — `scripts/make-icon.py`가 코드로 생성 (팔레트 변경 시 재실행 → `build/icon.icns`). 2026-06-11 v0.2.0에 포함
-- [ ] **코드 서명·공증** — 멤버십 보유 확인(2026-06-11), 빌드 설정 완료(`hardenedRuntime`+`notarize`). 남은 것은 이 Mac에 자격 증명 설치 (아래 1회성 절차).
+- [x] **코드 서명·공증** — 2026-06-11 완료. Developer ID 인증서(팀 493CJL5C9A) + 공증 프로필 `mindmap-notary`가 이 Mac 키체인에 설치됨. v0.2.1부터 서명·공증 빌드 (`spctl: accepted, source=Notarized Developer ID`, 앱 스테이플 ✓).
   **증상 (2026-06-11 실확인)**: 미서명 dmg를 다른 Mac에 전송·설치하면 격리 속성 때문에 *"손상되었기 때문에 휴지통으로 이동"* 팝업. 임시 우회: `xattr -cr /Applications/MindMap.app` (우클릭→열기로는 안 풀림). 격리가 안 붙는 exFAT USB 전달도 가능.
 
 ### 서명·공증 1회 설정 (Apple ID 필요 — 계정 주인이 직접)
