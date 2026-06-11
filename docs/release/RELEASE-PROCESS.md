@@ -23,6 +23,15 @@
 
 ## 패키징 전 점검 (코드)
 
-- [x] DevTools 메뉴가 배포 빌드에서 숨겨지는가 (`app.isPackaged` 분기) — 2026-06-11 구현
+- [x] DevTools 메뉴가 배포 빌드에서 숨겨지는가 (`app.isPackaged` 분기) — 2026-06-11 구현, 패키지 빌드에서 검증
 - [ ] 로그 레벨이 배포에 적절한가 (electron-log)
 - [ ] `npm run typecheck && npm test` 통과
+
+## 외부 배포 전 추가 과제 (v0.2.0 기준 미해결 — 내부 배포는 무관)
+
+- [ ] **앱 아이콘** — 현재 기본 Electron 아이콘 (electron-builder `mac.icon` 미설정)
+- [ ] **코드 서명·공증** — Developer ID 인증서 없음 → 서명 생략됨. 외부 배포 시 Gatekeeper 경고 발생. Apple Developer Program 가입 + `notarize` 설정 필요
+
+## 자동화 스모크 (선택)
+
+패키징된 앱도 드라이버로 검증 가능: `MINDMAP_USER_DATA`로 격리하고 실행 파일을 `release/mac-arm64/MindMap.app/Contents/MacOS/MindMap`으로 지정. v0.2.0에서 검증한 항목: 실행/홈, isPackaged, DevTools 메뉴 부재, 키보드 트리 작성, 자동 명명, ⌘K, 세션 복원.
