@@ -9,6 +9,7 @@
 3. **릴리즈 노트 작성** — `release/notes/vX.Y.Z.md` (아래 형식)
 4. **태그** — `git tag vX.Y.Z && git push --tags`
 5. **패키징** — `npm run dist` → .dmg 산출, 새 기기(또는 새 사용자 계정)에서 설치 후 스모크 테스트
+6. **정리** — 스모크가 끝나면 압축 전 부산물 삭제: `rm -rf release/mac-arm64 release-dev/mac-arm64`. 안 지우면 Spotlight 검색에 설치본과 똑같은 "MindMap"이 하나 더 잡힌다 (dmg만 있으면 됨)
 
 ## 릴리즈 노트 형식 (`notes/vX.Y.Z.md`)
 
