@@ -371,7 +371,7 @@ function buildCommands(o: {
   const cmds: Command[] = [
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
     { id: 'today', icon: 'calendar', label: '오늘 열기', run: () => useUi.getState().openToday() },
-    { id: 'history', icon: 'clock', label: '작업 기록 열기', run: () => useUi.getState().openHistory() },
+    { id: 'history', icon: 'clock', label: '돌아보기 열기', run: () => useUi.getState().openHistory() },
     { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
     { id: 'theme', icon: 'moon', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },
     { id: 'sidebar', icon: 'menu', label: '사이드바 토글', run: o.toggleSidebar },

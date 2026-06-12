@@ -423,6 +423,18 @@ export function Sidebar({
         </button>
       </div>
 
+      {/* primary nav — plan (오늘) ↔ reflect (돌아보기); distinct from the settings foot */}
+      <div className="sidebar-nav">
+        <button className="nav-item" onClick={() => useUi.getState().openToday()}>
+          <Icon name="calendar" />
+          <span>오늘</span>
+        </button>
+        <button className="nav-item" onClick={() => useUi.getState().openHistory()}>
+          <Icon name="clock" />
+          <span>돌아보기</span>
+        </button>
+      </div>
+
       {marked.size > 0 && (
         <div className="sel-bar">
           <span className="sel-count">{marked.size}개 선택</span>
@@ -529,18 +541,6 @@ export function Sidebar({
             </div>
           </div>
         )}
-        <button className="help-toggle work-history-btn" onClick={() => useUi.getState().openToday()}>
-          <span className="help-toggle-lbl">
-            <Icon name="calendar" />
-            오늘
-          </span>
-        </button>
-        <button className="help-toggle work-history-btn" onClick={() => useUi.getState().openHistory()}>
-          <span className="help-toggle-lbl">
-            <Icon name="clock" />
-            작업 기록
-          </span>
-        </button>
         <button className="help-toggle" onClick={() => setShowHelp((v) => !v)}>
           <span className="help-toggle-lbl">
             <Icon name="settings" />

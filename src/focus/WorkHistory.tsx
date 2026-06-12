@@ -142,7 +142,7 @@ export function WorkHistory() {
       <div className="wh" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wh-head">
           <Icon name="clock" />
-          <span className="wh-title">작업 기록</span>
+          <span className="wh-title">돌아보기</span>
           {/* period navigation */}
           <div className="wh-nav">
             <button className="wh-nav-btn" title="이전" onClick={() => (day != null ? setDay(day - DAY) : setOffset(offset - 1))}>
