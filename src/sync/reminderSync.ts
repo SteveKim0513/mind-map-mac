@@ -18,13 +18,13 @@ import { setReminderDeleteHook, type MapStore } from '../store/mapStore';
 import { log } from '../lib/log';
 import type { MindNode } from '../types';
 import type { ReminderInfo } from '../../electron/preload';
+import { resolveReminder, type Base } from './resolveReminder';
 
 const POLL_MS = 45000;
 const DEBOUNCE_MS = 1200;
 const BACKOFF_MS = [5000, 15000, 45000, 120000]; // heartbeat retry schedule while down
 
 type Health = 'unknown' | 'ok' | 'down' | 'denied';
-type Base = { title: string; due: string | null; done: boolean };
 
 let started = false;
 let health: Health = 'unknown';
@@ -274,46 +274,51 @@ async function reconcile() {
 
       if (n.reminderId !== rem.id) patch(store, id, { reminderId: rem.id });
 
-      // ── content-based change detection ──
+      // ── field-level reconcile (see resolveReminder) ──
       const base = n.reminderBase;
       const cur: Base = { title: titleOf(n), due: n.scheduleAt ?? null, done: !!n.done };
       const remote: Base = { title: rem.title, due: rem.dueDate, done: rem.completed };
-      const localChanged = !baseEq(base, cur);
-      const remoteChanged = !baseEq(base, remote);
-      if (!localChanged && !remoteChanged) {
-        if (!base) patch(store, id, { reminderBase: remote }); // first link → record base
+      if (baseEq(base, cur) && baseEq(base, remote)) continue; // both match base → nothing to do
+      if (!base && baseEq({ ...remote }, cur)) {
+        patch(store, id, { reminderBase: remote }); // first link, already in sync → just record
         continue;
       }
 
-      // both changed → tiebreak by recency; otherwise the changed side wins
-      const remMs = ms(rem.modifiedAt);
-      const local = n.updatedAt ?? 0;
-      const pull = remoteChanged && (!localChanged || remMs >= local);
+      let { resolved, needPush, needPull } = resolveReminder(
+        base,
+        cur,
+        remote,
+        n.updatedAt ?? 0,
+        ms(rem.modifiedAt),
+      );
 
-      if (pull) {
-        // Don't clobber the node's text while it's being edited, or when the remote
-        // title is merely the whitespace-normalized form of the local text.
-        const editing = store.getState().editingId === id;
-        const titleIsNormalizedLocal = remote.title === cur.title;
-        const fields: Record<string, unknown> = {
-          done: remote.done || undefined,
-          scheduleAt: remote.due ?? undefined,
-          reminderBase: remote,
-        };
-        if (!editing && !titleIsNormalizedLocal) fields.text = remote.title;
-        patch(store, id, fields);
+      // never overwrite the title the user is actively typing — keep the local one
+      if (resolved.title !== cur.title && store.getState().editingId === id) {
+        resolved = { ...resolved, title: cur.title };
+        needPush = needPush || resolved.title !== remote.title;
+      }
+
+      if (needPull) {
+        patch(store, id, {
+          text: resolved.title,
+          scheduleAt: resolved.due ?? undefined,
+          done: resolved.done || undefined,
+          reminderBase: resolved,
+        });
         stats.pulled++;
-      } else {
+      }
+      if (needPush) {
         const newMod = await window.api.reminderUpdate({
           id: rem.id,
-          title: cur.title,
-          completed: cur.done,
-          dueDate: cur.due,
+          title: resolved.title,
+          completed: resolved.done,
+          dueDate: resolved.due,
         });
-        if (newMod === null)
-          patch(store, id, { reminderId: undefined, reminderBase: undefined });
-        else patch(store, id, { reminderBase: cur });
+        if (newMod === null) patch(store, id, { reminderId: undefined, reminderBase: undefined });
+        else patch(store, id, { reminderBase: resolved });
         stats.pushed++;
+      } else if (!needPull) {
+        patch(store, id, { reminderBase: resolved }); // record the merged baseline
       }
     }
 

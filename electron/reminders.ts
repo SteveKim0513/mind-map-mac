@@ -10,7 +10,7 @@ import log from './logger';
 
 const pexec = promisify(execFile);
 
-const LIST = 'MindMap';
+const LIST = process.env.MINDMAP_REMINDER_LIST || 'MindMap';
 // Field / record separators: ASCII unit (31) and record (30) separators. These
 // control chars can't appear in a reminder title, so parsing stays unambiguous.
 const US = '';
