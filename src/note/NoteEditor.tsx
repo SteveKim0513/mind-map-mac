@@ -163,6 +163,8 @@ export function NoteEditor({ body, onChange, scaffold }: Props) {
     ],
     content: body,
     editorProps: {
+      // accessible name for the contenteditable surface (axe aria-input-field-name)
+      attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': scaffold ? '작업 기록' : '노트 본문' },
       handlePaste: (_view, event) => insertImages(imageFilesFrom(event.clipboardData)),
       handleDrop: (_view, event) => insertImages(imageFilesFrom(event.dataTransfer)),
       // Cmd/Ctrl-click a link to open it externally (plain click keeps editing).

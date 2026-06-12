@@ -20,7 +20,7 @@
   --ink: #000000;
   --ink-secondary: #31302e;
   --ink-muted: #615d59;
-  --ink-faint: #a39e98;
+  --ink-faint: #767069; /* AA on white (~4.7:1) — was #a39e98 (2.65, fails) */
 
   /* ── Layer 2 · semantic / state colours ──────────────────────────────────
      Reserved meanings, one colour per concept. Never user-pickable; always
@@ -92,7 +92,7 @@
   --ink: #e9e9e7;
   --ink-secondary: #d2d0cc;
   --ink-muted: #9b9893;
-  --ink-faint: #6f6c67;
+  --ink-faint: #9a9792; /* AA on dark surface (~4.9:1) — was #6f6c67 (~2.9, fails) */
 
   /* state — brighter so glyphs read on the dark canvas */
   --state-scheduled: #f0922e;
@@ -578,6 +578,11 @@ button {
 .row.open {
   color: var(--primary);
   font-weight: 500;
+}
+/* the accent blue fails AA (3.9:1) on the light selected-row tint — darken it
+   for the open/selected label only (dark theme's brighter blue already passes) */
+[data-theme="light"] .row.open {
+  color: #0064c4;
 }
 .row.dragging {
   opacity: 0.4;
