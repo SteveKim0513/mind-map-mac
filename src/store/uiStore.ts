@@ -113,6 +113,10 @@ interface UiState {
   historyOpen: boolean;
   openHistory: () => void;
   closeHistory: () => void;
+  // "오늘" agenda (overlay)
+  todayOpen: boolean;
+  openToday: () => void;
+  closeToday: () => void;
 }
 
 /** The running session, mirrored to localStorage for crash recovery. */
@@ -249,4 +253,7 @@ export const useUi = create<UiState>((set, get) => ({
   historyOpen: false,
   openHistory: () => set({ historyOpen: true }),
   closeHistory: () => set({ historyOpen: false }),
+  todayOpen: false,
+  openToday: () => set({ todayOpen: true }),
+  closeToday: () => set({ todayOpen: false }),
 }));

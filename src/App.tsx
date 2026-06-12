@@ -6,6 +6,7 @@ import { NotePane } from './note/NotePane';
 import { NotePopup } from './note/NotePopup';
 import { FocusOverlay } from './focus/FocusWidget';
 import { WorkHistory } from './focus/WorkHistory';
+import { TodayView } from './focus/TodayView';
 import { NoteLinkPicker } from './note/NoteLinkPicker';
 import { Home } from './panes/Home';
 import { Search } from './search/Search';
@@ -47,6 +48,7 @@ export default function App() {
   const quickOpen = useUi((s) => s.quickOpen);
   const cmdkOpen = useUi((s) => s.cmdkOpen);
   const historyOpen = useUi((s) => s.historyOpen);
+  const todayOpen = useUi((s) => s.todayOpen);
   const wsTree = useWorkspace((s) => s.tree);
   const tabDragId = useUi((s) => s.tabDragId);
 
@@ -354,6 +356,7 @@ export default function App() {
       <NoteLinkPicker />
       <FocusOverlay sidebarVisible={sidebarVisible} />
       {historyOpen && <WorkHistory />}
+      {todayOpen && <TodayView />}
     </div>
   );
 }
@@ -367,6 +370,8 @@ function buildCommands(o: {
 }): Command[] {
   const cmds: Command[] = [
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
+    { id: 'today', icon: 'calendar', label: '오늘 열기', run: () => useUi.getState().openToday() },
+    { id: 'history', icon: 'clock', label: '작업 기록 열기', run: () => useUi.getState().openHistory() },
     { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
     { id: 'theme', icon: 'moon', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },
     { id: 'sidebar', icon: 'menu', label: '사이드바 토글', run: o.toggleSidebar },

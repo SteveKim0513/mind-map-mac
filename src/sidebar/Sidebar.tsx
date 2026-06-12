@@ -529,6 +529,12 @@ export function Sidebar({
             </div>
           </div>
         )}
+        <button className="help-toggle work-history-btn" onClick={() => useUi.getState().openToday()}>
+          <span className="help-toggle-lbl">
+            <Icon name="calendar" />
+            오늘
+          </span>
+        </button>
         <button className="help-toggle work-history-btn" onClick={() => useUi.getState().openHistory()}>
           <span className="help-toggle-lbl">
             <Icon name="clock" />

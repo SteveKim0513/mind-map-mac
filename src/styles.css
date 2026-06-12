@@ -4200,6 +4200,38 @@ textarea:focus-visible,
 .wh-trend-bar:hover { background: color-mix(in srgb, var(--primary) 40%, var(--canvas-soft)); }
 .wh-trend-bar.on { background: var(--primary); }
 .work-history-btn .help-toggle-lbl .ic { width: 15px; height: 15px; }
+
+/* "오늘" agenda — scheduled nodes across maps, one-click into a focus session */
+.today {
+  width: 560px; max-width: 95vw; max-height: 88vh; overflow: auto;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-2);
+  animation: modalPop 0.2s var(--spring) both;
+}
+.today-summary { font-size: 12px; color: var(--ink-muted); margin-left: 8px; }
+.today-empty { padding: 56px 24px; text-align: center; color: var(--ink-muted); line-height: 1.8; }
+.today-body { padding: 12px 16px 20px; }
+.today-sec { margin-bottom: 14px; }
+.today-sec-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--ink-faint); padding: 2px 4px 6px; }
+.today-sec-label.over { color: var(--state-danger); }
+.today-row { display: flex; align-items: stretch; border-radius: var(--r-md); }
+.today-row:hover { background: var(--canvas-soft); }
+.today-row.over { background: color-mix(in srgb, var(--state-danger) 7%, transparent); }
+.today-row.over:hover { background: color-mix(in srgb, var(--state-danger) 12%, transparent); }
+.today-main {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px;
+  border: none; background: transparent; cursor: pointer; text-align: left; padding: 9px 8px;
+}
+.today-time { font-size: 12px; color: var(--ink-faint); width: 46px; flex: none; font-variant-numeric: tabular-nums; }
+.today-row.over .today-time { color: var(--state-danger); }
+.today-text { font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-map { font-size: 11px; color: var(--ink-faint); margin-left: auto; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+.today-acts { display: flex; align-items: center; gap: 2px; padding-right: 6px; opacity: 0; }
+.today-row:hover .today-acts { opacity: 1; }
+.today-act { border: none; background: transparent; cursor: pointer; color: var(--ink-muted); padding: 5px; border-radius: var(--r-sm); display: inline-flex; }
+.today-act .ic { width: 15px; height: 15px; }
+.today-act:hover { background: var(--hover); color: var(--ink); }
+.today-act.focus:hover { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--canvas-soft)); }
 /* narrow windows: stack the two-column dashboard so panels don't cramp (B10) */
 @media (max-width: 760px) {
   .wh-cols { grid-template-columns: 1fr; }

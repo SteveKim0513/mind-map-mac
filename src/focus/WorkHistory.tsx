@@ -10,53 +10,15 @@ import {
   weekPeriod, dayPeriod, periodSessions, periodLabel, quality, weeklyTrend,
   priorityVsActual, insights, type Period, type ScheduledNode,
 } from './report';
-import { deserialize } from '../io/formats';
-import type { TreeNode } from '../../electron/preload';
+import { collectAgenda } from './collectAgenda';
 import type { FocusSession } from '../types';
 
 const DAY = 86_400_000;
 
-function collectMindPaths(tree: TreeNode[], out: string[] = []): string[] {
-  for (const n of tree) {
-    if (n.type === 'dir' && n.children) collectMindPaths(n.children, out);
-    else if (n.type === 'file' && n.path.endsWith('.mind')) out.push(n.path);
-  }
-  return out;
-}
-
-/** All scheduled nodes across the workspace (open maps + on-disk .mind files),
- *  so the deadline review isn't limited to maps that happen to be open. */
+/** All scheduled nodes across the workspace (open maps + on-disk .mind files) —
+ *  shares the "오늘" view's collector so the two never diverge. */
 async function allScheduledNodes(): Promise<ScheduledNode[]> {
-  const out: ScheduledNode[] = [];
-  const seen = new Set<string>();
-  const add = (mapId: string, nodeId: string, text: string, scheduleAt: string) => {
-    const k = `${mapId} ${nodeId}`;
-    if (seen.has(k)) return;
-    seen.add(k);
-    out.push({ mapId, nodeId, text, scheduleAt });
-  };
-  // open maps first (freshest)
-  for (const st of openMaps()) {
-    const doc = st.getState().doc;
-    for (const id in doc.nodes) {
-      const n = doc.nodes[id];
-      if (n.scheduled && n.scheduleAt) add(doc.id ?? '', id, n.text, n.scheduleAt);
-    }
-  }
-  // then on-disk maps
-  const paths = collectMindPaths(useWorkspace.getState().tree);
-  for (const p of paths) {
-    try {
-      const doc = deserialize(await window.api.readFile(p));
-      for (const id in doc.nodes) {
-        const n = doc.nodes[id];
-        if (n.scheduled && n.scheduleAt) add(doc.id ?? '', id, n.text, n.scheduleAt);
-      }
-    } catch {
-      /* skip unreadable */
-    }
-  }
-  return out;
+  return (await collectAgenda()).map((a) => ({ mapId: a.mapId, nodeId: a.nodeId, text: a.text, scheduleAt: a.scheduleAt }));
 }
 
 /** Open maps → live tree helpers (so moving a node re-attributes, and we can read
