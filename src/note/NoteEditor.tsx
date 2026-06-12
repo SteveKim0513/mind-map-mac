@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
@@ -73,6 +73,27 @@ export function NoteEditor({ body, onChange }: Props) {
     m.current = { open: false, items: [], active: 0, query: '' };
     setMenu(null);
   };
+
+  // The slash menu is pinned to the caret's viewport position, so any scroll
+  // would strand it mid-air. Dismiss it when the page scrolls or resizes —
+  // but ignore scrolling within the menu's own list.
+  useEffect(() => {
+    if (!menu) return;
+    const onScroll = (e: Event) => {
+      if ((e.target as HTMLElement)?.closest?.('.slash-menu')) return;
+      close();
+    };
+    const onResize = () => close();
+    window.addEventListener('scroll', onScroll, true); // capture: catch any scroller
+    window.addEventListener('wheel', onScroll, { capture: true, passive: true });
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('wheel', onScroll, { capture: true } as EventListenerOptions);
+      window.removeEventListener('resize', onResize);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menu]);
   const setActive = (n: number) => {
     m.current.active = n;
     setMenu((cur) => (cur ? { ...cur, active: n } : cur));
@@ -102,8 +123,18 @@ export function NoteEditor({ body, onChange }: Props) {
     if (!items.length) return close();
     const slashFrom = sel.from - (q.length + 1);
     const c = ed.view.coordsAtPos(slashFrom);
+    // keep the menu inside the viewport: flip above the caret when there's no
+    // room below, and clamp horizontally (≈210px wide, see .slash-menu)
+    const W = 210;
+    const estH = Math.min(320, items.length * 32 + 12);
+    const m8 = 8;
+    const left = Math.max(m8, Math.min(c.left, window.innerWidth - W - m8));
+    const top =
+      c.bottom + 6 + estH <= window.innerHeight - m8
+        ? c.bottom + 6
+        : Math.max(m8, c.top - 6 - estH);
     m.current = { open: true, items, active: 0, query: q };
-    setMenu({ items, active: 0, query: q, coords: { left: c.left, top: c.bottom + 6 } });
+    setMenu({ items, active: 0, query: q, coords: { left, top } });
   };
 
   const editor = useEditor({
