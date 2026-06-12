@@ -4015,7 +4015,7 @@ textarea:focus-visible,
 }
 .focus-dot {
   width: 8px; height: 8px; border-radius: 50%;
-  background: var(--state-danger, #e0607a);
+  background: var(--state-danger);
   animation: focusPulse 1.6s ease-in-out infinite;
   flex: none;
 }
@@ -4029,13 +4029,14 @@ textarea:focus-visible,
 .focus-node:hover { color: var(--primary); text-decoration: underline; }
 .focus-end {
   border: none; cursor: pointer; padding: 4px 10px; border-radius: var(--r-full);
-  background: color-mix(in srgb, var(--state-danger, #e0607a) 14%, transparent);
-  color: var(--state-danger, #c0405a); font-size: 12px; font-weight: 600; flex: none;
+  background: color-mix(in srgb, var(--state-danger) 14%, transparent);
+  color: color-mix(in srgb, var(--state-danger) 70%, var(--ink)); font-size: 12px; font-weight: 600; flex: none;
 }
-.focus-end:hover { background: color-mix(in srgb, var(--state-danger, #e0607a) 22%, transparent); }
+.focus-end:hover { background: color-mix(in srgb, var(--state-danger) 22%, transparent); }
 /* running unusually long — amber dot + gentle reminder (B9) */
-.focus-pill.long .focus-dot { background: var(--state-scheduled, #d99a2b); animation-duration: 2.4s; }
-.focus-nudge { font-size: 11px; color: var(--state-scheduled, #b9831f); white-space: nowrap; flex: none; }
+.focus-pill.long .focus-dot { background: var(--state-scheduled); animation-duration: 2.4s; }
+/* state read from the amber dot (rule: no meaning by text colour alone) — text stays neutral */
+.focus-nudge { font-size: 11px; color: var(--ink-muted); white-space: nowrap; flex: none; }
 
 /* completion card */
 .focus-done-backdrop {
@@ -4049,7 +4050,7 @@ textarea:focus-visible,
   width: 380px; max-width: 92vw; padding: 22px;
   background: var(--surface); border: 1px solid var(--hairline);
   border-radius: var(--r-lg); box-shadow: var(--shadow-2);
-  animation: modalPop 0.22s var(--spring) both;
+  animation: modalPop 0.2s var(--spring) both;
 }
 .focus-done-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
 .focus-done-big { font-size: 30px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
@@ -4077,10 +4078,10 @@ textarea:focus-visible,
   width: 380px; max-width: 92vw; padding: 22px;
   background: var(--surface); border: 1px solid var(--hairline);
   border-radius: var(--r-lg); box-shadow: var(--shadow-2);
-  animation: modalPop 0.22s var(--spring) both;
+  animation: modalPop 0.2s var(--spring) both;
 }
 .focus-start-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px; }
-.focus-start-title { font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+.focus-start-title { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
 .focus-start-sub { color: var(--ink-muted); font-size: 13px; }
 .focus-start-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .focus-start-hint { font-size: 11px; color: var(--ink-faint); }
@@ -4108,8 +4109,8 @@ textarea:focus-visible,
 .session-banner-time { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); margin-left: 2px; }
 .sess-end {
   margin-left: auto; border: none; cursor: pointer; padding: 4px 12px; border-radius: var(--r-full);
-  background: color-mix(in srgb, var(--state-danger, #e0607a) 14%, transparent);
-  color: var(--state-danger, #c0405a); font-size: 12px; font-weight: 600;
+  background: color-mix(in srgb, var(--state-danger) 14%, transparent);
+  color: color-mix(in srgb, var(--state-danger) 70%, var(--ink)); font-size: 12px; font-weight: 600;
 }
 .sess-running { margin-left: auto; font-size: 12px; color: var(--ink-faint); }
 .session-banner-sub { font-size: 12px; color: var(--ink-muted); margin-top: 5px; padding-left: 23px; }
@@ -4151,7 +4152,7 @@ textarea:focus-visible,
 .wh-insights { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
 .wh-insight { font-size: 14px; padding: 9px 13px; border-radius: var(--r-md); line-height: 1.4; }
 .wh-insight.good { background: color-mix(in srgb, var(--primary) 9%, var(--canvas-soft)); color: var(--ink); }
-.wh-insight.warn { background: color-mix(in srgb, var(--state-danger, #e0607a) 10%, var(--canvas-soft)); color: var(--ink); }
+.wh-insight.warn { background: color-mix(in srgb, var(--state-danger) 10%, var(--canvas-soft)); color: var(--ink); }
 .wh-insight.neutral { background: var(--canvas-soft); color: var(--ink-secondary); }
 
 .wh-cols { display: grid; grid-template-columns: 1.5fr 1fr; gap: 22px; align-items: start; }
@@ -4178,10 +4179,11 @@ textarea:focus-visible,
 .wh-side { display: flex; flex-direction: column; gap: 16px; }
 .wh-panel { display: flex; flex-direction: column; gap: 6px; }
 .wh-prio { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: var(--r-sm); }
-.wh-prio.risk { background: color-mix(in srgb, var(--state-danger, #e0607a) 10%, transparent); }
+.wh-prio.risk { background: color-mix(in srgb, var(--state-danger) 10%, transparent); }
 .wh-prio-label { font-size: 13px; color: var(--ink-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wh-prio-due { font-size: 12px; color: var(--ink-muted); width: 56px; text-align: right; flex: none; }
-.wh-prio.risk .wh-prio-due { color: var(--state-danger, #c0405a); font-weight: 600; }
+/* risk read from the red-tint row bg — due text stays neutral + readable (AA) */
+.wh-prio.risk .wh-prio-due { color: var(--ink-secondary); font-weight: 600; }
 .wh-prio-focus { font-size: 12px; font-weight: 600; color: var(--ink); width: 52px; text-align: right; flex: none; }
 .wh-qrow { display: flex; align-items: baseline; justify-content: space-between; font-size: 13px; color: var(--ink-secondary); padding: 2px 2px; }
 .wh-qrow b { color: var(--ink); font-size: 14px; }
