@@ -4167,3 +4167,24 @@ textarea:focus-visible,
   0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent); }
   50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 22%, transparent); }
 }
+
+/* dashboard: per-topic drill-down + expandable session detail (dimensional view) */
+.wh-topic { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: none; background: transparent; cursor: pointer; border-radius: var(--r-sm); width: 100%; }
+.wh-topic:hover { background: var(--canvas-soft); }
+.wh-topic.on { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.wh-topic-label { font-size: 13px; color: var(--ink-secondary); width: 92px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.wh-topic-bar { flex: 1; height: 7px; background: var(--canvas-soft); border-radius: var(--r-full); overflow: hidden; }
+.wh-topic-fill { display: block; height: 100%; background: var(--primary); border-radius: var(--r-full); }
+.wh-topic-val { font-size: 12px; font-weight: 600; color: var(--ink-muted); width: 50px; text-align: right; flex: none; }
+
+.wh-entry-wrap { border-radius: var(--r-md); }
+.wh-entry-wrap.open { background: var(--canvas-soft); }
+.wh-entry .ic { width: 13px; height: 13px; color: var(--ink-faint); margin-left: auto; flex: none; }
+.wh-entry-detail { padding: 4px 10px 12px 52px; display: flex; flex-direction: column; gap: 6px; }
+.wh-detail-row { display: flex; gap: 8px; font-size: 13px; align-items: baseline; }
+.wh-detail-k { color: var(--ink-faint); width: 52px; flex: none; }
+.wh-detail-v { color: var(--ink); flex: 1; }
+.wh-detail-v i { color: var(--ink-faint); }
+.wh-detail-actions { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.wh-detail-actions button { border: none; background: color-mix(in srgb, var(--primary) 12%, var(--canvas-soft)); color: var(--primary); cursor: pointer; font-size: 12px; padding: 4px 10px; border-radius: var(--r-full); }
+.wh-detail-est { font-size: 11px; color: var(--ink-faint); }

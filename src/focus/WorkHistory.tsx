@@ -5,9 +5,9 @@ import { useSession } from '../store/sessionStore';
 import type { MapStore } from '../store/mapStore';
 import { Icon } from '../ui/Icon';
 import { openSessionNote } from './controller';
-import { dayKey, fmtDuration, isCounted } from './aggregate';
+import { dayKey, fmtDuration, isCounted, perNode, type LiveResolver } from './aggregate';
 import {
-  weekPeriod, dayPeriod, periodSessions, periodLabel, quality, weeklyTrend,
+  weekPeriod, dayPeriod, periodSessions, periodLabel, periodRange, quality, weeklyTrend,
   priorityVsActual, insights, buildReportMarkdown, type Period, type ScheduledNode,
 } from './report';
 import { serializeNote, emptyNote } from '../io/noteFormat';
@@ -82,12 +82,30 @@ function inSubtree(mapId: string, ancestorId: string, leafId: string): boolean {
   return false;
 }
 
+/** Live ancestor chain from the open map (so a moved node re-attributes). */
+const liveResolver: LiveResolver = (mapId, nodeId) => {
+  const st = openMaps().find((s) => (s.getState().doc.id ?? '') === mapId);
+  if (!st) return null;
+  const nodes = st.getState().doc.nodes;
+  if (!nodes[nodeId]) return null;
+  const ancestors: { id: string; text: string }[] = [];
+  let cur = nodes[nodeId].parentId;
+  let guard = 0;
+  while (cur && nodes[cur] && guard++ < 200) {
+    ancestors.unshift({ id: cur, text: nodes[cur].text });
+    cur = nodes[cur].parentId;
+  }
+  return { selfText: nodes[nodeId].text, ancestors };
+};
+
 export function WorkHistory() {
   const close = useUi((s) => s.closeHistory);
   const noteIndex = useWorkspace((s) => s.noteIndex);
   const now = Date.now();
   const [offset, setOffset] = useState(0); // 0 = this week, -1 = last week, …
   const [day, setDay] = useState<number | null>(null); // a drilled-in day (epoch ms) or null
+  const [filter, setFilter] = useState<{ mapId: string; nodeId: string; label: string } | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null); // expanded session id
   const [scheduled, setScheduled] = useState<ScheduledNode[]>([]);
   useEffect(() => {
     let alive = true;
@@ -103,12 +121,14 @@ export function WorkHistory() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (day != null) setDay(null);
+      if (expanded) setExpanded(null);
+      else if (filter) setFilter(null);
+      else if (day != null) setDay(null);
       else close();
     };
     window.addEventListener('keydown', k, true);
     return () => window.removeEventListener('keydown', k, true);
-  }, [close, day]);
+  }, [close, day, filter, expanded]);
 
   const sessions = useMemo(
     () => noteIndex.map((m) => m.session).filter((s): s is FocusSession => !!s),
@@ -127,7 +147,24 @@ export function WorkHistory() {
   );
   const tips = useMemo(() => insights(period, q, prevQ, priority, now), [period, q, prevQ, priority, now]);
   const trend = useMemo(() => weeklyTrend(sessions, now, 8), [sessions, now]);
-  const byDay = useMemo(() => groupByDay([...inP].sort((a, b) => b.start - a.start)), [inP]);
+  // per-topic rollup for THIS period (live tree) — the drill-down dimension
+  const topics = useMemo(
+    () => [...perNode(inP, liveResolver).values()].filter((t) => t.selfSec > 0 || t.rolledSec > 0)
+      .sort((a, b) => b.rolledSec - a.rolledSec),
+    [inP],
+  );
+  // diary, optionally filtered to the selected topic's subtree
+  const diary = useMemo(() => {
+    const list = filter
+      ? inP.filter(
+          (s) =>
+            s.link.mapId === filter.mapId &&
+            (s.link.nodeId === filter.nodeId || inSubtree(filter.mapId, filter.nodeId, s.link.nodeId)),
+        )
+      : inP;
+    return [...list].sort((a, b) => b.start - a.start);
+  }, [inP, filter]);
+  const byDay = useMemo(() => groupByDay(diary), [diary]);
   const maxTrend = Math.max(1, ...trend.map((t) => t.sec));
 
   const openNote = (s: FocusSession) => {
@@ -137,7 +174,8 @@ export function WorkHistory() {
   const exportReport = async () => {
     const md = buildReportMarkdown(period, now, q, byDay.map(([d, list]) => ({ day: dayLabel(d), sessions: list })));
     const root = useWorkspace.getState().root;
-    const title = `작업 요약 ${periodLabel(period, now)}`;
+    // concrete date range → the note is unambiguous and never collides
+    const title = `작업 요약 ${periodRange(period)}`;
     const path = await window.api.createFile(root, title, serializeNote({ ...emptyNote(title), body: md }), '.md');
     await useWorkspace.getState().refresh();
     try { useSession.getState().openInRight(path, await window.api.readFile(path)); } catch { /* ignore */ }
@@ -191,8 +229,14 @@ export function WorkHistory() {
               {/* outcome-first work digest */}
               <div className="wh-log">
                 <div className="wh-log-head">
-                  <span className="wh-section-label">작업 일지 — 무엇을 끝냈나</span>
-                  <button className="wh-export" onClick={() => void exportReport()}>요약 노트로 내보내기</button>
+                  <span className="wh-section-label">
+                    {filter ? `「${filter.label}」 기록` : '작업 일지 — 무엇을 끝냈나'}
+                  </span>
+                  {filter ? (
+                    <button className="wh-export" onClick={() => setFilter(null)}>← 전체</button>
+                  ) : (
+                    <button className="wh-export" onClick={() => void exportReport()}>요약 노트로 내보내기</button>
+                  )}
                 </div>
                 {byDay.length === 0 ? (
                   <div className="wh-noday">이 기간에 집중 기록이 없어요.</div>
@@ -210,14 +254,36 @@ export function WorkHistory() {
                         </span>
                       </button>
                       {list.map((s) => (
-                        <button key={s.sessionId} className="wh-entry" onClick={() => openNote(s)}>
-                          <span className="wh-entry-time">{hm(s.start)}</span>
-                          <span className="wh-entry-dur">{fmtDuration(s.durationSec)}</span>
-                          <span className="wh-entry-topic">{s.link.nodeText || '노드'}</span>
-                          <span className="wh-entry-outcome">
-                            {s.reflect || <span className="wh-entry-noreflect">— 성과 미기록</span>}
-                          </span>
-                        </button>
+                        <div key={s.sessionId} className={`wh-entry-wrap${expanded === s.sessionId ? ' open' : ''}`}>
+                          <button
+                            className="wh-entry"
+                            onClick={() => setExpanded(expanded === s.sessionId ? null : s.sessionId)}
+                          >
+                            <span className="wh-entry-time">{hm(s.start)}</span>
+                            <span className="wh-entry-dur">{fmtDuration(s.durationSec)}</span>
+                            <span className="wh-entry-topic">{s.link.nodeText || '노드'}</span>
+                            <span className="wh-entry-outcome">
+                              {s.reflect || <span className="wh-entry-noreflect">— 성과 미기록</span>}
+                            </span>
+                            <Icon name={expanded === s.sessionId ? 'chevronDown' : 'chevronRight'} />
+                          </button>
+                          {expanded === s.sessionId && (
+                            <div className="wh-entry-detail">
+                              <div className="wh-detail-row">
+                                <span className="wh-detail-k">🎯 목표</span>
+                                <span className="wh-detail-v">{s.goal || <i>(미기록)</i>}</span>
+                              </div>
+                              <div className="wh-detail-row">
+                                <span className="wh-detail-k">✅ 성과</span>
+                                <span className="wh-detail-v">{s.reflect || <i>(미기록)</i>}</span>
+                              </div>
+                              <div className="wh-detail-actions">
+                                <button onClick={() => openNote(s)}>노트 열기</button>
+                                {s.estimated && <span className="wh-detail-est">· 종료 시각 추정</span>}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   ))
@@ -225,6 +291,36 @@ export function WorkHistory() {
               </div>
 
               <div className="wh-side">
+                {/* per-topic — click to drill the diary into that topic */}
+                {topics.length > 0 && (
+                  <div className="wh-panel">
+                    <div className="wh-section-label">주제별 집중 (하위 포함)</div>
+                    {topics.slice(0, 8).map((t) => (
+                      <button
+                        key={`${t.mapId} ${t.nodeId}`}
+                        className={`wh-topic${filter?.nodeId === t.nodeId ? ' on' : ''}`}
+                        title="이 주제의 기록만 보기"
+                        onClick={() =>
+                          setFilter(
+                            filter?.nodeId === t.nodeId
+                              ? null
+                              : { mapId: t.mapId, nodeId: t.nodeId, label: t.label || '(이름 없음)' },
+                          )
+                        }
+                      >
+                        <span className="wh-topic-label">{t.label || '(이름 없음)'}</span>
+                        <span className="wh-topic-bar">
+                          <span
+                            className="wh-topic-fill"
+                            style={{ width: `${Math.round((t.rolledSec / (topics[0]?.rolledSec || 1)) * 100)}%` }}
+                          />
+                        </span>
+                        <span className="wh-topic-val">{fmtDuration(t.rolledSec)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* priority vs actual */}
                 {priority.length > 0 && (
                   <div className="wh-panel">

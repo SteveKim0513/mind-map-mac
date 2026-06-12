@@ -44,6 +44,15 @@ export function periodSessions(sessions: FocusSession[], p: Period): FocusSessio
   return sessions.filter((s) => isCounted(s) && inPeriod(s, p));
 }
 
+/** Concrete calendar range, e.g. "2026-06-08 – 06-14" (always unambiguous). */
+export function periodRange(p: Period): string {
+  const f = new Date(p.from);
+  const t = new Date(p.to - DAY);
+  const ds = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  if (p.kind === 'day') return ds(f);
+  return `${ds(f)} – ${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
+
 export function periodLabel(p: Period, now: number): string {
   if (p.kind === 'day') {
     if (startOfDay(now) === p.from) return '오늘';
@@ -211,7 +220,8 @@ export function buildReportMarkdown(
   byDay: { day: string; sessions: FocusSession[] }[],
 ): string {
   const lines: string[] = [];
-  lines.push(`# 작업 요약 · ${periodLabel(period, now)}`, '');
+  // the title carries the concrete date range so the note is unambiguous later
+  lines.push(`# 작업 요약 · ${periodLabel(period, now)} (${periodRange(period)})`, '');
   lines.push(`- 총 집중: **${fmtDuration(q.totalSec)}** · ${q.count}세션 · 평균 ${fmtDuration(q.avgSec)}`, '');
   for (const { day, sessions } of byDay) {
     const dayTotal = sessions.reduce((a, s) => a + s.durationSec, 0);
