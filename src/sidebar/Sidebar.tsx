@@ -245,8 +245,10 @@ export function Sidebar({
   );
 
   // At the root, separate maps and notes under their own collapsible headings.
+  // work-log is hidden — session notes are reached via the dashboard (by date)
+  // or the node's chip, and the folder would only clutter the tree.
   const renderTree = (nodes: TreeNode[]) => {
-    const dirs = nodes.filter((n) => n.type === 'dir');
+    const dirs = nodes.filter((n) => n.type === 'dir' && n.name !== 'work-log');
     const maps = nodes.filter((n) => n.type === 'file' && !isNoteFile(n));
     const notes = nodes.filter((n) => isNoteFile(n));
     return (
@@ -288,7 +290,7 @@ export function Sidebar({
               dragging === node.path ? ' dragging' : ''
             }`}
             style={{ paddingLeft: pad }}
-            draggable={!renaming}
+            draggable={!renaming && !isLocked(node.path)}
             onDragStart={(e) => {
               e.dataTransfer.effectAllowed = 'move';
               e.dataTransfer.setData('text/plain', node.path);
