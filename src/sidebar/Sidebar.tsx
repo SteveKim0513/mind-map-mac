@@ -9,6 +9,7 @@ import { extractArticle } from '../note/extractArticle';
 import { UrlImportModal } from '../note/UrlImportModal';
 import type { NoteDoc } from '../types';
 import { Icon } from '../ui/Icon';
+import { FocusPill } from '../focus/FocusWidget';
 
 interface Props {
   openPaths: string[];
@@ -453,6 +454,7 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-foot">
+        <FocusPill docked />
         {showHelp && (
           <div className="settings-panel">
             <div className="settings-row">

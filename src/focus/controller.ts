@@ -47,23 +47,42 @@ function mapStoreById(mapId: string): MapStore | null {
   return tab ? (tab.store as MapStore) : null;
 }
 
-const BODY_TEMPLATE =
-  '## 목표\n\n\n## 작업 기록\n\n';
+// A scaffold for genuinely focused work, not just a blank page:
+// intention → definition of done → live log → a parking lot so distractions
+// get captured WITHOUT breaking flow (a real deep-work technique).
+const BODY_TEMPLATE = [
+  '## 🎯 이번 세션의 한 가지',
+  '_무엇에 집중하나 — 한 문장으로_',
+  '',
+  '',
+  '## ✅ 끝나면 이렇게 된다',
+  '_무엇이 되면 “됐다”인가_',
+  '',
+  '',
+  '---',
+  '',
+  '## 🔨 작업 기록',
+  '_진행하며 적기 (결정·발견·막힌 점)_',
+  '',
+  '',
+  '## 🅿️ 나중에',
+  '_떠오른 딴 생각·할 일 — 흐름 끊지 말고 여기 적어두기_',
+  '',
+].join('\n');
 
 /**
  * Start a focus session on a node of the given (open) map store.
- * Creates work-log/, the session note, links it to the node, and arms the timer.
- * Does NOT force-open the note — "1-second start" (§14.5); the widget pulls it.
+ * Creates work-log/, the session note, links it to the node, opens the note in
+ * the right split (you start a session to start WORKING in the note), and arms
+ * the timer. Only one session runs at a time — a second start is refused.
  */
 export async function startFocusSession(store: MapStore, nodeId: string): Promise<void> {
   const ui = useUi.getState();
   if (ui.activeFocus) {
-    const ok = await window.api.message({
-      message: '진행 중인 집중 세션이 있어요. 종료하고 새로 시작할까요?',
-      buttons: ['종료하고 시작', '취소'],
-    });
-    if (ok !== 0) return;
-    await endFocusSession();
+    // single active session: refuse a second one. A light toast (not a modal) —
+    // the always-visible pill lets the user jump to the running note.
+    ui.toast(`이미 「${ui.activeFocus.nodeText}」 집중 세션이 진행 중이에요 — 먼저 종료해 주세요`);
+    return;
   }
 
   const doc = store.getState().doc;
@@ -95,11 +114,14 @@ export async function startFocusSession(store: MapStore, nodeId: string): Promis
     links: [link],
     session,
   };
-  const path = await window.api.createFile(`${root}/${WORK_LOG}`, note.title, serializeNote(note), '.md');
+  const serialized = serializeNote(note);
+  const path = await window.api.createFile(`${root}/${WORK_LOG}`, note.title, serialized, '.md');
   await useWorkspace.getState().refresh();
   reindexFromNote(path, note);
 
   ui.setActiveFocus({ sessionId, notePath: path, start, mapId, nodeId, nodeText });
+  // open the note in the right split so the session = working in the note
+  useSession.getState().openInRight(path, serialized);
 }
 
 /** Read → patch (end/duration/reflect) → write the session note's frontmatter. */

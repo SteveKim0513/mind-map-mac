@@ -48,6 +48,8 @@ export function NodeView({
 
   // notes linked to this node (resolved from the workspace link index)
   const docId = useMap((s) => s.doc.id);
+  const activeFocus = useUi((s) => s.activeFocus);
+  const isFocusing = !!activeFocus && activeFocus.mapId === docId && activeFocus.nodeId === node.id;
   const noteIndex = useWorkspace((s) => s.noteIndex);
   const linkedNotes = useMemo(
     () =>
@@ -141,6 +143,7 @@ export function NodeView({
     node.scheduled ? 'scheduled' : '',
     isMatch ? 'match' : '',
     isActiveMatch ? 'active-match' : '',
+    isFocusing ? 'focusing' : '',
   ]
     .filter(Boolean)
     .join(' ');

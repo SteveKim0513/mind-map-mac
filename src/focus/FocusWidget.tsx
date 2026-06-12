@@ -13,45 +13,50 @@ function elapsedClock(sec: number): string {
 }
 
 /**
- * The running-session pill. Anchored bottom-left: docked at the sidebar foot
- * when the sidebar shows, floating in the same spot when it's hidden — so the
- * timer is always visible (you hide the sidebar *to* focus) and never jumps (§7).
+ * The running-session pill. Two presentations of the SAME thing:
+ *  - `docked`  — lives inside the sidebar foot (part of the sidebar) when it's open
+ *  - floating  — a fixed bottom-left pill when the sidebar is collapsed
+ * Returns null when no session is running.
  */
-export function FocusWidget({ sidebarVisible }: { sidebarVisible: boolean }) {
+export function FocusPill({ docked }: { docked?: boolean }) {
   const active = useUi((s) => s.activeFocus);
-  const done = useUi((s) => s.focusDone);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [active]);
+  if (!active) return null;
 
   return (
+    <div className={`focus-pill${docked ? ' docked' : ' floating'}`}>
+      <span className="focus-dot" />
+      <span className="focus-elapsed">
+        {elapsedClock(Math.max(0, Math.round((now - active.start) / 1000)))}
+      </span>
+      <button className="focus-node" title="세션 노트 열기" onClick={() => void openSessionNote(active.notePath)}>
+        {active.nodeText}
+      </button>
+      <button className="focus-end" onClick={() => void endFocusSession()}>
+        종료
+      </button>
+    </div>
+  );
+}
+
+/** Mounted globally: the floating pill (only while sidebar is hidden) + completion card. */
+export function FocusOverlay({ sidebarVisible }: { sidebarVisible: boolean }) {
+  const done = useUi((s) => s.focusDone);
+  return (
     <>
-      {active && (
-        <div className={`focus-pill${sidebarVisible ? ' docked' : ' floating'}`}>
-          <span className="focus-dot" />
-          <span className="focus-elapsed">{elapsedClock(Math.max(0, Math.round((now - active.start) / 1000)))}</span>
-          <button
-            className="focus-node"
-            title="세션 노트 열기"
-            onClick={() => void openSessionNote(active.notePath)}
-          >
-            {active.nodeText}
-          </button>
-          <button className="focus-end" onClick={() => void endFocusSession()}>
-            종료
-          </button>
-        </div>
-      )}
+      {!sidebarVisible && <FocusPill />}
       {done && <FocusCompletionCard />}
     </>
   );
 }
 
 /** Closure ritual: shows the "쌓임" right after ending + captures a one-line
- *  reflection by default (skippable) — the reward that closes the habit loop (§14-C/D). */
+ *  outcome by default (skippable) — the reward that closes the habit loop (§14-C/D). */
 function FocusCompletionCard() {
   const done = useUi((s) => s.focusDone)!;
   const close = () => useUi.getState().setFocusDone(null);
@@ -79,7 +84,7 @@ function FocusCompletionCard() {
         <input
           className="focus-done-reflect"
           autoFocus
-          placeholder="방금 뭐가 풀렸나? 다음 시작점은? (선택)"
+          placeholder="이번 세션 성과 한 줄 — 무엇을 끝냈나? (선택)"
           value={reflect}
           onChange={(e) => setReflect(e.target.value)}
           onKeyDown={(e) => {

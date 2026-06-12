@@ -4,7 +4,7 @@ import { TabBar } from './panes/TabBar';
 import { Pane } from './panes/Pane';
 import { NotePane } from './note/NotePane';
 import { NotePopup } from './note/NotePopup';
-import { FocusWidget } from './focus/FocusWidget';
+import { FocusOverlay } from './focus/FocusWidget';
 import { WorkHistory } from './focus/WorkHistory';
 import { NoteLinkPicker } from './note/NoteLinkPicker';
 import { Home } from './panes/Home';
@@ -352,7 +352,7 @@ export default function App() {
       <Toasts />
       <NotePopup />
       <NoteLinkPicker />
-      <FocusWidget sidebarVisible={sidebarVisible} />
+      <FocusOverlay sidebarVisible={sidebarVisible} />
       {historyOpen && <WorkHistory />}
     </div>
   );

@@ -3979,27 +3979,35 @@ textarea:focus-visible,
 .gchip.focus .ic { width: 13px; height: 13px; }
 .gchip.focus:hover { color: var(--primary); }
 
-/* running-session pill (bottom-left: docked under sidebar / floating when hidden) */
+/* running-session pill — same content, two presentations */
 .focus-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 11px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  font-size: 13px;
+  animation: pillPop 0.2s var(--spring) both;
+}
+/* docked: part of the sidebar foot (in normal flow) while the sidebar is open */
+.focus-pill.docked {
+  margin: 0 10px 8px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--canvas-soft));
+  border-color: color-mix(in srgb, var(--primary) 20%, var(--hairline));
+}
+/* floating: a fixed bottom-left pill once the sidebar collapses */
+.focus-pill.floating {
   position: fixed;
   bottom: 14px;
   left: 14px;
   z-index: 60;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 8px 7px 12px;
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-full);
   box-shadow: var(--shadow-2);
-  font-size: 13px;
   max-width: 320px;
-  animation: pillPop 0.2s var(--spring) both;
 }
-.focus-pill.docked { left: 16px; bottom: 92px; } /* sit above the sidebar foot */
 .focus-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--state-danger, #e0607a);
@@ -4130,3 +4138,10 @@ textarea:focus-visible,
 .wh-node-val { font-size: 12px; font-weight: 600; color: var(--ink-muted); width: 56px; text-align: right; flex: none; }
 .wh-broken { margin-top: 16px; font-size: 12px; color: var(--ink-faint); }
 .work-history-btn .help-toggle-lbl .ic { width: 15px; height: 15px; }
+
+/* node currently being focused — a soft pulsing ring */
+.node.focusing { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent); animation: focusRing 1.8s ease-in-out infinite; }
+@keyframes focusRing {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 22%, transparent); }
+}
