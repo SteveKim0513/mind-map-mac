@@ -7,10 +7,9 @@ import { Icon } from '../ui/Icon';
 import { openSessionNote } from './controller';
 import { dayKey, fmtDuration, isCounted, perNode, type LiveResolver } from './aggregate';
 import {
-  weekPeriod, dayPeriod, periodSessions, periodLabel, periodRange, quality, weeklyTrend,
-  priorityVsActual, insights, buildReportMarkdown, type Period, type ScheduledNode,
+  weekPeriod, dayPeriod, periodSessions, periodLabel, quality, weeklyTrend,
+  priorityVsActual, insights, type Period, type ScheduledNode,
 } from './report';
-import { serializeNote, emptyNote } from '../io/noteFormat';
 import { deserialize } from '../io/formats';
 import type { TreeNode } from '../../electron/preload';
 import type { FocusSession } from '../types';
@@ -176,17 +175,6 @@ export function WorkHistory() {
     const m = noteIndex.find((n) => n.session?.sessionId === s.sessionId);
     if (m) { void openSessionNote(m.path); close(); }
   };
-  const exportReport = async () => {
-    const md = buildReportMarkdown(period, now, q, tips, priority, byDay.map(([d, list]) => ({ day: dayLabel(d), sessions: list })));
-    const root = useWorkspace.getState().root;
-    // concrete date range → the note is unambiguous and never collides
-    const title = `작업 요약 ${periodRange(period)}`;
-    const path = await window.api.createFile(root, title, serializeNote({ ...emptyNote(title), body: md }), '.md');
-    await useWorkspace.getState().refresh();
-    try { useSession.getState().openInRight(path, await window.api.readFile(path)); } catch { /* ignore */ }
-    close();
-  };
-
   return (
     <div className="wh-backdrop" onMouseDown={close}>
       <div className="wh" onMouseDown={(e) => e.stopPropagation()}>
@@ -237,10 +225,8 @@ export function WorkHistory() {
                   <span className="wh-section-label">
                     {filter ? `「${filter.label}」 기록` : '작업 일지 — 무엇을 끝냈나'}
                   </span>
-                  {filter ? (
+                  {filter && (
                     <button className="wh-export" onClick={() => setFilter(null)}>← 전체</button>
-                  ) : (
-                    <button className="wh-export" onClick={() => void exportReport()}>요약 노트로 내보내기</button>
                   )}
                 </div>
                 {byDay.length === 0 ? (
