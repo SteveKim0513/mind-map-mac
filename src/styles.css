@@ -2386,6 +2386,8 @@ button {
   min-width: 38px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--ink-muted);
 }
 
 /* ── Accessibility: focus ring + reduced motion ─────────────────────────────── */
@@ -2853,12 +2855,10 @@ textarea:focus-visible,
   gap: 6px;
 }
 .settings-sub {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--ink-faint);
-  margin-top: 2px;
+  /* a section label like 테마 / 글자 크기 — keep them visually identical */
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  margin-top: 4px;
 }
 .settings-panel .help-panel {
   padding: 0;
