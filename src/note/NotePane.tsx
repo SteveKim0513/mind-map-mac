@@ -220,6 +220,7 @@ function SessionMetaBanner({ session }: { session: FocusSession }) {
         {session.estimated && <span className="session-est"> · 추정</span>}
       </div>
       {session.goal && <div className="session-banner-goal">🎯 {session.goal}</div>}
+      {session.reflect && <div className="session-banner-result">✅ {session.reflect}</div>}
     </div>
   );
 }

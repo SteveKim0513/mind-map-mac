@@ -167,14 +167,18 @@ async function stampEnd(notePath: string, end: number, reflect?: string): Promis
   };
   await window.api.save(notePath, serializeNote(note));
   reindexFromNote(notePath, note);
-  // if the session note is open in a tab, sync its store so a pending autosave
-  // can't clobber the just-written end with the stale (end:null) session (§14-I)
-  const openTab = useSession.getState().tabs.find((t) => t.kind === 'note' && t.path === notePath);
-  if (openTab) {
-    type NoteStoreApi = { getState: () => { applySession: (s: FocusSession) => void } };
-    (openTab.store as unknown as NoteStoreApi).getState().applySession(note.session);
-  }
+  syncOpenSessionTab(notePath, note.session);
   return note.session;
+}
+
+/** Push a session struct into the note tab's store if it's open, so the banner
+ *  reflects the latest goal/result immediately and a pending autosave can't
+ *  clobber the just-written frontmatter with a stale session (§14-I). */
+function syncOpenSessionTab(notePath: string, session: FocusSession): void {
+  const openTab = useSession.getState().tabs.find((t) => t.kind === 'note' && t.path === notePath);
+  if (!openTab) return;
+  type NoteStoreApi = { getState: () => { applySession: (s: FocusSession) => void } };
+  (openTab.store as unknown as NoteStoreApi).getState().applySession(session);
 }
 
 /** End the active session: stamp the note, refresh the index, raise the completion card. */
@@ -214,6 +218,7 @@ export async function attachReflection(notePath: string, reflect: string): Promi
     note.session = { ...note.session, reflect: reflect.trim() };
     await window.api.save(notePath, serializeNote(note));
     reindexFromNote(notePath, note);
+    syncOpenSessionTab(notePath, note.session); // banner shows ✅ result right away
   } catch {
     /* ignore */
   }
