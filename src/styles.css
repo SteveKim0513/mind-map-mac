@@ -3349,6 +3349,39 @@ textarea:focus-visible,
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+/* tables — editor + preview */
+.note-rich .ProseMirror table,
+.note-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 0.95em;
+  table-layout: fixed;
+}
+.note-rich .ProseMirror th,
+.note-rich .ProseMirror td,
+.note-preview th,
+.note-preview td {
+  border: 1px solid var(--hairline);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+}
+.note-rich .ProseMirror th,
+.note-preview th {
+  background: var(--canvas-soft);
+  font-weight: 600;
+}
+.note-rich .ProseMirror .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  pointer-events: none;
+}
+.note-rich .ProseMirror td,
+.note-rich .ProseMirror th { position: relative; }
 .note-rich .ProseMirror h1, .note-rich .ProseMirror h2, .note-rich .ProseMirror h3, .note-rich .ProseMirror h4,
 .note-preview h1, .note-preview h2, .note-preview h3, .note-preview h4 {
   color: var(--ink);

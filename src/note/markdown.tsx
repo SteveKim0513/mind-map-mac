@@ -144,6 +144,36 @@ export function renderMarkdown(md: string): ReactNode[] {
       continue;
     }
 
+    // GFM pipe table: a header row, then a |---|---| separator, then body rows
+    const splitRow = (l: string) =>
+      l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    const isSep = (l: string) =>
+      l.includes('-') &&
+      splitRow(l).every((c) => /^:?-+:?$/.test(c));
+    if (line.includes('|') && i + 1 < lines.length && isSep(lines[i + 1])) {
+      flush();
+      const header = splitRow(line);
+      i++; // consume the separator
+      const rows: string[][] = [];
+      while (i + 1 < lines.length && lines[i + 1].includes('|') && lines[i + 1].trim() !== '') {
+        rows.push(splitRow(lines[i + 1]));
+        i++;
+      }
+      blocks.push(
+        <table key={k()}>
+          <thead>
+            <tr>{header.map((c) => <th key={k()}>{inline(c)}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={k()}>{header.map((_, ci) => <td key={k()}>{inline(r[ci] ?? '')}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>,
+      );
+      continue;
+    }
+
     // default: accumulate into a paragraph
     flushList();
     para.push(line.trim());

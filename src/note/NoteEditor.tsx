@@ -5,6 +5,10 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell } from '@tiptap/extension-table-cell';
 import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 import { EditorToolbar } from './EditorToolbar';
 import { SlashMenu, type SlashItem } from './SlashMenu';
@@ -28,6 +32,7 @@ const SLASH: SlashItem[] = [
   { id: 'ordered', label: '번호 목록', keys: 'ordered number ol 번호 목록', icon: 'listOrdered', run: (c) => c.toggleOrderedList() },
   { id: 'task', label: '체크리스트', keys: 'task todo check 체크 할일', icon: 'checklist', run: (c) => c.toggleTaskList() },
   { id: 'quote', label: '인용', keys: 'quote blockquote 인용', icon: 'quote', run: (c) => c.toggleBlockquote() },
+  { id: 'table', label: '표', keys: 'table grid 표 테이블', icon: 'table', run: (c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
   { id: 'divider', label: '구분선', keys: 'divider hr rule 구분선', icon: 'divider', run: (c) => c.setHorizontalRule() },
 ];
 
@@ -147,6 +152,10 @@ export function NoteEditor({ body, onChange }: Props) {
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: PLACEHOLDER }),
       Image.configure({ inline: false, allowBase64: true }),
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
     ],
     content: body,

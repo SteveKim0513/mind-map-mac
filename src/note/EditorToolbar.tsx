@@ -162,6 +162,7 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
       <div className="md-tb-group">
         <Btn on={active.link} title="링크" onClick={onLinkClick}><Icon name="link" /></Btn>
         <Btn title="이미지" onClick={() => fileRef.current?.click()}><Icon name="image" /></Btn>
+        <Btn title="표" onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}><Icon name="table" /></Btn>
         <Btn title="구분선" onClick={() => chain().setHorizontalRule().run()}><Icon name="divider" /></Btn>
         <input
           ref={fileRef}
