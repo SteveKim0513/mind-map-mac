@@ -22,23 +22,25 @@ export const PLACEHOLDER_HINTS: ReadonlySet<string> = new Set(SECTIONS.map((s) =
 // A scaffold for genuinely focused work, not just a blank page:
 // intention → definition of done → live log → a parking lot so distractions
 // get captured WITHOUT breaking flow (a real deep-work technique). Hints are
-// italic so they read as guidance; a divider separates planning from logging.
+// PLAIN text (not italic): in the editor the sessionHints decoration greys them
+// like a placeholder, and click-to-replace then yields clean (non-italic) text.
+// A divider separates planning from logging.
 export const BODY_TEMPLATE = [
   `## ${SECTIONS[0].emoji} ${SECTIONS[0].title}`,
-  `_${SECTIONS[0].hint}_`,
+  SECTIONS[0].hint,
   '',
   '',
   `## ${SECTIONS[1].emoji} ${SECTIONS[1].title}`,
-  `_${SECTIONS[1].hint}_`,
+  SECTIONS[1].hint,
   '',
   '',
   '---',
   '',
   `## ${SECTIONS[2].emoji} ${SECTIONS[2].title}`,
-  `_${SECTIONS[2].hint}_`,
+  SECTIONS[2].hint,
   '',
   '',
   `## ${SECTIONS[3].emoji} ${SECTIONS[3].title}`,
-  `_${SECTIONS[3].hint}_`,
+  SECTIONS[3].hint,
   '',
 ].join('\n');

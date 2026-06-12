@@ -166,7 +166,7 @@ function NotePaneBody() {
       )}
 
       {/* key by note id so switching to another note loads its content fresh */}
-      <NoteEditor key={note.id} body={note.body} onChange={setBody} />
+      <NoteEditor key={note.id} body={note.body} onChange={setBody} scaffold={isSession} />
     </div>
   );
 }

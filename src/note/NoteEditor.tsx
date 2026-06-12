@@ -13,12 +13,16 @@ import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 import { EditorToolbar } from './EditorToolbar';
 import { SlashMenu, type SlashItem } from './SlashMenu';
 import { fileToDataUrl, imageFilesFrom } from './imageInsert';
+import { SessionHints } from './sessionHints';
+import { PLACEHOLDER_HINTS } from '../focus/sessionNote';
 
 interface Props {
   /** Initial Markdown body. The editor owns the document after mount; the parent
    *  remounts (via React key) when a different note loads. */
   body: string;
   onChange: (markdown: string) => void;
+  /** Session note: treat the scaffold hints as click-to-replace placeholders. */
+  scaffold?: boolean;
 }
 
 const PLACEHOLDER = '메모를 시작하세요…  (“/” 를 눌러 블록 추가)';
@@ -45,7 +49,7 @@ interface MenuState {
 
 /** Notion-style rich editor: Markdown is applied live as you type, no edit/preview
  *  toggle. Stored on disk as Markdown via tiptap-markdown. A "/" opens a block menu. */
-export function NoteEditor({ body, onChange }: Props) {
+export function NoteEditor({ body, onChange, scaffold }: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   // mirror used by the (creation-time) keydown handler so it sees fresh values
   const m = useRef<{ open: boolean; items: SlashItem[]; active: number; query: string }>({
@@ -157,6 +161,7 @@ export function NoteEditor({ body, onChange }: Props) {
       TableHeader,
       TableCell,
       Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
+      ...(scaffold ? [SessionHints(PLACEHOLDER_HINTS)] : []),
     ],
     content: body,
     editorProps: {

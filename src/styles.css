@@ -3329,6 +3329,9 @@ textarea:focus-visible,
   height: 0;
   pointer-events: none;
 }
+/* session-note scaffold hints: read as a greyed placeholder, not content
+   (click selects the whole line → next input replaces it with clean text). */
+.note-rich .ProseMirror p.session-hint { color: var(--ink-faint); opacity: 0.75; }
 
 /* shared markdown typography: live editor + read-only popup peek */
 .note-rich .ProseMirror,

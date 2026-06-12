@@ -1,7 +1,20 @@
 # 세션 노트 자리표시자 — 네이티브 placeholder 전환
 
-> 작성: 2026-06-12 · 상태: 명세 (합의 후 구현) · 출처: [REVIEW §6.3](../REVIEW-2026-06-focus-and-dashboard.md)
+> 작성: 2026-06-12 · 상태: **구현 완료(B안 + 클릭 교체)** · 출처: [REVIEW §6.3](../REVIEW-2026-06-focus-and-dashboard.md)
 > 선행: 목표 추출 정합성은 [goal.ts/sessionNote.ts](../REVIEW-2026-06-focus-and-dashboard.md#62)로 이미 해결됨. 이 스펙은 *편집 경험*만 다룬다.
+
+## 구현 결과 (2026-06-12)
+
+**B안(데코레이션) + 클릭 교체**로 구현 — A안의 체감(클릭하고 바로 덮어쓰기)을 markdown·IME 리스크 없이 달성. A안(빈 문단 보존 직렬화)은 불필요해져 채택 안 함.
+
+- `src/note/sessionHints.ts` — 세션 노트에만 추가되는 tiptap 확장: ① 텍스트가 `PLACEHOLDER_HINTS`와 일치하는 문단을 `.session-hint`로 데코레이트(회색 placeholder), ② 클릭 시 그 줄 전체를 선택 → 다음 입력이 깔끔히 교체. 선택은 클릭 시점에 설정돼 **한글 조합(IME) 시작 전**이라 안전.
+- 힌트를 **plain 텍스트로 전환**(`sessionNote.ts` BODY_TEMPLATE에서 `_..._` 제거) → 덮어쓴 목표가 이탤릭을 상속하지 않고 plain으로 들어감. 회색 처리는 `.session-hint` CSS가 담당.
+- `NoteEditor`에 `scaffold?: boolean` prop, `NotePane`에서 `scaffold={isSession}` — 일반 노트는 무변경.
+- **격리 앱 E2E 검증**: 힌트 4개 회색 표시(em 없음) · 🎯 클릭→줄 전체 선택 · 한글 타이핑 "토큰 검증 끝내기"로 plain 교체 · 미입력 섹션은 plain 힌트로 저장(markdown 라운드트립 안전) · frontmatter `goal` 정확.
+
+---
+
+## (이하 원 명세 — 배경/대안 기록)
 
 ## 1. 문제
 
