@@ -197,7 +197,11 @@ button {
 .tab-group.reserve-actions {
   padding-right: 130px;
 }
-/* focused split pane is shown by dimming the *other* group's tabs — no accent line */
+/* focused split pane is shown by dimming the *other* group's tabs — no accent line.
+   INTENTIONAL a11y exception: the unfocused group's tab text drops below WCAG AA
+   (~2.3:1) by design — it's a de-emphasised secondary state, and the ACTIVE tab
+   already carries the focus cue (surface bg + border + bold + full-ink). Raising
+   the opacity to reach AA would erase the cue. See AUDIT-2026-06-12-uxaudit.md. */
 .tabbar.split .tab-group:not(.active) .tab:not(:hover) {
   opacity: 0.55;
 }
