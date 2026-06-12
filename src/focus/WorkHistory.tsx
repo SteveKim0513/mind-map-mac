@@ -5,89 +5,143 @@ import { useSession } from '../store/sessionStore';
 import type { MapStore } from '../store/mapStore';
 import { Icon } from '../ui/Icon';
 import { openSessionNote } from './controller';
+import { dayKey, fmtDuration, isCounted } from './aggregate';
 import {
-  summary, perNode, dailyTotals, dayKey, fmtDuration, isCounted, type LiveResolver,
-} from './aggregate';
+  weekPeriod, dayPeriod, periodSessions, periodLabel, quality, weeklyTrend,
+  priorityVsActual, insights, buildReportMarkdown, type Period, type ScheduledNode,
+} from './report';
+import { serializeNote, emptyNote } from '../io/noteFormat';
+import { deserialize } from '../io/formats';
+import type { TreeNode } from '../../electron/preload';
 import type { FocusSession } from '../types';
 
 const DAY = 86_400_000;
 
-/** Resolve a node's CURRENT position from the open map (so a moved node's time
- *  re-attributes); null when the map isn't open or the node is gone. */
-const liveResolver: LiveResolver = (mapId, nodeId) => {
-  const tab = useSession
-    .getState()
-    .tabs.find((t) => t.kind === 'map' && (t.store as MapStore).getState().doc.id === mapId);
-  if (!tab) return null;
-  const nodes = (tab.store as MapStore).getState().doc.nodes;
-  const n = nodes[nodeId];
-  if (!n) return null;
-  const ancestors: { id: string; text: string }[] = [];
-  let cur = n.parentId;
-  let guard = 0;
-  while (cur && nodes[cur] && guard++ < 200) {
-    ancestors.unshift({ id: cur, text: nodes[cur].text });
-    cur = nodes[cur].parentId;
+function collectMindPaths(tree: TreeNode[], out: string[] = []): string[] {
+  for (const n of tree) {
+    if (n.type === 'dir' && n.children) collectMindPaths(n.children, out);
+    else if (n.type === 'file' && n.path.endsWith('.mind')) out.push(n.path);
   }
-  return { selfText: n.text, ancestors };
-};
+  return out;
+}
 
-/**
- * Work-history dashboard — a work review, not a personal tracker: a manager (or
- * you) should be able to read *how the work went*. Day-grouped log of what was
- * done (topic · duration · outcome), an activity heatmap, and where time went by
- * topic. Clicking a topic filters the log; clicking a session opens its note
- * (and closes this overlay, since it would otherwise cover the result).
- */
+/** All scheduled nodes across the workspace (open maps + on-disk .mind files),
+ *  so the deadline review isn't limited to maps that happen to be open. */
+async function allScheduledNodes(): Promise<ScheduledNode[]> {
+  const out: ScheduledNode[] = [];
+  const seen = new Set<string>();
+  const add = (mapId: string, nodeId: string, text: string, scheduleAt: string) => {
+    const k = `${mapId} ${nodeId}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push({ mapId, nodeId, text, scheduleAt });
+  };
+  // open maps first (freshest)
+  for (const st of openMaps()) {
+    const doc = st.getState().doc;
+    for (const id in doc.nodes) {
+      const n = doc.nodes[id];
+      if (n.scheduled && n.scheduleAt) add(doc.id ?? '', id, n.text, n.scheduleAt);
+    }
+  }
+  // then on-disk maps
+  const paths = collectMindPaths(useWorkspace.getState().tree);
+  for (const p of paths) {
+    try {
+      const doc = deserialize(await window.api.readFile(p));
+      for (const id in doc.nodes) {
+        const n = doc.nodes[id];
+        if (n.scheduled && n.scheduleAt) add(doc.id ?? '', id, n.text, n.scheduleAt);
+      }
+    } catch {
+      /* skip unreadable */
+    }
+  }
+  return out;
+}
+
+/** Open maps → live tree helpers (so moving a node re-attributes, and we can read
+ *  scheduled nodes for priority-vs-actual). */
+function openMaps(): MapStore[] {
+  return useSession
+    .getState()
+    .tabs.filter((t) => t.kind === 'map')
+    .map((t) => t.store as MapStore);
+}
+/** Is `leafId` inside `ancestorId`'s subtree in the current (open) tree? */
+function inSubtree(mapId: string, ancestorId: string, leafId: string): boolean {
+  const st = openMaps().find((s) => (s.getState().doc.id ?? '') === mapId);
+  if (!st) return false;
+  const nodes = st.getState().doc.nodes;
+  let cur: string | null = leafId;
+  let guard = 0;
+  while (cur && guard++ < 200) {
+    if (cur === ancestorId) return true;
+    cur = nodes[cur]?.parentId ?? null;
+  }
+  return false;
+}
+
 export function WorkHistory() {
   const close = useUi((s) => s.closeHistory);
   const noteIndex = useWorkspace((s) => s.noteIndex);
   const now = Date.now();
-  const [filter, setFilter] = useState<{ mapId: string; nodeId: string; label: string } | null>(null);
+  const [offset, setOffset] = useState(0); // 0 = this week, -1 = last week, …
+  const [day, setDay] = useState<number | null>(null); // a drilled-in day (epoch ms) or null
+  const [scheduled, setScheduled] = useState<ScheduledNode[]>([]);
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && (filter ? setFilter(null) : close());
+    let alive = true;
+    void allScheduledNodes().then((s) => alive && setScheduled(s));
+    return () => { alive = false; };
+  }, []);
+
+  const period: Period = useMemo(
+    () => (day != null ? dayPeriod(day) : weekPeriod(now, offset)),
+    [day, offset, now],
+  );
+
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (day != null) setDay(null);
+      else close();
+    };
     window.addEventListener('keydown', k, true);
     return () => window.removeEventListener('keydown', k, true);
-  }, [close, filter]);
+  }, [close, day]);
 
   const sessions = useMemo(
     () => noteIndex.map((m) => m.session).filter((s): s is FocusSession => !!s),
     [noteIndex],
   );
   const counted = useMemo(() => sessions.filter(isCounted), [sessions]);
-  const sum = useMemo(() => summary(sessions, now), [sessions, now]);
-  const daily = useMemo(() => dailyTotals(sessions), [sessions]);
-  const nodeAgg = useMemo(() => perNode(sessions, liveResolver), [sessions]);
-  const nodes = useMemo(
-    () => [...nodeAgg.values()].sort((a, b) => b.rolledSec - a.rolledSec).slice(0, 8),
-    [nodeAgg],
+  const inP = useMemo(() => periodSessions(sessions, period), [sessions, period]);
+  const q = useMemo(() => quality(inP), [inP]);
+  const prevQ = useMemo(
+    () => quality(periodSessions(sessions, day != null ? dayPeriod(day - DAY) : weekPeriod(now, offset - 1))),
+    [sessions, day, offset, now],
   );
-
-  // subtree membership for the active topic filter (direct node + its descendants)
-  const inFilter = (s: FocusSession): boolean => {
-    if (!filter) return true;
-    if (s.link.mapId !== filter.mapId) return false;
-    if (s.link.nodeId === filter.nodeId) return true;
-    const live = liveResolver(s.link.mapId, s.link.nodeId);
-    const chain = live ? live.ancestors.map((a) => a.id) : s.ancestorIds;
-    return chain.includes(filter.nodeId);
-  };
-  const shown = useMemo(
-    () => counted.filter(inFilter).sort((a, b) => b.start - a.start),
-    [counted, filter],
+  const priority = useMemo(
+    () => priorityVsActual(scheduled, sessions, period, now, inSubtree),
+    [scheduled, sessions, period, now],
   );
-  const byDay = useMemo(() => groupByDay(shown), [shown]);
-
-  const weeks = 17;
-  const heat = useMemo(() => buildHeat(daily, now, weeks), [daily, now]);
-  const maxDay = Math.max(1, ...[...daily.values()]);
+  const tips = useMemo(() => insights(period, q, prevQ, priority, now), [period, q, prevQ, priority, now]);
+  const trend = useMemo(() => weeklyTrend(sessions, now, 8), [sessions, now]);
+  const byDay = useMemo(() => groupByDay([...inP].sort((a, b) => b.start - a.start)), [inP]);
+  const maxTrend = Math.max(1, ...trend.map((t) => t.sec));
 
   const openNote = (s: FocusSession) => {
     const m = noteIndex.find((n) => n.session?.sessionId === s.sessionId);
-    if (m) {
-      void openSessionNote(m.path);
-      close(); // the note opens in the split underneath — get out of the way
-    }
+    if (m) { void openSessionNote(m.path); close(); }
+  };
+  const exportReport = async () => {
+    const md = buildReportMarkdown(period, now, q, byDay.map(([d, list]) => ({ day: dayLabel(d), sessions: list })));
+    const root = useWorkspace.getState().root;
+    const title = `작업 요약 ${periodLabel(period, now)}`;
+    const path = await window.api.createFile(root, title, serializeNote({ ...emptyNote(title), body: md }), '.md');
+    await useWorkspace.getState().refresh();
+    try { useSession.getState().openInRight(path, await window.api.readFile(path)); } catch { /* ignore */ }
+    close();
   };
 
   return (
@@ -96,6 +150,24 @@ export function WorkHistory() {
         <div className="wh-head">
           <Icon name="clock" />
           <span className="wh-title">작업 기록</span>
+          {/* period navigation */}
+          <div className="wh-nav">
+            <button className="wh-nav-btn" title="이전" onClick={() => (day != null ? setDay(day - DAY) : setOffset(offset - 1))}>
+              <Icon name="chevronLeft" />
+            </button>
+            <span className="wh-period">{periodLabel(period, now)}</span>
+            <button
+              className="wh-nav-btn"
+              title="다음"
+              disabled={day != null ? day + DAY > now : offset >= 0}
+              onClick={() => (day != null ? setDay(day + DAY) : setOffset(Math.min(0, offset + 1)))}
+            >
+              <Icon name="chevronRight" />
+            </button>
+            {day != null && (
+              <button className="wh-nav-week" onClick={() => setDay(null)}>주 단위</button>
+            )}
+          </div>
           <button className="wh-close" title="닫기 (Esc)" onClick={close}>
             <Icon name="close" />
           </button>
@@ -108,103 +180,105 @@ export function WorkHistory() {
           </div>
         ) : (
           <div className="wh-body">
-            <div className="wh-strip">
-              <Card big={fmtDuration(sum.todaySec)} label="오늘" />
-              <Card big={fmtDuration(sum.weekSec)} label="이번 주" />
-              <Card big={`${sum.countToday}회`} label="오늘 세션" />
-              <Card big={`🔥 ${sum.streak}일`} label="연속" />
-            </div>
-
-            <div className="wh-section-label">최근 {weeks}주</div>
-            <div className="wh-heat">
-              {heat.map((col, ci) => (
-                <div className="wh-heat-col" key={ci}>
-                  {col.map((cell, ri) => (
-                    <div
-                      key={ri}
-                      className={`wh-cell${cell ? ` lvl-${level(cell.sec, maxDay)}` : ' empty'}`}
-                      title={cell ? `${cell.key} · ${fmtDuration(cell.sec)}` : ''}
-                    />
-                  ))}
-                </div>
+            {/* insight strip — the "so what" */}
+            <div className="wh-insights">
+              {tips.map((t, i) => (
+                <div key={i} className={`wh-insight ${t.tone}`}>{t.text}</div>
               ))}
             </div>
 
             <div className="wh-cols">
-              {/* day-grouped work log */}
+              {/* outcome-first work digest */}
               <div className="wh-log">
                 <div className="wh-log-head">
-                  <span className="wh-section-label">
-                    {filter ? `「${filter.label}」 기록` : '작업 일지'}
-                  </span>
-                  {filter && (
-                    <button className="wh-filter-clear" onClick={() => setFilter(null)}>
-                      전체 보기 ✕
-                    </button>
-                  )}
+                  <span className="wh-section-label">작업 일지 — 무엇을 끝냈나</span>
+                  <button className="wh-export" onClick={() => void exportReport()}>요약 노트로 내보내기</button>
                 </div>
-                {byDay.map(([day, list]) => (
-                  <div className="wh-day" key={day}>
-                    <div className="wh-day-head">
-                      <span className="wh-day-label">{dayLabel(day)}</span>
-                      <span className="wh-day-total">
-                        {fmtDuration(list.reduce((a, s) => a + s.durationSec, 0))} · {list.length}세션
-                      </span>
-                    </div>
-                    {list.map((s) => (
-                      <button key={s.sessionId} className="wh-entry" onClick={() => openNote(s)}>
-                        <span className="wh-entry-time">{hm(s.start)}</span>
-                        <span className="wh-entry-dur">{fmtDuration(s.durationSec)}</span>
-                        <span className="wh-entry-topic">{s.link.nodeText || '노드'}</span>
-                        <span className="wh-entry-outcome">
-                          {s.reflect || <span className="wh-entry-noreflect">— (성과 미기록)</span>}
+                {byDay.length === 0 ? (
+                  <div className="wh-noday">이 기간에 집중 기록이 없어요.</div>
+                ) : (
+                  byDay.map(([d, list]) => (
+                    <div className="wh-day" key={d}>
+                      <button
+                        className="wh-day-head"
+                        title="이 날만 보기"
+                        onClick={() => setDay(new Date(d + 'T00:00:00').getTime())}
+                      >
+                        <span className="wh-day-label">{dayLabel(d)}</span>
+                        <span className="wh-day-total">
+                          {fmtDuration(list.reduce((a, s) => a + s.durationSec, 0))} · {list.length}세션
                         </span>
                       </button>
-                    ))}
-                  </div>
-                ))}
+                      {list.map((s) => (
+                        <button key={s.sessionId} className="wh-entry" onClick={() => openNote(s)}>
+                          <span className="wh-entry-time">{hm(s.start)}</span>
+                          <span className="wh-entry-dur">{fmtDuration(s.durationSec)}</span>
+                          <span className="wh-entry-topic">{s.link.nodeText || '노드'}</span>
+                          <span className="wh-entry-outcome">
+                            {s.reflect || <span className="wh-entry-noreflect">— 성과 미기록</span>}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ))
+                )}
               </div>
 
-              {/* where time went, by topic — click to filter the log */}
-              <div className="wh-nodes">
-                <div className="wh-section-label">주제별 누적 (하위 포함)</div>
-                {nodes.map((n) => (
-                  <button
-                    key={`${n.mapId} ${n.nodeId}`}
-                    className={`wh-node${filter?.nodeId === n.nodeId ? ' on' : ''}`}
-                    onClick={() =>
-                      setFilter(
-                        filter?.nodeId === n.nodeId
-                          ? null
-                          : { mapId: n.mapId, nodeId: n.nodeId, label: n.label || '(이름 없음)' },
-                      )
-                    }
-                    title="이 주제의 기록만 보기"
-                  >
-                    <span className="wh-node-label">{n.label || '(이름 없음)'}</span>
-                    <span className="wh-node-bar">
+              <div className="wh-side">
+                {/* priority vs actual */}
+                {priority.length > 0 && (
+                  <div className="wh-panel">
+                    <div className="wh-section-label">마감 vs 실제 집중</div>
+                    {priority.slice(0, 6).map((p) => (
+                      <div key={`${p.mapId} ${p.nodeId}`} className={`wh-prio${p.flagged ? ' risk' : ''}`}>
+                        <span className="wh-prio-label">{p.label}</span>
+                        <span className="wh-prio-due">
+                          {p.dueInDays < 0 ? `${-p.dueInDays}일 지남` : p.dueInDays === 0 ? '오늘' : `D-${p.dueInDays}`}
+                        </span>
+                        <span className="wh-prio-focus">{p.focusSec > 0 ? fmtDuration(p.focusSec) : '0분'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* quality */}
+                <div className="wh-panel">
+                  <div className="wh-section-label">집중의 질</div>
+                  <div className="wh-qrow"><span>평균 세션</span><b>{fmtDuration(q.avgSec)}</b></div>
+                  <div className="wh-qrow"><span>최장 몰입</span><b>{fmtDuration(q.longestSec)}</b></div>
+                  <div className="wh-qrow"><span>딥워크(50분+)</span><b>{q.deepWorkCount}회</b></div>
+                  <div className="wh-hours" title="시간대별 집중(0–23시)">
+                    {q.byHour.map((sec, h) => (
                       <span
-                        className="wh-node-fill"
-                        style={{ width: `${Math.round((n.rolledSec / (nodes[0]?.rolledSec || 1)) * 100)}%` }}
+                        key={h}
+                        className="wh-hour"
+                        style={{ height: `${Math.max(2, Math.round((sec / Math.max(1, ...q.byHour)) * 22))}px` }}
+                        title={`${h}시 · ${fmtDuration(sec)}`}
                       />
-                    </span>
-                    <span className="wh-node-val">{fmtDuration(n.rolledSec)}</span>
-                  </button>
-                ))}
+                    ))}
+                  </div>
+                </div>
+
+                {/* trend */}
+                <div className="wh-panel">
+                  <div className="wh-section-label">주별 추세 (8주)</div>
+                  <div className="wh-trend">
+                    {trend.map((t, i) => (
+                      <span
+                        key={i}
+                        className={`wh-trend-bar${i === trend.length - 1 + (offset) ? ' on' : ''}`}
+                        style={{ height: `${Math.max(3, Math.round((t.sec / maxTrend) * 40))}px` }}
+                        title={`${fmtDuration(t.sec)}`}
+                        onClick={() => { setDay(null); setOffset(i - (trend.length - 1)); }}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function Card({ big, label }: { big: string; label: string }) {
-  return (
-    <div className="wh-card">
-      <span className="wh-card-big">{big}</span>
-      <span className="wh-card-label">{label}</span>
     </div>
   );
 }
@@ -217,32 +291,6 @@ function groupByDay(sorted: FocusSession[]): [string, FocusSession[]][] {
   }
   return [...map.entries()];
 }
-
-function level(sec: number, max: number): number {
-  if (sec <= 0) return 0;
-  const r = sec / max;
-  return r > 0.66 ? 4 : r > 0.33 ? 3 : r > 0.1 ? 2 : 1;
-}
-
-function buildHeat(daily: Map<string, number>, now: number, weeks: number) {
-  const cols: ({ key: string; sec: number } | null)[][] = [];
-  const today = new Date(now);
-  const dow = today.getDay();
-  const totalDays = weeks * 7;
-  const startMs = now - (totalDays - 1 - (6 - dow)) * DAY;
-  for (let c = 0; c < weeks; c++) {
-    const col: ({ key: string; sec: number } | null)[] = [];
-    for (let r = 0; r < 7; r++) {
-      const ms = startMs + (c * 7 + r) * DAY;
-      if (ms > now + DAY) { col.push(null); continue; }
-      const key = dayKey(ms);
-      col.push({ key, sec: daily.get(key) ?? 0 });
-    }
-    cols.push(col);
-  }
-  return cols;
-}
-
 function hm(ms: number): string {
   const d = new Date(ms);
   const p = (n: number) => String(n).padStart(2, '0');
@@ -253,5 +301,6 @@ function dayLabel(key: string): string {
   if (key === today) return '오늘';
   if (key === dayKey(Date.now() - DAY)) return '어제';
   const [, m, d] = key.split('-');
-  return `${Number(m)}월 ${Number(d)}일`;
+  const wd = ['일', '월', '화', '수', '목', '금', '토'][new Date(key + 'T00:00:00').getDay()];
+  return `${Number(m)}/${Number(d)} (${wd})`;
 }

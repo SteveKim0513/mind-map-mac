@@ -77,7 +77,8 @@ export interface FocusSession {
   start: number; // epoch ms
   end: number | null; // epoch ms; null while running
   durationSec: number; // 0 while running; (end-start)/1000 once ended
-  reflect?: string; // optional one-line reflection captured at end
+  goal?: string; // the "🎯" line from the note body, snapshotted at end (goal vs outcome)
+  reflect?: string; // optional one-line reflection (outcome) captured at end
   estimated?: boolean; // end was inferred (abnormal exit), not user-confirmed
 }
 

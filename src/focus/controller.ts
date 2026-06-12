@@ -124,7 +124,21 @@ export async function startFocusSession(store: MapStore, nodeId: string): Promis
   useSession.getState().openInRight(path, serialized);
 }
 
-/** Read → patch (end/duration/reflect) → write the session note's frontmatter. */
+/** Pull the user's goal — the first real line under the "🎯" heading. */
+function extractGoal(body: string): string | undefined {
+  const lines = body.split('\n');
+  const i = lines.findIndex((l) => l.includes('🎯'));
+  if (i < 0) return undefined;
+  for (let j = i + 1; j < lines.length; j++) {
+    const t = lines[j].trim();
+    if (t.startsWith('##')) break; // next section
+    if (!t || t.startsWith('_')) continue; // blank or the italic placeholder
+    return t.replace(/^[-*]\s*/, '').slice(0, 200);
+  }
+  return undefined;
+}
+
+/** Read → patch (end/duration/goal/reflect) → write the session note's frontmatter. */
 async function stampEnd(notePath: string, end: number, reflect?: string): Promise<FocusSession | null> {
   let content: string;
   try {
@@ -140,6 +154,7 @@ async function stampEnd(notePath: string, end: number, reflect?: string): Promis
     end,
     durationSec,
     estimated: suspect || undefined,
+    goal: extractGoal(note.body) || note.session.goal,
     reflect: reflect?.trim() || note.session.reflect,
   };
   await window.api.save(notePath, serializeNote(note));
