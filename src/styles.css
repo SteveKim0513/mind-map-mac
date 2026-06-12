@@ -4028,6 +4028,9 @@ textarea:focus-visible,
   color: var(--state-danger, #c0405a); font-size: 12px; font-weight: 600; flex: none;
 }
 .focus-end:hover { background: color-mix(in srgb, var(--state-danger, #e0607a) 22%, transparent); }
+/* running unusually long — amber dot + gentle reminder (B9) */
+.focus-pill.long .focus-dot { background: var(--state-scheduled, #d99a2b); animation-duration: 2.4s; }
+.focus-nudge { font-size: 11px; color: var(--state-scheduled, #b9831f); white-space: nowrap; flex: none; }
 
 /* completion card */
 .focus-done-backdrop {
@@ -4065,6 +4068,15 @@ textarea:focus-visible,
 }
 .focus-done-open { background: var(--canvas-soft); color: var(--ink-secondary); }
 .focus-done-ok { background: var(--primary); color: #fff; }
+/* the session's goal, shown so the outcome can be judged against it (B1) */
+.focus-done-goal {
+  display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; margin-bottom: 10px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--primary) 6%, var(--canvas-soft));
+  border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--hairline));
+}
+.focus-done-goal-k { font-size: 11px; color: var(--ink-faint); }
+.focus-done-goal-v { font-size: 13px; color: var(--ink); line-height: 1.4; }
 
 /* read-only session meta banner inside the note pane */
 .session-banner {
@@ -4155,11 +4167,17 @@ textarea:focus-visible,
 .wh-qrow b { color: var(--ink); font-size: 14px; }
 .wh-hours { display: flex; align-items: flex-end; gap: 1px; height: 24px; margin-top: 6px; padding: 0 2px; }
 .wh-hour { flex: 1; background: color-mix(in srgb, var(--primary) 45%, var(--canvas-soft)); border-radius: 1px; min-height: 2px; }
+.wh-hours-axis { display: flex; justify-content: space-between; margin-top: 2px; padding: 0 2px; }
+.wh-hours-axis span { font-size: 9px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 .wh-trend { display: flex; align-items: flex-end; gap: 4px; height: 44px; padding: 0 2px; }
 .wh-trend-bar { flex: 1; background: var(--canvas-soft); border-radius: 2px 2px 0 0; cursor: pointer; min-height: 3px; }
 .wh-trend-bar:hover { background: color-mix(in srgb, var(--primary) 40%, var(--canvas-soft)); }
 .wh-trend-bar.on { background: var(--primary); }
 .work-history-btn .help-toggle-lbl .ic { width: 15px; height: 15px; }
+/* narrow windows: stack the two-column dashboard so panels don't cramp (B10) */
+@media (max-width: 760px) {
+  .wh-cols { grid-template-columns: 1fr; }
+}
 
 /* node currently being focused — a soft pulsing ring */
 .node.focusing { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent); animation: focusRing 1.8s ease-in-out infinite; }

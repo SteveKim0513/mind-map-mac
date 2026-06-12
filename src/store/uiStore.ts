@@ -122,8 +122,9 @@ export interface ActiveFocus {
 export interface FocusDoneCard {
   durationSec: number;
   nodeText: string;
+  goal?: string; // the session's "🎯 한 가지" (so the outcome can be judged against it)
   todaySec: number;
-  streak: number;
+  focusDays7: number; // focus days in the last 7 (neutral framing, ADR 0007)
   nodeRolledSec: number;
   notePath: string;
 }

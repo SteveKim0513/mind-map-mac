@@ -107,9 +107,14 @@ export function WorkHistory() {
   const [filter, setFilter] = useState<{ mapId: string; nodeId: string; label: string } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null); // expanded session id
   const [scheduled, setScheduled] = useState<ScheduledNode[]>([]);
+  const [schedLoading, setSchedLoading] = useState(true);
   useEffect(() => {
     let alive = true;
-    void allScheduledNodes().then((s) => alive && setScheduled(s));
+    void allScheduledNodes().then((s) => {
+      if (!alive) return;
+      setScheduled(s);
+      setSchedLoading(false);
+    });
     return () => { alive = false; };
   }, []);
 
@@ -172,7 +177,7 @@ export function WorkHistory() {
     if (m) { void openSessionNote(m.path); close(); }
   };
   const exportReport = async () => {
-    const md = buildReportMarkdown(period, now, q, byDay.map(([d, list]) => ({ day: dayLabel(d), sessions: list })));
+    const md = buildReportMarkdown(period, now, q, tips, priority, byDay.map(([d, list]) => ({ day: dayLabel(d), sessions: list })));
     const root = useWorkspace.getState().root;
     // concrete date range → the note is unambiguous and never collides
     const title = `작업 요약 ${periodRange(period)}`;
@@ -322,7 +327,12 @@ export function WorkHistory() {
                 )}
 
                 {/* priority vs actual */}
-                {priority.length > 0 && (
+                {schedLoading ? (
+                  <div className="wh-panel">
+                    <div className="wh-section-label">마감 vs 실제 집중</div>
+                    <div className="wh-prio-none">마감 불러오는 중…</div>
+                  </div>
+                ) : priority.length > 0 && (
                   <div className="wh-panel">
                     <div className="wh-section-label">마감 vs 실제 집중</div>
                     {priority.slice(0, 6).map((p) => (
@@ -352,6 +362,9 @@ export function WorkHistory() {
                         title={`${h}시 · ${fmtDuration(sec)}`}
                       />
                     ))}
+                  </div>
+                  <div className="wh-hours-axis" aria-hidden="true">
+                    <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
                   </div>
                 </div>
 

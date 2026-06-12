@@ -4,6 +4,8 @@ import { useWorkspace } from '../store/workspaceStore';
 import { fmtDuration } from './aggregate';
 import { endFocusSession, openSessionNote, attachReflection } from './controller';
 
+const NUDGE_SEC = 4 * 3600; // gently remind to end after this long (still running)
+
 function elapsedClock(sec: number): string {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
@@ -28,15 +30,18 @@ export function FocusPill({ docked }: { docked?: boolean }) {
   }, [active]);
   if (!active) return null;
 
+  const elapsedSec = Math.max(0, Math.round((now - active.start) / 1000));
+  const long = elapsedSec >= NUDGE_SEC; // running unusually long — gentle reminder (B9)
+  const nudge = '장시간 집중 중이에요 — 종료를 잊지 않으셨나요?';
+
   return (
-    <div className={`focus-pill${docked ? ' docked' : ' floating'}`}>
-      <span className="focus-dot" />
-      <span className="focus-elapsed">
-        {elapsedClock(Math.max(0, Math.round((now - active.start) / 1000)))}
-      </span>
+    <div className={`focus-pill${docked ? ' docked' : ' floating'}${long ? ' long' : ''}`}>
+      <span className="focus-dot" title={long ? nudge : undefined} />
+      <span className="focus-elapsed">{elapsedClock(elapsedSec)}</span>
       <button className="focus-node" title="세션 노트 열기" onClick={() => void openSessionNote(active.notePath)}>
         {active.nodeText}
       </button>
+      {long && <span className="focus-nudge" title={nudge}>아직 집중 중?</span>}
       <button className="focus-end" onClick={() => void endFocusSession()}>
         종료
       </button>
@@ -78,18 +83,24 @@ function FocusCompletionCard() {
         </div>
         <div className="focus-done-stats">
           <Stat label="오늘 누적" value={fmtDuration(done.todaySec)} />
-          <Stat label="연속" value={`🔥 ${done.streak}일`} />
+          <Stat label="최근 7일" value={`${done.focusDays7}일 집중`} />
           <Stat label="이 주제 누적" value={fmtDuration(done.nodeRolledSec)} />
         </div>
+        {done.goal && (
+          <div className="focus-done-goal">
+            <span className="focus-done-goal-k">🎯 목표였던 것</span>
+            <span className="focus-done-goal-v">{done.goal}</span>
+          </div>
+        )}
         <input
           className="focus-done-reflect"
           autoFocus
-          placeholder="이번 세션 성과 한 줄 — 무엇을 끝냈나? (선택)"
+          placeholder={done.goal ? '그래서, 됐나요? 성과 한 줄 (선택)' : '이번 세션 성과 한 줄 — 무엇을 끝냈나? (선택)'}
           value={reflect}
           onChange={(e) => setReflect(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') finish();
-            if (e.key === 'Escape') close();
+            // both Enter and Escape commit — never silently discard a typed outcome (B3)
+            if (e.key === 'Enter' || e.key === 'Escape') finish();
           }}
         />
         <div className="focus-done-actions">

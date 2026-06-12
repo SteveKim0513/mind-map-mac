@@ -68,11 +68,29 @@ export function currentStreak(sessions: FocusSession[], now: number): number {
   return streak;
 }
 
+/**
+ * Distinct days with a qualifying session within the last `windowDays` (today
+ * inclusive). A calm alternative to the streak: it shows progress without the
+ * "don't break the chain" pressure (ADR 0007 / G2). DST-safe via dayKey.
+ */
+export function focusDaysInWindow(sessions: FocusSession[], now: number, windowDays: number): number {
+  const window = new Set<string>();
+  for (let i = 0; i < windowDays; i++) window.add(dayKey(now - i * DAY_MS));
+  const hit = new Set<string>();
+  for (const s of sessions) {
+    if (!isCounted(s) || s.durationSec < STREAK_MIN_SEC) continue;
+    const k = dayKey(s.start);
+    if (window.has(k)) hit.add(k);
+  }
+  return hit.size;
+}
+
 export interface Totals {
   todaySec: number;
   weekSec: number;
   countToday: number;
   streak: number;
+  focusDays7: number; // focus days in the last 7 (neutral, non-pressuring)
 }
 
 export function summary(sessions: FocusSession[], now: number): Totals {
@@ -89,7 +107,13 @@ export function summary(sessions: FocusSession[], now: number): Totals {
     }
     if (s.start >= weekAgo) weekSec += s.durationSec;
   }
-  return { todaySec, weekSec, countToday, streak: currentStreak(sessions, now) };
+  return {
+    todaySec,
+    weekSec,
+    countToday,
+    streak: currentStreak(sessions, now),
+    focusDays7: focusDaysInWindow(sessions, now, 7),
+  };
 }
 
 export interface NodeAgg {

@@ -24,3 +24,4 @@
 - [0004 — 진입점 매트릭스 채택 + 우클릭 메뉴 그룹 구분선](0004-entrypoint-matrix.md)
 - [0005 — 복사 의미론: 내용은 전부, 미리알림 연동 정체성은 제외](0005-copy-semantics.md)
 - [0006 — 집중 세션 도입 + "이 노드만 보기" 개명](0006-focus-session-and-rename.md)
+- [0007 — 집중/대시보드의 위치: "사적인 거울 + 의도된 보고서"](0007-focus-positioning.md)

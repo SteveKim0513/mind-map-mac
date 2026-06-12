@@ -11,6 +11,8 @@ import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
 import { ensureMapPersisted, reindexFromNote } from '../note/noteLinks';
 import type { MapStore } from '../store/mapStore';
 import { sanitizeDuration, summary, perNode, nodeStat } from './aggregate';
+import { extractGoal } from './goal';
+import { BODY_TEMPLATE } from './sessionNote';
 
 const WORK_LOG = 'work-log';
 
@@ -46,29 +48,6 @@ function mapStoreById(mapId: string): MapStore | null {
     .tabs.find((t) => t.kind === 'map' && (t.store as MapStore).getState().doc.id === mapId);
   return tab ? (tab.store as MapStore) : null;
 }
-
-// A scaffold for genuinely focused work, not just a blank page:
-// intention → definition of done → live log → a parking lot so distractions
-// get captured WITHOUT breaking flow (a real deep-work technique).
-const BODY_TEMPLATE = [
-  '## 🎯 이번 세션의 한 가지',
-  '_무엇에 집중하나 — 한 문장으로_',
-  '',
-  '',
-  '## ✅ 끝나면 이렇게 된다',
-  '_무엇이 되면 “됐다”인가_',
-  '',
-  '',
-  '---',
-  '',
-  '## 🔨 작업 기록',
-  '_진행하며 적기 (결정·발견·막힌 점)_',
-  '',
-  '',
-  '## 🅿️ 나중에',
-  '_떠오른 딴 생각·할 일 — 흐름 끊지 말고 여기 적어두기_',
-  '',
-].join('\n');
 
 /**
  * Start a focus session on a node of the given (open) map store.
@@ -122,20 +101,17 @@ export async function startFocusSession(store: MapStore, nodeId: string): Promis
   ui.setActiveFocus({ sessionId, notePath: path, start, mapId, nodeId, nodeText });
   // open the note in the right split so the session = working in the note
   useSession.getState().openInRight(path, serialized);
-}
 
-/** Pull the user's goal — the first real line under the "🎯" heading. */
-function extractGoal(body: string): string | undefined {
-  const lines = body.split('\n');
-  const i = lines.findIndex((l) => l.includes('🎯'));
-  if (i < 0) return undefined;
-  for (let j = i + 1; j < lines.length; j++) {
-    const t = lines[j].trim();
-    if (t.startsWith('##')) break; // next section
-    if (!t || t.startsWith('_')) continue; // blank or the italic placeholder
-    return t.replace(/^[-*]\s*/, '').slice(0, 200);
+  // first-run coachmark: a session silently spawns a note + timer, so explain it
+  // once (and only once) so the first-time user isn't surprised. (B2)
+  try {
+    if (!localStorage.getItem('focusCoachShown')) {
+      localStorage.setItem('focusCoachShown', '1');
+      ui.toast('집중 세션 시작 — 이 노트에 기록하고, 끝나면 “종료”를 누르세요');
+    }
+  } catch {
+    /* localStorage unavailable — skip the hint */
   }
-  return undefined;
 }
 
 /** Read → patch (end/duration/goal/reflect) → write the session note's frontmatter. */
@@ -188,8 +164,9 @@ export async function endFocusSession(reflect?: string): Promise<void> {
   ui.setFocusDone({
     durationSec: ended?.durationSec ?? Math.round((now - active.start) / 1000),
     nodeText: active.nodeText,
+    goal: ended?.goal,
     todaySec: sum.todaySec,
-    streak: sum.streak,
+    focusDays7: sum.focusDays7,
     nodeRolledSec: stat?.rolledSec ?? 0,
     notePath: active.notePath,
   });
