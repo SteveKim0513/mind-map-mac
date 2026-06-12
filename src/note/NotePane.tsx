@@ -130,13 +130,16 @@ function NotePaneBody() {
             사이드바에 보이기
           </button>
         )}
-        <button className="note-link-btn" title="노드에 연동" onClick={() => setPickerOpen(true)}>
-          <Icon name="link" />
-          연동
-        </button>
+        {/* session notes have an immutable node attribution — no link editing */}
+        {!isSession && (
+          <button className="note-link-btn" title="노드에 연동" onClick={() => setPickerOpen(true)}>
+            <Icon name="link" />
+            연동
+          </button>
+        )}
       </div>
 
-      {note.links.length > 0 && (
+      {!isSession && note.links.length > 0 && (
         <div className="note-links">
           {note.links.map((l) => (
             <span key={`${l.mapId}:${l.nodeId}`} className="note-link-chip">
@@ -210,7 +213,10 @@ function SessionMetaBanner({ session }: { session: FocusSession }) {
       </div>
       <div className="session-banner-sub">
         {clock(session.start)}
-        {session.end != null && ` – ${clock(session.end)}`} · 대상 「{session.link.nodeText || '노드'}」
+        {session.end != null && ` – ${clock(session.end)}`} · 대상{' '}
+        <button className="session-target" title="노드로 이동" onClick={() => void revealNode(session.link)}>
+          「{session.link.nodeText || '노드'}」
+        </button>
         {session.estimated && <span className="session-est"> · 추정</span>}
       </div>
     </div>

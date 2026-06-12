@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useMap } from '../store/mapStore';
+import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
+import { startFocusSession } from '../focus/controller';
 import { Icon } from '../ui/Icon';
 import { TAG_KEYS, tagVar } from '../theme/palette';
 
@@ -14,6 +15,8 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
   const setScheduled = useMap((s) => s.setScheduled);
   const docId = useMap((s) => s.doc.id);
   const filePath = useMap((s) => s.filePath);
+  const mapStore = useMapStore();
+  const focusing = useUi((s) => !!s.activeFocus);
   const [showColors, setShowColors] = useState(false);
 
   if (!node) return null;
@@ -69,6 +72,13 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
         }}
       >
         <Icon name="calendar" />
+      </button>
+      <button
+        className="st-btn"
+        title={focusing ? '집중 세션 진행 중' : '집중 세션 시작'}
+        onClick={() => void startFocusSession(mapStore, nodeId)}
+      >
+        <Icon name="clock" />
       </button>
       <span className="st-sep" />
       <button className="st-btn" title="자식 추가" onClick={() => addChild(nodeId)}>
