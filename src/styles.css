@@ -4258,6 +4258,16 @@ textarea:focus-visible,
 .wh-trend-bar.read:not(.on):hover { background: var(--canvas-soft); }
 .wh-trend-bar.read.on:hover { background: var(--primary); }
 
+/* day ↔ week scope toggle in the header (reuses the .seg segmented control) */
+.wh-seg { margin-left: 8px; flex: none; }
+/* calm weekly reflection — not an alarm */
+.wh-notes { margin: 2px 0 14px; }
+.wh-notes .wh-section-label { margin-bottom: 4px; }
+.wh-note { font-size: 13px; color: var(--ink-secondary); line-height: 1.65; }
+/* day header label is a button (zoom into that day) in week scope */
+.wh-day-label.as-link { border: none; background: transparent; cursor: pointer; padding: 0; }
+.wh-day-label.as-link:hover { color: var(--primary); }
+
 /* side panels */
 .wh-side { display: flex; flex-direction: column; gap: 16px; }
 .wh-panel { display: flex; flex-direction: column; gap: 6px; }
