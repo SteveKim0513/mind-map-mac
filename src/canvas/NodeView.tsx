@@ -58,24 +58,29 @@ export function NodeView({
         : [],
     [noteIndex, docId, node.id],
   );
-  // cumulative focus time on this node + its whole subtree (sessions roll up via
-  // their ancestor chain) — turns the map itself into an effort heat-map (§14-A/B)
+  // cumulative focus time on this node + its whole subtree — computed against the
+  // CURRENT tree (live descendant set), so moving a node re-attributes its time.
+  const nodes = useMap((s) => s.doc.nodes);
   const focusStat = useMemo(() => {
     if (!docId) return null;
+    // live descendant set (includes self) from the current structure
+    const subtree = new Set<string>([node.id]);
+    const stack = [node.id];
+    while (stack.length) {
+      const id = stack.pop()!;
+      for (const c of nodes[id]?.children ?? []) if (!subtree.has(c)) { subtree.add(c); stack.push(c); }
+    }
     let sec = 0;
     let count = 0;
     for (const m of noteIndex) {
       const s = m.session;
       if (!s || s.end == null || s.durationSec <= 0 || s.link.mapId !== docId) continue;
-      if (s.link.nodeId === node.id) {
-        sec += s.durationSec;
-        count++;
-      } else if (s.ancestorIds.includes(node.id)) {
-        sec += s.durationSec; // descendant session rolls up
-      }
+      if (!subtree.has(s.link.nodeId)) continue;
+      sec += s.durationSec;
+      if (s.link.nodeId === node.id) count++;
     }
     return sec > 0 ? { sec, count } : null;
-  }, [noteIndex, docId, node.id]);
+  }, [noteIndex, docId, node.id, nodes]);
 
   // legacy single link + new multi links, de-duplicated
   const allLinks = useMemo(() => {

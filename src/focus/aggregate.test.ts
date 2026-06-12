@@ -71,6 +71,16 @@ describe('focus aggregate', () => {
     expect(nodeStat(agg, 'm1', 'auth')).toEqual({ rolledSec: 50 * 60, sessions: 0 });
   });
 
+  it('a live resolver re-attributes time when a node has moved (snapshot ignored)', () => {
+    // saved snapshot says ancestor "auth", but the node has since moved under "billing"
+    const sessions = [S(NOW, 0, 30, 'login', ['auth'])];
+    const live = (_m: string, nodeId: string) =>
+      nodeId === 'login' ? { selfText: 'login', ancestors: [{ id: 'billing', text: '결제' }] } : null;
+    const agg = perNode(sessions, live);
+    expect(nodeStat(agg, 'm1', 'billing')?.rolledSec).toBe(30 * 60); // new parent gets it
+    expect(nodeStat(agg, 'm1', 'auth')).toBeNull(); // old parent no longer credited
+  });
+
   it('fmtDuration', () => {
     expect(fmtDuration(45)).toBe('45s');
     expect(fmtDuration(32 * 60)).toBe('32m');
