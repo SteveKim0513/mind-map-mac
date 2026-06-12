@@ -14,6 +14,11 @@ log.transports.console.level = isDev ? 'debug' : false;
 log.transports.file.level = isDev ? 'debug' : 'info';
 log.transports.file.maxSize = 1024 * 1024; // 1 MB, then rotates to main.old.log
 
+// Capture uncaught MAIN-process errors (uncaughtException + unhandledRejection)
+// so a crash leaves a trace in the log file — renderer crashes are already caught
+// via render-process-gone. Log only: no dialog, no behaviour change.
+log.errorHandler.startCatching({ showDialog: false });
+
 export type LogLevel = 'error' | 'warn' | 'info' | 'verbose' | 'debug';
 
 /** Log a scoped event, e.g. logEvent('info', 'sync', 'created 1, pushed 0'). */

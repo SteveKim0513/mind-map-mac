@@ -147,8 +147,9 @@ function createWindow() {
   // Forward renderer warnings/errors to the log file, minus the noisy dev-only
   // Electron CSP security warning.
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    // level: 2 = warning, 3 = error — preserve the severity in the file log
     if (level >= 2 && !message.includes('Electron Security Warning'))
-      log.warn(`[renderer] ${message} (${sourceId}:${line})`);
+      log[level >= 3 ? 'error' : 'warn'](`[renderer] ${message} (${sourceId}:${line})`);
   });
   win.webContents.on('render-process-gone', (_e, details) => {
     log.error(`[renderer] process gone: ${details.reason}`);
