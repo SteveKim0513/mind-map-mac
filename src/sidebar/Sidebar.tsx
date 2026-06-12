@@ -49,6 +49,10 @@ export function Sidebar({
   const choose = useWorkspace((s) => s.choose);
   const toggle = useWorkspace((s) => s.toggle);
   const setExpanded = useWorkspace((s) => s.setExpanded);
+  const noteByPath = useWorkspace((s) => s.noteByPath);
+  // work-log session notes have an immutable name (title = start time, fixed at
+  // creation); they can't be renamed from the tree either.
+  const isLocked = (path: string) => !!noteByPath(path)?.session || path.split('/').includes('work-log');
 
   const [selected, setSelected] = useState<{ path: string; type: 'dir' | 'file' } | null>(null);
   const [renaming, setRenaming] = useState<{ path: string; isFile: boolean } | null>(null);
@@ -171,6 +175,7 @@ export function Sidebar({
 
   const commitRename = async (node: TreeNode, draft: string) => {
     setRenaming(null);
+    if (isLocked(node.path)) return; // session notes keep their start-time name
     const trimmed = draft.trim();
     if (!trimmed || trimmed === displayName(node)) return;
     const ext = isNoteFile(node) ? '.md' : '.mind';
@@ -351,16 +356,18 @@ export function Sidebar({
             )}
 
             <span className="row-actions">
-              <button
-                className="row-act"
-                title="이름 변경"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setRenaming({ path: node.path, isFile: node.type === 'file' });
-                }}
-              >
-                <Icon name="edit" />
-              </button>
+              {!isLocked(node.path) && (
+                <button
+                  className="row-act"
+                  title="이름 변경"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRenaming({ path: node.path, isFile: node.type === 'file' });
+                  }}
+                >
+                  <Icon name="edit" />
+                </button>
+              )}
               <button
                 className="row-act"
                 title="삭제"
