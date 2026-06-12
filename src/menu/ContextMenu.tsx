@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useMap } from '../store/mapStore';
+import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
+import { startFocusSession } from '../focus/controller';
 import { TAG_KEYS, tagVar } from '../theme/palette';
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 export function ContextMenu({ id, x, y, onClose }: Props) {
   const node = useMap((s) => s.doc.nodes[id]);
   const map = useMap((s) => s);
+  const mapStore = useMapStore();
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
 
@@ -153,6 +155,12 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       )}
       <div className="ctx-sep" />
 
+      {/* 집중 세션 */}
+      <button className="ctx-item" onClick={run(() => void startFocusSession(mapStore, id))}>
+        <span>집중 세션 시작</span>
+      </button>
+      <div className="ctx-sep" />
+
       {/* 보기 · 기타 */}
       {hasChildren && (
         <button className="ctx-item" onClick={run(() => map.toggleCollapse(id))}>
@@ -160,7 +168,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
         </button>
       )}
       <button className="ctx-item" onClick={run(() => map.setFocus(id))}>
-        <span>이 노드에 집중</span>
+        <span>이 노드만 보기</span>
       </button>
       <button className="ctx-item" onClick={run(() => useUi.getState().zoomTo(id))}>
         <span>이 노드로 확대</span>

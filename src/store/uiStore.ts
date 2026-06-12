@@ -97,6 +97,35 @@ interface UiState {
   // node text scale (persisted)
   fontScale: number;
   setFontScale: (s: number) => void;
+
+  // ── focus session (only one active at a time) ──
+  activeFocus: ActiveFocus | null;
+  setActiveFocus: (f: ActiveFocus | null) => void;
+  // completion card shown on end (null = hidden)
+  focusDone: FocusDoneCard | null;
+  setFocusDone: (c: FocusDoneCard | null) => void;
+  // work-history dashboard (overlay)
+  historyOpen: boolean;
+  openHistory: () => void;
+  closeHistory: () => void;
+}
+
+/** The running session, mirrored to localStorage for crash recovery. */
+export interface ActiveFocus {
+  sessionId: string;
+  notePath: string;
+  start: number; // epoch ms
+  mapId: string;
+  nodeId: string;
+  nodeText: string;
+}
+export interface FocusDoneCard {
+  durationSec: number;
+  nodeText: string;
+  todaySec: number;
+  streak: number;
+  nodeRolledSec: number;
+  notePath: string;
 }
 
 function applyTheme(t: Theme) {
@@ -192,4 +221,23 @@ export const useUi = create<UiState>((set, get) => ({
     document.documentElement.style.setProperty('--font-scale', String(clamped));
     set({ fontScale: clamped });
   },
+
+  activeFocus: (() => {
+    try {
+      const raw = localStorage.getItem('activeFocus');
+      return raw ? (JSON.parse(raw) as ActiveFocus) : null;
+    } catch {
+      return null;
+    }
+  })(),
+  setActiveFocus: (f) => {
+    if (f) localStorage.setItem('activeFocus', JSON.stringify(f));
+    else localStorage.removeItem('activeFocus');
+    set({ activeFocus: f });
+  },
+  focusDone: null,
+  setFocusDone: (c) => set({ focusDone: c }),
+  historyOpen: false,
+  openHistory: () => set({ historyOpen: true }),
+  closeHistory: () => set({ historyOpen: false }),
 }));

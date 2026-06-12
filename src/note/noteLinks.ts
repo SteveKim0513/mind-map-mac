@@ -27,8 +27,17 @@ export async function ensureMapPersisted(mapId: string): Promise<void> {
 }
 
 /** Reindex a note from its store state into the workspace link index. */
-export function reindexFromNote(path: string, note: { id: string; title: string; links: NoteLink[] }) {
-  useWorkspace.getState().reindexNote({ path, id: note.id, title: note.title, links: note.links });
+export function reindexFromNote(
+  path: string,
+  note: { id: string; title: string; links: NoteLink[]; session?: import('../types').FocusSession },
+) {
+  useWorkspace.getState().reindexNote({
+    path,
+    id: note.id,
+    title: note.title,
+    links: note.links,
+    session: note.session,
+  });
 }
 
 /**

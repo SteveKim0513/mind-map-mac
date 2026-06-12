@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import { createStore, useStore, type StoreApi } from 'zustand';
-import type { NoteDoc, NoteLink } from '../types';
+import type { FocusSession, NoteDoc, NoteLink } from '../types';
 import { emptyNote } from '../io/noteFormat';
 
 interface NoteState {
@@ -14,6 +14,7 @@ interface NoteState {
 
   setTitle: (title: string) => void;
   setBody: (body: string) => void;
+  applySession: (session: FocusSession) => void; // system write (focus end) — never user-editable
   addLink: (link: NoteLink) => void;
   removeLink: (mapId: string, nodeId: string) => void;
 }
@@ -32,6 +33,9 @@ export function createNoteStore(): NoteStore {
 
     setTitle: (title) => set({ note: { ...get().note, title }, dirty: true }),
     setBody: (body) => set({ note: { ...get().note, body }, dirty: true }),
+    // keep an open session note's meta in sync after the app stamps end — does
+    // NOT set dirty (disk already written), so a later autosave keeps the new end.
+    applySession: (session) => set({ note: { ...get().note, session } }),
 
     addLink: (link) => {
       const { note } = get();

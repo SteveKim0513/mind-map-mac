@@ -5,6 +5,7 @@ import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { measureNode } from '../layout/measure';
 import { scheduleInfo } from './scheduleInfo';
+import { fmtDuration } from '../focus/aggregate';
 import { Icon, isIconName } from '../ui/Icon';
 import { tagVar } from '../theme/palette';
 
@@ -55,6 +56,25 @@ export function NodeView({
         : [],
     [noteIndex, docId, node.id],
   );
+  // cumulative focus time on this node + its whole subtree (sessions roll up via
+  // their ancestor chain) — turns the map itself into an effort heat-map (§14-A/B)
+  const focusStat = useMemo(() => {
+    if (!docId) return null;
+    let sec = 0;
+    let count = 0;
+    for (const m of noteIndex) {
+      const s = m.session;
+      if (!s || s.end == null || s.durationSec <= 0 || s.link.mapId !== docId) continue;
+      if (s.link.nodeId === node.id) {
+        sec += s.durationSec;
+        count++;
+      } else if (s.ancestorIds.includes(node.id)) {
+        sec += s.durationSec; // descendant session rolls up
+      }
+    }
+    return sec > 0 ? { sec, count } : null;
+  }, [noteIndex, docId, node.id]);
+
   // legacy single link + new multi links, de-duplicated
   const allLinks = useMemo(() => {
     const out: string[] = [];
@@ -72,7 +92,7 @@ export function NodeView({
   const memoTitles = linkedNotes.map((m) => m.title).join('');
   const metaSig = `${node.note ? 1 : 0}|${memoEditing ? 1 : 0}|${sched?.label ?? ''}|${
     sched?.urg ?? ''
-  }|${p.childDone}/${p.childTotal}|${node.collapsed ? p.hiddenCount : 0}|${linkedNotes.length}|${allLinks.length}|${memoTitles}`;
+  }|${p.childDone}/${p.childTotal}|${node.collapsed ? p.hiddenCount : 0}|${linkedNotes.length}|${allLinks.length}|${memoTitles}|${focusStat?.sec ?? 0}`;
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -205,8 +225,8 @@ export function NodeView({
         </span>
       )}
 
-      {/* ②③ STATUS GUTTER — one compact row: schedule (urgency) · links · notes */}
-      {!editing && (sched || allLinks.length > 0 || linkedNotes.length > 0) && (
+      {/* ②③ STATUS GUTTER — one compact row: schedule (urgency) · links · notes · focus */}
+      {!editing && (sched || allLinks.length > 0 || linkedNotes.length > 0 || focusStat) && (
         <div className="node-gutter" onPointerDown={(e) => e.stopPropagation()}>
           {sched && (
             <button
@@ -268,6 +288,19 @@ export function NodeView({
               <span className="gchip-t">{m.title}</span>
             </button>
           ))}
+          {focusStat && (
+            <button
+              className="gchip focus"
+              title={`집중 ${focusStat.count}회 · 누적 ${fmtDuration(focusStat.sec)} (하위 포함)`}
+              onClick={(e) => {
+                e.stopPropagation();
+                useUi.getState().openHistory();
+              }}
+            >
+              <Icon name="clock" />
+              <span className="gchip-t">{fmtDuration(focusStat.sec)}</span>
+            </button>
+          )}
         </div>
       )}
 

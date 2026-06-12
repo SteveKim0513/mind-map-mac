@@ -18,15 +18,17 @@ export function emptyNote(title = '제목 없음'): NoteDoc {
 }
 
 export function serializeNote(note: NoteDoc): string {
-  const fm = [
+  const lines = [
     '---',
     `id: ${JSON.stringify(note.id)}`,
     `title: ${JSON.stringify(note.title)}`,
     `links: ${JSON.stringify(note.links ?? [])}`,
-    '---',
-    '',
-  ].join('\n');
-  return fm + note.body;
+  ];
+  // only session notes carry a session line — never pollute ordinary notes.
+  // JSON.stringify keeps it on ONE line (the parser splits on the first colon).
+  if (note.session) lines.push(`session: ${JSON.stringify(note.session)}`);
+  lines.push('---', '');
+  return lines.join('\n') + note.body;
 }
 
 /** Parse a note file. `fallbackTitle` (filename) is used when frontmatter lacks one. */
@@ -49,10 +51,17 @@ export function parseNote(text: string, fallbackTitle = '제목 없음'): NoteDo
     }
   }
   const body = text.slice(m[0].length);
+  // session round-trips only when present and well-formed; a hand-broken value
+  // (JSON.parse failed → raw string) is dropped so it can't corrupt aggregation.
+  const session =
+    fields.session && typeof fields.session === 'object' && !Array.isArray(fields.session)
+      ? (fields.session as NoteDoc['session'])
+      : undefined;
   return {
     id: typeof fields.id === 'string' ? (fields.id as string) : newId(),
     title: typeof fields.title === 'string' ? (fields.title as string) : fallbackTitle,
     body,
     links: Array.isArray(fields.links) ? (fields.links as NoteLink[]) : [],
+    ...(session ? { session } : {}),
   };
 }

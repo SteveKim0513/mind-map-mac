@@ -3965,3 +3965,168 @@ textarea:focus-visible,
   width: 13px;
   height: 13px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Focus sessions — pill, completion card, note banner, chip, dashboard
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* dedicated pops (no translate offset — selPop was toolbar-specific) */
+@keyframes pillPop { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes modalPop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+
+/* node gutter focus chip */
+.gchip.focus { color: var(--ink-muted); }
+.gchip.focus .ic { width: 13px; height: 13px; }
+.gchip.focus:hover { color: var(--primary); }
+
+/* running-session pill (bottom-left: docked under sidebar / floating when hidden) */
+.focus-pill {
+  position: fixed;
+  bottom: 14px;
+  left: 14px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 12px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-2);
+  font-size: 13px;
+  max-width: 320px;
+  animation: pillPop 0.2s var(--spring) both;
+}
+.focus-pill.docked { left: 16px; bottom: 92px; } /* sit above the sidebar foot */
+.focus-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--state-danger, #e0607a);
+  animation: focusPulse 1.6s ease-in-out infinite;
+  flex: none;
+}
+@keyframes focusPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.focus-elapsed { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+.focus-node {
+  border: none; background: transparent; cursor: pointer; padding: 0;
+  color: var(--ink-secondary); max-width: 140px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.focus-node:hover { color: var(--primary); text-decoration: underline; }
+.focus-end {
+  border: none; cursor: pointer; padding: 4px 10px; border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--state-danger, #e0607a) 14%, transparent);
+  color: var(--state-danger, #c0405a); font-size: 12px; font-weight: 600; flex: none;
+}
+.focus-end:hover { background: color-mix(in srgb, var(--state-danger, #e0607a) 22%, transparent); }
+
+/* completion card */
+.focus-done-backdrop {
+  position: fixed; inset: 0; z-index: 90;
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.focus-done {
+  width: 380px; max-width: 92vw; padding: 22px;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-2);
+  animation: modalPop 0.22s var(--spring) both;
+}
+.focus-done-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
+.focus-done-big { font-size: 30px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
+.focus-done-sub { color: var(--ink-muted); font-size: 13px; }
+.focus-done-stats { display: flex; gap: 10px; margin-bottom: 14px; }
+.focus-done-stat {
+  flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 10px;
+  background: var(--canvas-soft); border-radius: var(--r-md); text-align: center;
+}
+.focus-done-stat-v { font-weight: 600; color: var(--ink); font-size: 15px; }
+.focus-done-stat-l { font-size: 11px; color: var(--ink-faint); }
+.focus-done-reflect {
+  width: 100%; box-sizing: border-box; padding: 9px 11px; font-size: 13px;
+  border: 1px solid var(--hairline); border-radius: var(--r-md); background: var(--canvas);
+  color: var(--ink); margin-bottom: 12px;
+}
+.focus-done-reflect:focus { outline: none; border-color: var(--primary); }
+.focus-done-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.focus-done-open, .focus-done-ok {
+  border: none; cursor: pointer; padding: 8px 16px; border-radius: var(--r-md); font-size: 13px; font-weight: 500;
+}
+.focus-done-open { background: var(--canvas-soft); color: var(--ink-secondary); }
+.focus-done-ok { background: var(--primary); color: #fff; }
+
+/* read-only session meta banner inside the note pane */
+.session-banner {
+  padding: 12px 16px; border-bottom: 1px solid var(--hairline);
+  background: var(--canvas-soft);
+}
+.session-banner.running { background: color-mix(in srgb, var(--primary) 7%, var(--canvas-soft)); }
+.session-banner-main { display: flex; align-items: center; gap: 8px; }
+.session-banner-main .ic { width: 15px; height: 15px; color: var(--ink-muted); }
+.session-banner-title { font-weight: 600; font-size: 13px; color: var(--ink-secondary); }
+.session-banner-time { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); margin-left: 2px; }
+.sess-end {
+  margin-left: auto; border: none; cursor: pointer; padding: 4px 12px; border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--state-danger, #e0607a) 14%, transparent);
+  color: var(--state-danger, #c0405a); font-size: 12px; font-weight: 600;
+}
+.sess-running { margin-left: auto; font-size: 12px; color: var(--ink-faint); }
+.session-banner-sub { font-size: 12px; color: var(--ink-muted); margin-top: 5px; padding-left: 23px; }
+.session-est { color: var(--ink-faint); }
+
+/* work-history dashboard overlay */
+.wh-backdrop {
+  position: fixed; inset: 0; z-index: 88;
+  background: color-mix(in srgb, var(--ink) 16%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+.wh {
+  width: 880px; max-width: 94vw; max-height: 88vh; overflow: auto;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-2);
+  animation: modalPop 0.2s var(--spring) both;
+}
+.wh-head { display: flex; align-items: center; gap: 8px; padding: 16px 20px; border-bottom: 1px solid var(--hairline); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.wh-head .ic { width: 17px; height: 17px; color: var(--ink-muted); }
+.wh-title { font-weight: 600; font-size: 15px; }
+.wh-close { margin-left: auto; border: none; background: transparent; cursor: pointer; color: var(--ink-faint); padding: 4px; border-radius: var(--r-sm); }
+.wh-close:hover { background: var(--canvas-soft); color: var(--ink); }
+.wh-empty { padding: 60px 24px; text-align: center; color: var(--ink-muted); line-height: 1.8; }
+.wh-body { padding: 18px 20px 24px; }
+.wh-strip { display: flex; gap: 12px; margin-bottom: 22px; }
+.wh-card { flex: 1; padding: 14px; background: var(--canvas-soft); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 3px; }
+.wh-card-big { font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+.wh-card-label { font-size: 12px; color: var(--ink-faint); }
+.wh-section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--ink-faint); margin: 4px 0 10px; }
+.wh-heat { display: flex; gap: 3px; margin-bottom: 24px; }
+.wh-heat-col { display: flex; flex-direction: column; gap: 3px; }
+.wh-cell { width: 13px; height: 13px; border-radius: 3px; background: var(--canvas-soft); }
+.wh-cell.empty { background: transparent; }
+.wh-cell.lvl-1 { background: color-mix(in srgb, var(--primary) 22%, var(--canvas-soft)); }
+.wh-cell.lvl-2 { background: color-mix(in srgb, var(--primary) 42%, var(--canvas-soft)); }
+.wh-cell.lvl-3 { background: color-mix(in srgb, var(--primary) 66%, transparent); }
+.wh-cell.lvl-4 { background: var(--primary); }
+.wh-cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; }
+.wh-timeline, .wh-nodes { display: flex; flex-direction: column; gap: 6px; }
+.wh-session {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: none;
+  background: transparent; cursor: pointer; border-radius: var(--r-md); text-align: left; width: 100%;
+}
+.wh-session:hover { background: var(--canvas-soft); }
+.wh-session-when { font-size: 12px; color: var(--ink-faint); width: 88px; flex: none; }
+.wh-session-dur { font-weight: 600; font-size: 13px; color: var(--ink); width: 56px; flex: none; }
+.wh-session-node { color: var(--ink-secondary); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wh-session-node:hover { color: var(--primary); text-decoration: underline; }
+.wh-session-reflect { color: var(--ink-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.wh-node { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: none; background: transparent; cursor: pointer; border-radius: var(--r-md); width: 100%; }
+.wh-node:hover { background: var(--canvas-soft); }
+.wh-node-label { font-size: 13px; color: var(--ink-secondary); width: 96px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wh-node-bar { flex: 1; height: 8px; background: var(--canvas-soft); border-radius: var(--r-full); overflow: hidden; }
+.wh-node-fill { display: block; height: 100%; background: var(--primary); border-radius: var(--r-full); }
+.wh-node-val { font-size: 12px; font-weight: 600; color: var(--ink-muted); width: 56px; text-align: right; flex: none; }
+.wh-broken { margin-top: 16px; font-size: 12px; color: var(--ink-faint); }
+.work-history-btn .help-toggle-lbl .ic { width: 15px; height: 15px; }

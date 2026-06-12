@@ -20,7 +20,7 @@ export function Breadcrumb() {
           <Icon name="chevronUp" />
         </button>
       )}
-      <span className="bc-label">집중</span>
+      <span className="bc-label">이 노드만</span>
       <span className="bc-current" title={node.text}>
         {node.text?.trim() || '제목 없음'}
       </span>

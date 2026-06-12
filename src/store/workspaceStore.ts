@@ -17,6 +17,7 @@ interface WorkspaceState {
   // link-index queries / updates
   notesForNode: (mapId: string, nodeId: string) => NoteMeta[];
   noteByPath: (path: string) => NoteMeta | undefined;
+  sessions: () => import('../types').FocusSession[]; // every indexed focus session
   reindexNote: (meta: NoteMeta) => void; // upsert one note (after save/link change)
 }
 
@@ -41,7 +42,7 @@ async function buildNoteIndex(tree: TreeNode[]): Promise<NoteMeta[]> {
       try {
         const content = await window.api.readFile(path);
         const n = parseNote(content, nameOf(path));
-        return { path, id: n.id, title: n.title, links: n.links };
+        return { path, id: n.id, title: n.title, links: n.links, session: n.session };
       } catch {
         return null;
       }
@@ -78,6 +79,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   notesForNode: (mapId, nodeId) =>
     get().noteIndex.filter((m) => m.links.some((l) => l.mapId === mapId && l.nodeId === nodeId)),
   noteByPath: (path) => get().noteIndex.find((m) => m.path === path),
+  sessions: () =>
+    get().noteIndex.map((m) => m.session).filter((s): s is NonNullable<typeof s> => !!s),
   reindexNote: (meta) =>
     set((s) => {
       const rest = s.noteIndex.filter((m) => m.path !== meta.path);

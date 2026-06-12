@@ -7,7 +7,11 @@ import { NodePicker } from './NodePicker';
 import { addLinkToNoteFile, reindexFromNote, revealNode } from './noteLinks';
 import { useSession } from '../store/sessionStore';
 import { useWorkspace } from '../store/workspaceStore';
+import { useUi } from '../store/uiStore';
 import { Icon } from '../ui/Icon';
+import { fmtDuration } from '../focus/aggregate';
+import { endFocusSession } from '../focus/controller';
+import type { FocusSession } from '../types';
 import type { Tab } from '../store/sessionStore';
 
 interface Props {
@@ -79,8 +83,11 @@ function NotePaneBody() {
   // rename, one-directional: editing the title renames the .md so the sidebar
   // and tab follow. Attached notes stay in .notes/ (rename keeps the dirname).
   const renaming = useRef(false);
+  const isSession = !!note.session;
   useEffect(() => {
-    if (!filePath || renaming.current) return;
+    // Session notes are named once at creation (start time) and never renamed —
+    // their title contains ":" which the filename sanitizer would churn forever (§14-H).
+    if (isSession || !filePath || renaming.current) return;
     const base = (filePath.split('/').pop() ?? '').replace(/\.md$/, '');
     const wanted = fileNameFromTitle(note.title);
     if (!wanted || wanted === base) return;
@@ -101,15 +108,17 @@ function NotePaneBody() {
       })();
     }, 600);
     return () => clearTimeout(t);
-  }, [note.title, filePath]);
+  }, [note.title, filePath, isSession]);
 
   return (
     <div className="note-doc">
+      {note.session && <SessionMetaBanner session={note.session} />}
       <div className="note-head">
         <input
           className="note-title"
           value={note.title}
           placeholder="제목 없음"
+          readOnly={isSession}
           onChange={(e) => setTitle(e.target.value)}
         />
         <span className={`note-save${dirty ? ' saving' : ''}`} title={dirty ? '저장 중' : '저장됨'}>
@@ -157,4 +166,61 @@ function NotePaneBody() {
       <NoteEditor key={note.id} body={note.body} onChange={setBody} />
     </div>
   );
+}
+
+const clock = (ms: number) => {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+/** Read-only meta header for a focus-session note — driven by frontmatter, not
+ *  the editable body, so the user can never alter start/end/target (§6.2). */
+function SessionMetaBanner({ session }: { session: FocusSession }) {
+  const active = useUi((s) => s.activeFocus);
+  const running = session.end == null;
+  const isThis = active?.notePath && active.sessionId === session.sessionId;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+
+  const elapsed = running ? Math.max(0, Math.round((now - session.start) / 1000)) : session.durationSec;
+  const right = running ? (
+    isThis ? (
+      <button className="sess-end" onClick={() => void endFocusSession()}>
+        종료
+      </button>
+    ) : (
+      <span className="sess-running">진행 중</span>
+    )
+  ) : null;
+
+  return (
+    <div className={`session-banner${running ? ' running' : ''}`}>
+      <div className="session-banner-main">
+        <Icon name="clock" />
+        <span className="session-banner-title">집중 세션</span>
+        <span className="session-banner-time">
+          {running ? fmtClock(elapsed) : fmtDuration(session.durationSec)}
+        </span>
+        {right}
+      </div>
+      <div className="session-banner-sub">
+        {clock(session.start)}
+        {session.end != null && ` – ${clock(session.end)}`} · 대상 「{session.link.nodeText || '노드'}」
+        {session.estimated && <span className="session-est"> · 추정</span>}
+      </div>
+    </div>
+  );
+}
+
+function fmtClock(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`;
 }

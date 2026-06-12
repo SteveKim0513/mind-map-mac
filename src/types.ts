@@ -66,12 +66,28 @@ export interface NoteLink {
   mapPath?: string; // best-effort file path hint, to open the map when it isn't already
 }
 
+/** A focus-session record stamped into a note's frontmatter. The note IS the
+ *  session log; this struct is the structured truth the dashboard aggregates.
+ *  Times are epoch ms (not local ISO) so duration survives sleep / DST / TZ. */
+export interface FocusSession {
+  sessionId: string; // unique — dedup key (a copied note must not double-count)
+  link: NoteLink; // node attribution, reusing the note-link identity/recovery
+  ancestorIds: string[]; // node's ancestor chain (root→parent) for subtree roll-up
+  ancestorTexts: string[]; // snapshot labels for those ancestors (display when map gone)
+  start: number; // epoch ms
+  end: number | null; // epoch ms; null while running
+  durationSec: number; // 0 while running; (end-start)/1000 once ended
+  reflect?: string; // optional one-line reflection captured at end
+  estimated?: boolean; // end was inferred (abnormal exit), not user-confirmed
+}
+
 /** A standalone note document, stored as a Markdown file (.md) with frontmatter. */
 export interface NoteDoc {
   id: string; // stable note id (frontmatter)
   title: string;
   body: string; // Markdown body
   links: NoteLink[]; // nodes this note is linked to
+  session?: FocusSession; // present iff this is a focus-session note (read-only meta)
 }
 
 /** Lightweight note record for the workspace link index (frontmatter only). */
@@ -80,6 +96,7 @@ export interface NoteMeta {
   id: string;
   title: string;
   links: NoteLink[];
+  session?: FocusSession; // carried so the dashboard aggregates from the index, no re-scan
 }
 
 /** A node with its computed on-canvas position. `x` is the node's LEFT edge;
