@@ -69,16 +69,21 @@ export function currentStreak(sessions: FocusSession[], now: number): number {
 }
 
 /**
- * Distinct days with a qualifying session within the last `windowDays` (today
+ * Distinct days with a focus session within the last `windowDays` (today
  * inclusive). A calm alternative to the streak: it shows progress without the
  * "don't break the chain" pressure (ADR 0007 / G2). DST-safe via dayKey.
+ *
+ * Unlike the streak it has NO minimum-duration gate: the streak gates short
+ * sessions to resist chain-gaming, but this is a plain informational count, so
+ * gating it would make "0일 집중" appear right after a real (sub-5-min) session.
+ * Any counted session marks its day.
  */
 export function focusDaysInWindow(sessions: FocusSession[], now: number, windowDays: number): number {
   const window = new Set<string>();
   for (let i = 0; i < windowDays; i++) window.add(dayKey(now - i * DAY_MS));
   const hit = new Set<string>();
   for (const s of sessions) {
-    if (!isCounted(s) || s.durationSec < STREAK_MIN_SEC) continue;
+    if (!isCounted(s)) continue;
     const k = dayKey(s.start);
     if (window.has(k)) hit.add(k);
   }

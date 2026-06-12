@@ -63,12 +63,12 @@ describe('focus aggregate', () => {
     expect(currentStreak([S(NOW, 0, 6, 'a')], NOW)).toBe(1);
   });
 
-  it('focusDaysInWindow counts distinct qualifying days in the window only', () => {
+  it('focusDaysInWindow counts distinct focus days in the window only', () => {
     // today, -2 (two distinct days), -3 (a 2nd session on the same -3 day → still 1)
     const sessions = [S(NOW, 0, 30, 'a'), S(NOW, 2, 10, 'a'), S(NOW, 3, 10, 'a'), S(NOW, 3, 10, 'b')];
     expect(focusDaysInWindow(sessions, NOW, 7)).toBe(3); // 0, -2, -3
     expect(focusDaysInWindow(sessions, NOW, 3)).toBe(2); // window = today,-1,-2 → 0 and -2
-    expect(focusDaysInWindow([S(NOW, 0, 2, 'a')], NOW, 7)).toBe(0); // <5m doesn't qualify
+    expect(focusDaysInWindow([S(NOW, 0, 2, 'a')], NOW, 7)).toBe(1); // a real sub-5m session still marks its day
     expect(focusDaysInWindow([S(NOW, 30, 30, 'a')], NOW, 7)).toBe(0); // outside window
   });
 
