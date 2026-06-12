@@ -99,6 +99,11 @@ interface UiState {
   setFontScale: (s: number) => void;
 
   // ── focus session (only one active at a time) ──
+  // goal prompt shown before a session starts (captures the goal as structured
+  // data via the process, not a note template)
+  focusPrompt: { nodeText: string } | null;
+  openFocusPrompt: (p: { nodeText: string }) => void;
+  closeFocusPrompt: () => void;
   activeFocus: ActiveFocus | null;
   setActiveFocus: (f: ActiveFocus | null) => void;
   // completion card shown on end (null = hidden)
@@ -223,6 +228,9 @@ export const useUi = create<UiState>((set, get) => ({
     set({ fontScale: clamped });
   },
 
+  focusPrompt: null,
+  openFocusPrompt: (p) => set({ focusPrompt: p }),
+  closeFocusPrompt: () => set({ focusPrompt: null }),
   activeFocus: (() => {
     try {
       const raw = localStorage.getItem('activeFocus');

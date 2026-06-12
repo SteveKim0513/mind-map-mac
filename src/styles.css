@@ -3329,9 +3329,6 @@ textarea:focus-visible,
   height: 0;
   pointer-events: none;
 }
-/* session-note scaffold hints: read as a greyed placeholder, not content
-   (click selects the whole line → next input replaces it with clean text). */
-.note-rich .ProseMirror p.session-hint { color: var(--ink-faint); opacity: 0.75; }
 
 /* shared markdown typography: live editor + read-only popup peek */
 .note-rich .ProseMirror,
@@ -4065,12 +4062,25 @@ textarea:focus-visible,
   color: var(--ink); margin-bottom: 12px;
 }
 .focus-done-reflect:focus { outline: none; border-color: var(--primary); }
-.focus-done-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.focus-done-open, .focus-done-ok {
-  border: none; cursor: pointer; padding: 8px 16px; border-radius: var(--r-md); font-size: 13px; font-weight: 500;
+.focus-done-actions { display: flex; gap: 8px; }
+.focus-done-ok {
+  border: none; cursor: pointer; padding: 9px 16px; border-radius: var(--r-md); font-size: 13px; font-weight: 500;
+  background: var(--primary); color: #fff; width: 100%;
 }
-.focus-done-open { background: var(--canvas-soft); color: var(--ink-secondary); }
-.focus-done-ok { background: var(--primary); color: #fff; }
+/* goal prompt shown before a session starts */
+.focus-start {
+  width: 380px; max-width: 92vw; padding: 22px;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-2);
+  animation: modalPop 0.22s var(--spring) both;
+}
+.focus-start-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px; }
+.focus-start-title { font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+.focus-start-sub { color: var(--ink-muted); font-size: 13px; }
+.focus-start-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.focus-start-hint { font-size: 11px; color: var(--ink-faint); }
+.focus-start-go { width: auto; padding: 9px 22px; }
+
 /* the session's goal, shown so the outcome can be judged against it (B1) */
 .focus-done-goal {
   display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; margin-bottom: 10px;
@@ -4098,6 +4108,7 @@ textarea:focus-visible,
 }
 .sess-running { margin-left: auto; font-size: 12px; color: var(--ink-faint); }
 .session-banner-sub { font-size: 12px; color: var(--ink-muted); margin-top: 5px; padding-left: 23px; }
+.session-banner-goal { font-size: 13px; color: var(--ink-secondary); margin-top: 7px; padding-left: 23px; }
 .session-target { border: none; background: transparent; cursor: pointer; color: var(--ink-secondary); padding: 0; font-size: 12px; }
 .session-target:hover { color: var(--primary); text-decoration: underline; }
 .session-est { color: var(--ink-faint); }

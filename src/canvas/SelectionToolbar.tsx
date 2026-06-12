@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
-import { startFocusSession } from '../focus/controller';
+import { requestFocusStart } from '../focus/controller';
 import { Icon } from '../ui/Icon';
 import { TAG_KEYS, tagVar } from '../theme/palette';
 
@@ -76,7 +76,7 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
       <button
         className="st-btn"
         title={focusing ? '집중 세션 진행 중' : '집중 세션 시작'}
-        onClick={() => void startFocusSession(mapStore, nodeId)}
+        onClick={() => requestFocusStart(mapStore, nodeId)}
       >
         <Icon name="clock" />
       </button>

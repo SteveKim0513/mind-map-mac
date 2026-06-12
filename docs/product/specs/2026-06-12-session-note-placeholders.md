@@ -1,6 +1,8 @@
 # 세션 노트 자리표시자 — 네이티브 placeholder 전환
 
-> 작성: 2026-06-12 · 상태: **구현 완료(B안 + 클릭 교체)** · 출처: [REVIEW §6.3](../REVIEW-2026-06-focus-and-dashboard.md)
+> ⚠️ **폐기됨(SUPERSEDED) — [decisions/0008](../../decisions/0008-focus-goal-process-result.md)**: 노트 4단 템플릿 자체를 없애고 목표를 *시작 팝업*에서 구조화 포착하도록 재설계하면서, 템플릿 자리표시자 문제도 함께 사라졌다. 이 스펙(자리표시자 데코레이션)은 더 이상 유효하지 않다. 아래는 기록용.
+
+> 작성: 2026-06-12 · 상태: ~~구현 완료~~ → **폐기(0008로 대체)** · 출처: [REVIEW §6.3](../REVIEW-2026-06-focus-and-dashboard.md)
 > 선행: 목표 추출 정합성은 [goal.ts/sessionNote.ts](../REVIEW-2026-06-focus-and-dashboard.md#62)로 이미 해결됨. 이 스펙은 *편집 경험*만 다룬다.
 
 ## 구현 결과 (2026-06-12)

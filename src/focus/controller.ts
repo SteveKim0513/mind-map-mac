@@ -11,8 +11,7 @@ import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
 import { ensureMapPersisted, reindexFromNote } from '../note/noteLinks';
 import type { MapStore } from '../store/mapStore';
 import { sanitizeDuration, summary, perNode, nodeStat } from './aggregate';
-import { extractGoal } from './goal';
-import { BODY_TEMPLATE } from './sessionNote';
+import { SESSION_BODY } from './sessionNote';
 
 const WORK_LOG = 'work-log';
 
@@ -49,17 +48,49 @@ function mapStoreById(mapId: string): MapStore | null {
   return tab ? (tab.store as MapStore) : null;
 }
 
-/**
- * Start a focus session on a node of the given (open) map store.
- * Creates work-log/, the session note, links it to the node, opens the note in
- * the right split (you start a session to start WORKING in the note), and arms
- * the timer. Only one session runs at a time — a second start is refused.
- */
-export async function startFocusSession(store: MapStore, nodeId: string): Promise<void> {
+// A start is a two-step process: a goal prompt, then the actual start. The store
+// + node are held here (not in uiStore) so the prompt stays serializable and the
+// map id never has to be resolved from a possibly-unsaved doc.
+let pendingStart: { store: MapStore; nodeId: string } | null = null;
+
+/** Entry point for every "집중 세션 시작" trigger: refuse if busy, else open the
+ *  goal prompt. The session itself begins on confirmFocusStart. */
+export function requestFocusStart(store: MapStore, nodeId: string): void {
   const ui = useUi.getState();
   if (ui.activeFocus) {
-    // single active session: refuse a second one. A light toast (not a modal) —
-    // the always-visible pill lets the user jump to the running note.
+    ui.toast(`이미 「${ui.activeFocus.nodeText}」 집중 세션이 진행 중이에요 — 먼저 종료해 주세요`);
+    return;
+  }
+  const node = store.getState().doc.nodes[nodeId];
+  if (!node) return;
+  pendingStart = { store, nodeId };
+  ui.openFocusPrompt({ nodeText: (node.text || '').trim() || '제목 없음' });
+}
+
+/** Confirm the goal prompt → begin the session (goal optional, blank = skip). */
+export async function confirmFocusStart(goal?: string): Promise<void> {
+  const p = pendingStart;
+  pendingStart = null;
+  useUi.getState().closeFocusPrompt();
+  if (p) await startFocusSession(p.store, p.nodeId, goal);
+}
+
+/** Dismiss the goal prompt without starting. */
+export function cancelFocusStart(): void {
+  pendingStart = null;
+  useUi.getState().closeFocusPrompt();
+}
+
+/**
+ * Start a focus session on a node of the given (open) map store.
+ * Creates work-log/, the session note (the free work LOG — the "process"), links
+ * it to the node, opens it in the right split, and arms the timer. The goal is
+ * structured data captured up front (not parsed from the note). One session at a
+ * time — a second start is refused.
+ */
+export async function startFocusSession(store: MapStore, nodeId: string, goal?: string): Promise<void> {
+  const ui = useUi.getState();
+  if (ui.activeFocus) {
     ui.toast(`이미 「${ui.activeFocus.nodeText}」 집중 세션이 진행 중이에요 — 먼저 종료해 주세요`);
     return;
   }
@@ -84,12 +115,13 @@ export async function startFocusSession(store: MapStore, nodeId: string): Promis
     start,
     end: null,
     durationSec: 0,
+    goal: goal?.trim() || undefined, // captured up front via the start prompt
   };
 
   const root = useWorkspace.getState().root;
   const note = {
     ...emptyNote(titleFor(start, nodeText)),
-    body: BODY_TEMPLATE,
+    body: SESSION_BODY,
     links: [link],
     session,
   };
@@ -107,7 +139,7 @@ export async function startFocusSession(store: MapStore, nodeId: string): Promis
   try {
     if (!localStorage.getItem('focusCoachShown')) {
       localStorage.setItem('focusCoachShown', '1');
-      ui.toast('집중 세션 시작 — 이 노트에 기록하고, 끝나면 “종료”를 누르세요');
+      ui.toast('집중 세션 시작 — 이 노트에 과정을 기록하고, 끝나면 “종료”를 누르세요');
     }
   } catch {
     /* localStorage unavailable — skip the hint */
@@ -130,7 +162,7 @@ async function stampEnd(notePath: string, end: number, reflect?: string): Promis
     end,
     durationSec,
     estimated: suspect || undefined,
-    goal: extractGoal(note.body) || note.session.goal,
+    // goal was captured up front (structured); the result is the reflection
     reflect: reflect?.trim() || note.session.reflect,
   };
   await window.api.save(notePath, serializeNote(note));

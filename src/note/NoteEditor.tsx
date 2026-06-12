@@ -13,8 +13,7 @@ import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 import { EditorToolbar } from './EditorToolbar';
 import { SlashMenu, type SlashItem } from './SlashMenu';
 import { fileToDataUrl, imageFilesFrom } from './imageInsert';
-import { SessionHints } from './sessionHints';
-import { PLACEHOLDER_HINTS } from '../focus/sessionNote';
+import { SESSION_NOTE_PLACEHOLDER } from '../focus/sessionNote';
 
 interface Props {
   /** Initial Markdown body. The editor owns the document after mount; the parent
@@ -154,14 +153,13 @@ export function NoteEditor({ body, onChange, scaffold }: Props) {
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: PLACEHOLDER }),
+      Placeholder.configure({ placeholder: scaffold ? SESSION_NOTE_PLACEHOLDER : PLACEHOLDER }),
       Image.configure({ inline: false, allowBase64: true }),
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
       TableCell,
       Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
-      ...(scaffold ? [SessionHints(PLACEHOLDER_HINTS)] : []),
     ],
     content: body,
     editorProps: {

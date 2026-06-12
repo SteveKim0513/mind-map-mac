@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { fmtDuration } from './aggregate';
-import { endFocusSession, openSessionNote, attachReflection } from './controller';
+import { endFocusSession, openSessionNote, attachReflection, confirmFocusStart, cancelFocusStart } from './controller';
 
 const NUDGE_SEC = 4 * 3600; // gently remind to end after this long (still running)
 
@@ -49,14 +49,48 @@ export function FocusPill({ docked }: { docked?: boolean }) {
   );
 }
 
-/** Mounted globally: the floating pill (only while sidebar is hidden) + completion card. */
+/** Mounted globally: the goal prompt + floating pill (sidebar hidden) + completion card. */
 export function FocusOverlay({ sidebarVisible }: { sidebarVisible: boolean }) {
   const done = useUi((s) => s.focusDone);
+  const prompt = useUi((s) => s.focusPrompt);
   return (
     <>
+      {prompt && <FocusStartCard nodeText={prompt.nodeText} />}
       {!sidebarVisible && <FocusPill />}
       {done && <FocusCompletionCard />}
     </>
+  );
+}
+
+/** Opening ritual: capture the session's ONE goal up front (structured, skippable)
+ *  so goal → process → result is measurable without relying on a note template. */
+function FocusStartCard({ nodeText }: { nodeText: string }) {
+  const [goal, setGoal] = useState('');
+  const start = () => void confirmFocusStart(goal); // blank → starts without a goal
+  return (
+    <div className="focus-done-backdrop" onMouseDown={cancelFocusStart}>
+      <div className="focus-start" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="focus-start-head">
+          <span className="focus-start-title">집중 세션</span>
+          <span className="focus-start-sub">「{nodeText}」</span>
+        </div>
+        <input
+          className="focus-done-reflect"
+          autoFocus
+          placeholder="이번 세션에 집중할 한 가지 (선택)"
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') start();
+            if (e.key === 'Escape') cancelFocusStart();
+          }}
+        />
+        <div className="focus-start-actions">
+          <span className="focus-start-hint">Enter 시작 · 비워도 시작</span>
+          <button className="focus-done-ok focus-start-go" onClick={start}>시작</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -104,9 +138,6 @@ function FocusCompletionCard() {
           }}
         />
         <div className="focus-done-actions">
-          <button className="focus-done-open" onClick={() => { void openSessionNote(done.notePath); finish(); }}>
-            세션 노트 열기
-          </button>
           <button className="focus-done-ok" onClick={finish}>
             완료
           </button>

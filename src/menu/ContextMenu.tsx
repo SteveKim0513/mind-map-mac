@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
-import { startFocusSession } from '../focus/controller';
+import { requestFocusStart } from '../focus/controller';
 import { TAG_KEYS, tagVar } from '../theme/palette';
 
 interface Props {
@@ -156,7 +156,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       <div className="ctx-sep" />
 
       {/* 집중 세션 */}
-      <button className="ctx-item" onClick={run(() => void startFocusSession(mapStore, id))}>
+      <button className="ctx-item" onClick={run(() => requestFocusStart(mapStore, id))}>
         <span>집중 세션 시작</span>
       </button>
       <div className="ctx-sep" />
