@@ -229,11 +229,27 @@ export function WorkHistory() {
               </div>
             )}
 
+            {/* TOPIC FILTER — directly above the narrative it filters, so the
+                result is always in view (no reaching down into 분석) */}
+            {topics.length >= 2 && (
+              <div className="wh-topics">
+                <button className={`wh-chip${!filter ? ' on' : ''}`} onClick={() => setFilter(null)}>전체</button>
+                {topics.slice(0, 6).map((t) => (
+                  <button
+                    key={`${t.mapId} ${t.nodeId}`}
+                    className={`wh-chip${filter?.nodeId === t.nodeId ? ' on' : ''}`}
+                    onClick={() => setFilter(filter?.nodeId === t.nodeId ? null : { mapId: t.mapId, nodeId: t.nodeId, label: t.label || '(이름 없음)' })}
+                  >
+                    {t.label || '(이름 없음)'} <span className="wh-chip-val">{fmtDuration(t.rolledSec)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* NARRATIVE — what you actually did */}
             <div className="wh-narrative">
               <div className="wh-narr-head">
                 <span className="wh-narr-title">무엇을 했나{filter && ` · 「${filter.label}」`}</span>
-                {filter && <button className="wh-link" onClick={() => setFilter(null)}>← 전체</button>}
               </div>
               {byDay.length === 0 ? (
                 <div className="wh-noday">이 기간에 집중 기록이 없어요.</div>
@@ -279,23 +295,6 @@ export function WorkHistory() {
               </button>
               {showAnalysis && (
                 <div className="wh-analysis-body">
-                  {topics.length > 0 && (
-                    <div className="wh-panel">
-                      <div className="wh-section-label">주제별 집중 (하위 포함)</div>
-                      {topics.slice(0, 8).map((t) => (
-                        <button
-                          key={`${t.mapId} ${t.nodeId}`}
-                          className={`wh-topic${filter?.nodeId === t.nodeId ? ' on' : ''}`}
-                          title="이 주제의 기록만 보기"
-                          onClick={() => setFilter(filter?.nodeId === t.nodeId ? null : { mapId: t.mapId, nodeId: t.nodeId, label: t.label || '(이름 없음)' })}
-                        >
-                          <span className="wh-topic-label">{t.label || '(이름 없음)'}</span>
-                          <span className="wh-topic-bar"><span className="wh-topic-fill" style={{ width: `${Math.round((t.rolledSec / (topics[0]?.rolledSec || 1)) * 100)}%` }} /></span>
-                          <span className="wh-topic-val">{fmtDuration(t.rolledSec)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
                   {schedLoading ? (
                     <div className="wh-panel"><div className="wh-section-label">마감 vs 실제 집중</div><div className="wh-prio-none">마감 불러오는 중…</div></div>
                   ) : priority.length > 0 && (
@@ -325,10 +324,9 @@ export function WorkHistory() {
                     <div className="wh-section-label">주별 추세 (8주)</div>
                     <div className="wh-trend">
                       {trend.map((t, i) => (
-                        <span key={i} className={`wh-trend-bar${i === trend.length - 1 + offset ? ' on' : ''}`}
+                        <span key={i} className={`wh-trend-bar read${i === trend.length - 1 + offset ? ' on' : ''}`}
                           style={{ height: `${Math.max(3, Math.round((t.sec / maxTrend) * 40))}px` }}
-                          title={fmtDuration(t.sec)}
-                          onClick={() => gotoWeek(i - (trend.length - 1) - offset)} />
+                          title={fmtDuration(t.sec)} />
                       ))}
                     </div>
                   </div>

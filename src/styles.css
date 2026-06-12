@@ -4245,6 +4245,19 @@ textarea:focus-visible,
 .wh-analysis-toggle .ic { width: 14px; height: 14px; }
 .wh-analysis-body { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 10px 2px 4px; }
 
+/* topic filter chips — co-located with the narrative they filter */
+.wh-topics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.wh-chip { border: 1px solid var(--hairline); background: transparent; cursor: pointer; color: var(--ink-secondary);
+  font-size: 12px; padding: 5px 10px; border-radius: var(--r-full); display: inline-flex; align-items: center; gap: 5px; }
+.wh-chip:hover { background: var(--canvas-soft); }
+.wh-chip.on { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); border-color: color-mix(in srgb, var(--primary) 30%, var(--hairline)); color: var(--primary); }
+.wh-chip-val { font-size: 11px; color: var(--ink-faint); }
+.wh-chip.on .wh-chip-val { color: color-mix(in srgb, var(--primary) 65%, var(--ink)); }
+/* read-only trend (period nav lives in the header) */
+.wh-trend-bar.read { cursor: default; }
+.wh-trend-bar.read:not(.on):hover { background: var(--canvas-soft); }
+.wh-trend-bar.read.on:hover { background: var(--primary); }
+
 /* side panels */
 .wh-side { display: flex; flex-direction: column; gap: 16px; }
 .wh-panel { display: flex; flex-direction: column; gap: 6px; }
