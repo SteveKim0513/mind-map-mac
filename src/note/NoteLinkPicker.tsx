@@ -62,9 +62,10 @@ export function NoteLinkPicker() {
   };
   const createAndLink = async () => {
     close();
-    // node-created notes are "attached": stored in the hidden .notes/ folder so
-    // they never clutter the sidebar; reachable via the node's note satellite.
-    const dir = `${root}/.notes`;
+    // A node-created note lives in the SAME folder as the node's map, so it shows
+    // in the sidebar like any other note. (Only work-log/focus notes stay hidden.)
+    const mapDir = link.mapPath?.includes('/') ? link.mapPath.slice(0, link.mapPath.lastIndexOf('/')) : '';
+    const dir = mapDir || root;
     const title = (q.trim() || target.nodeText?.trim() || '제목 없음').slice(0, 80);
     const path = await window.api.createFile(dir, title, serializeNote(emptyNote(title)), '.md');
     await refresh();

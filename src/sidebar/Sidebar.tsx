@@ -248,7 +248,9 @@ export function Sidebar({
   // work-log is hidden — session notes are reached via the dashboard (by date)
   // or the node's chip, and the folder would only clutter the tree.
   const renderTree = (nodes: TreeNode[]) => {
-    const dirs = nodes.filter((n) => n.type === 'dir' && n.name !== 'work-log');
+    // hide ONLY the focus-session log folder (at the workspace root) — a user's
+    // own folder happening to be named "work-log" elsewhere stays visible.
+    const dirs = nodes.filter((n) => n.type === 'dir' && n.path !== `${root}/work-log`);
     const maps = nodes.filter((n) => n.type === 'file' && !isNoteFile(n));
     const notes = nodes.filter((n) => isNoteFile(n));
     return (

@@ -58,6 +58,14 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   noteIndex: [],
 
   refresh: async () => {
+    // one-time surface: older builds stashed node-created notes in a hidden
+    // .notes/ folder (invisible in the sidebar). Node notes now live in the map's
+    // folder, so move any legacy ones out to the workspace root → they show up.
+    const legacy = await window.api.attachedNotes().catch(() => [] as string[]);
+    if (legacy.length) {
+      const { root: r } = await window.api.workspaceTree();
+      for (const p of legacy) { try { await window.api.move(p, r); } catch { /* leave it; still indexed */ } }
+    }
     const { root, tree } = await window.api.workspaceTree();
     set({ root, tree });
     // scan note frontmatter in the background; the tree shows immediately
