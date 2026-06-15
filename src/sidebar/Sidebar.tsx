@@ -4,7 +4,9 @@ import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
 import { useSession } from '../store/sessionStore';
 import { emptyDoc, serialize, newId } from '../io/formats';
-import { emptyNote, serializeNote } from '../io/noteFormat';
+import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
+import { fileNameFromTitle } from '../io/autoName';
+import type { NoteStore } from '../store/noteStore';
 import { extractArticle } from '../note/extractArticle';
 import { UrlImportModal } from '../note/UrlImportModal';
 import type { NoteDoc } from '../types';
@@ -178,11 +180,34 @@ export function Sidebar({
     if (isLocked(node.path)) return; // session notes keep their start-time name
     const trimmed = draft.trim();
     if (!trimmed || trimmed === displayName(node)) return;
-    const ext = isNoteFile(node) ? '.md' : '.mind';
-    const newName = node.type === 'file' ? `${trimmed}${ext}` : trimmed;
     // Flush pending autosaves of affected tabs before moving the file on disk,
     // so a debounced write can't land on the old path mid-rename.
     await useSession.getState().flushSaves(node.path);
+
+    // A NOTE's identity is its frontmatter title (one-directional title→filename
+    // sync). Renaming only the file would leave an open pane on the old title and
+    // the sync would rename the file back — so set the TITLE first (open note via
+    // its store so the pane updates; closed note on disk), then rename to match.
+    if (isNoteFile(node)) {
+      const tab = useSession.getState().tabs.find((t) => t.kind === 'note' && t.path === node.path);
+      if (tab) {
+        (tab.store as NoteStore).getState().setTitle(trimmed);
+        await useSession.getState().flushSaves(node.path); // persist new title before moving
+      } else {
+        try {
+          const note = parseNote(await window.api.readFile(node.path), trimmed);
+          await window.api.save(node.path, serializeNote({ ...note, title: trimmed }));
+        } catch { /* ignore — fall through to a plain rename */ }
+      }
+      const newPath = await window.api.rename(node.path, `${fileNameFromTitle(trimmed) ?? trimmed}.md`);
+      await refresh();
+      onRenamed(node.path, newPath);
+      setSelected({ path: newPath, type: 'file' });
+      return;
+    }
+
+    // maps + folders: rename the file/folder directly
+    const newName = node.type === 'file' ? `${trimmed}.mind` : trimmed;
     const newPath = await window.api.rename(node.path, newName);
     await refresh();
     onRenamed(node.path, newPath);
