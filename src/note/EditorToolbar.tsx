@@ -24,6 +24,7 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
       task: editor.isActive('taskList'),
       quote: editor.isActive('blockquote'),
       link: editor.isActive('link'),
+      table: editor.isActive('table'),
     }),
   })!;
 
@@ -173,6 +174,20 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
           onChange={(e) => void onPickImages(e.target.files)}
         />
       </div>
+      {/* table editing — only while the cursor is inside a table (markdown-safe;
+          no column resize — GFM has no width, see decisions/0003) */}
+      {active.table && (
+        <>
+          <span className="md-tb-sep" aria-hidden="true" />
+          <div className="md-tb-group">
+            <Btn title="행 추가 (아래)" cls="md-tb-type" onClick={() => chain().addRowAfter().run()}>행+</Btn>
+            <Btn title="행 삭제" cls="md-tb-type" onClick={() => chain().deleteRow().run()}>행−</Btn>
+            <Btn title="열 추가 (오른쪽)" cls="md-tb-type" onClick={() => chain().addColumnAfter().run()}>열+</Btn>
+            <Btn title="열 삭제" cls="md-tb-type" onClick={() => chain().deleteColumn().run()}>열−</Btn>
+            <Btn title="표 삭제" onClick={() => chain().deleteTable().run()}><Icon name="trash" /></Btn>
+          </div>
+        </>
+      )}
     </div>
   );
 }
