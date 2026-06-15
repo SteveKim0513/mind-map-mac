@@ -7,6 +7,8 @@ import { NotePopup } from './note/NotePopup';
 import { FocusOverlay } from './focus/FocusWidget';
 import { WorkHistory } from './focus/WorkHistory';
 import { TodayView } from './focus/TodayView';
+import { UpdatesOverlay, WhatsNewCard } from './ui/Updates';
+import { CURRENT_VERSION, isNewer } from './ui/changelog';
 import { NoteLinkPicker } from './note/NoteLinkPicker';
 import { Home } from './panes/Home';
 import { Search } from './search/Search';
@@ -49,6 +51,17 @@ export default function App() {
   const cmdkOpen = useUi((s) => s.cmdkOpen);
   const historyOpen = useUi((s) => s.historyOpen);
   const todayOpen = useUi((s) => s.todayOpen);
+  const updatesOpen = useUi((s) => s.updatesOpen);
+  const whatsNew = useUi((s) => s.whatsNew);
+
+  // post-update "what's new": show this version's changes once after an update
+  // (not on a fresh install). Top CHANGELOG entry = the running build's version.
+  useEffect(() => {
+    if (!CURRENT_VERSION) return;
+    const seen = localStorage.getItem('lastSeenVersion');
+    if (seen && isNewer(CURRENT_VERSION, seen)) useUi.getState().setWhatsNew(CURRENT_VERSION);
+    localStorage.setItem('lastSeenVersion', CURRENT_VERSION);
+  }, []);
   const wsTree = useWorkspace((s) => s.tree);
   const tabDragId = useUi((s) => s.tabDragId);
 
@@ -357,6 +370,8 @@ export default function App() {
       <FocusOverlay sidebarVisible={sidebarVisible} />
       {historyOpen && <WorkHistory />}
       {todayOpen && <TodayView />}
+      {updatesOpen && <UpdatesOverlay />}
+      {whatsNew && <WhatsNewCard />}
     </div>
   );
 }

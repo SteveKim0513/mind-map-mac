@@ -117,6 +117,12 @@ interface UiState {
   todayOpen: boolean;
   openToday: () => void;
   closeToday: () => void;
+  // release history (overlay) + post-update "what's new" card (a version string)
+  updatesOpen: boolean;
+  openUpdates: () => void;
+  closeUpdates: () => void;
+  whatsNew: string | null;
+  setWhatsNew: (v: string | null) => void;
 }
 
 /** The running session, mirrored to localStorage for crash recovery. */
@@ -256,4 +262,9 @@ export const useUi = create<UiState>((set, get) => ({
   todayOpen: false,
   openToday: () => set({ todayOpen: true }),
   closeToday: () => set({ todayOpen: false }),
+  updatesOpen: false,
+  openUpdates: () => set({ updatesOpen: true }),
+  closeUpdates: () => set({ updatesOpen: false }),
+  whatsNew: null,
+  setWhatsNew: (v) => set({ whatsNew: v }),
 }));

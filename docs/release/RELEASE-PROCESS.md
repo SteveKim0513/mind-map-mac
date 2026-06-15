@@ -6,7 +6,7 @@
 
 1. **버전 결정** — `package.json`의 `version` 갱신 (semver: 기능 추가 = minor, 버그만 = patch)
 2. **QA 1회전** — [QA-CHECKLIST.md](QA-CHECKLIST.md)를 처음부터 끝까지. 실패 항목은 고치거나, 알려진 이슈로 릴리즈 노트에 명시
-3. **릴리즈 노트 작성** — `release/notes/vX.Y.Z.md` (아래 형식)
+3. **릴리즈 노트 작성** — `release/notes/vX.Y.Z.md` (아래 형식) **+ `CHANGELOG.md` 최상단에 `## [X.Y.Z] - YYYY-MM-DD` 항목 추가**(같은 내용 요약). CHANGELOG는 빌드에 번들되어 **앱의 "업데이트 내역" + 업데이트 후 "새로운 점" 카드**에 그대로 표시되므로, 최상단 버전이 빌드 버전과 일치해야 한다.
 4. **태그** — `git tag vX.Y.Z && git push --tags`
 5. **패키징** — `APPLE_KEYCHAIN_PROFILE=mindmap-notary npm run dist` → dmg + zip + `latest-mac.yml` 산출 (서명·공증). 새 기기에서 설치 후 스모크 테스트
 6. **퍼블리시 (자동 업데이트 필수)** — dmg·zip·blockmap·`latest-mac.yml`을 GitHub Release(태그 vX.Y.Z)에 업로드. 구버전 앱이 이 피드를 보고 업데이트한다.

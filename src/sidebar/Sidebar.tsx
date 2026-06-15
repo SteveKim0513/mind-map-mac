@@ -7,6 +7,7 @@ import { emptyDoc, serialize, newId } from '../io/formats';
 import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
 import { fileNameFromTitle } from '../io/autoName';
 import type { NoteStore } from '../store/noteStore';
+import { CURRENT_VERSION } from '../ui/changelog';
 import { extractArticle } from '../note/extractArticle';
 import { UrlImportModal } from '../note/UrlImportModal';
 import type { NoteDoc } from '../types';
@@ -566,6 +567,12 @@ export function Sidebar({
               <Row k="우클릭" d="노드 메뉴" />
               <Row k="더블클릭" d="빈 곳에 새 중심 주제" />
             </div>
+
+            <div className="settings-sub">버전</div>
+            <button className="settings-ver" onClick={() => useUi.getState().openUpdates()}>
+              <span>v{CURRENT_VERSION}</span>
+              <span className="settings-ver-link">업데이트 내역</span>
+            </button>
           </div>
         )}
         <button className="help-toggle" onClick={() => setShowHelp((v) => !v)}>
