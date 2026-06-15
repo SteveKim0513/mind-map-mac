@@ -14,6 +14,7 @@ import { EditorToolbar } from './EditorToolbar';
 import { SlashMenu, type SlashItem } from './SlashMenu';
 import { fileToDataUrl, imageFilesFrom } from './imageInsert';
 import { SESSION_NOTE_PLACEHOLDER } from '../focus/sessionNote';
+import { TableOfContents } from './TableOfContents';
 
 interface Props {
   /** Initial Markdown body. The editor owns the document after mount; the parent
@@ -212,6 +213,7 @@ export function NoteEditor({ body, onChange, scaffold }: Props) {
 
   return (
     <div className="note-rich">
+      <TableOfContents editor={editor} />
       <EditorToolbar editor={editor} />
       <div className="note-rich-body" onClick={() => editor.chain().focus().run()}>
         <EditorContent editor={editor} />

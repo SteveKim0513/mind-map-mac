@@ -3347,6 +3347,32 @@ textarea:focus-visible,
   display: flex;
   flex-direction: column;
 }
+
+/* table of contents — collapsed bar at the top of the note, built from headings */
+.note-toc { flex: none; }
+.note-toc-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: none; background: transparent; cursor: pointer;
+  color: var(--ink-muted); font-size: 12px; padding: 7px 14px 5px;
+}
+.note-toc-btn:hover { color: var(--ink); }
+.note-toc-btn .ic { width: 13px; height: 13px; }
+.note-toc-count { font-size: 11px; color: var(--ink-faint); }
+.note-toc-list {
+  display: flex; flex-direction: column; gap: 1px;
+  margin: 0 8px 6px; padding: 4px; max-height: 40vh; overflow-y: auto;
+  background: var(--canvas-soft); border: 1px solid var(--hairline); border-radius: var(--r-md);
+  animation: pillPop 0.16s var(--spring) both;
+}
+.note-toc-item {
+  text-align: left; border: none; background: transparent; cursor: pointer;
+  color: var(--ink-secondary); font-size: 13px; padding: 5px 8px; border-radius: var(--r-sm);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.note-toc-item:hover { background: var(--hover); color: var(--primary); }
+.note-toc-item.lvl1 { font-weight: 600; }
+.note-toc-item.lvl2 { padding-left: 22px; }
+.note-toc-item.lvl3 { padding-left: 36px; color: var(--ink-muted); }
 .note-rich-body {
   flex: 1;
   min-height: 0;
