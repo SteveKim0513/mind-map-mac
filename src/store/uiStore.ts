@@ -35,9 +35,11 @@ interface UiState {
   syncStatus: 'idle' | 'syncing' | 'ok' | 'down' | 'denied';
   setSyncStatus: (s: 'idle' | 'syncing' | 'ok' | 'down' | 'denied') => void;
 
-  // a tab currently being dragged (drives the pane split drop-zones)
-  tabDragId: string | null;
-  setTabDrag: (id: string | null) => void;
+  // a tab currently being dragged. `overPane` = the cursor left the tab strip and
+  // is over the panes (→ show split zones); `zone` = which split zone is hovered
+  // (→ highlight it). Null while reordering within the strip.
+  tabDrag: { id: string; overPane: boolean; zone: 0 | 1 | null } | null;
+  setTabDrag: (v: { id: string; overPane: boolean; zone: 0 | 1 | null } | null) => void;
 
   // node right-click context menu (owning pane renders it)
   contextMenu: { id: string; x: number; y: number } | null;
@@ -191,8 +193,8 @@ export const useUi = create<UiState>((set, get) => ({
   syncStatus: 'idle',
   setSyncStatus: (s) => set((cur) => (cur.syncStatus === s ? cur : { syncStatus: s })),
 
-  tabDragId: null,
-  setTabDrag: (id) => set({ tabDragId: id }),
+  tabDrag: null,
+  setTabDrag: (v) => set({ tabDrag: v }),
 
   contextMenu: null,
   openContextMenu: (id, x, y) => set({ contextMenu: { id, x, y } }),

@@ -39,9 +39,11 @@ export function TabBar(p: Props) {
   // events + setPointerCapture bypass app-region entirely.
   const drag = useRef<{ id: string; group: GroupIndex; sx: number; sy: number; moved: boolean } | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
-  const [overGroup, setOverGroup] = useState<GroupIndex | null>(null);
+  // where the dragged tab would land in the strip: before/after a target tab
+  const [over, setOver] = useState<{ id: string | null; side: 'before' | 'after'; group: GroupIndex } | null>(null);
+  const overRef = useRef<{ id: string | null; side: 'before' | 'after'; group: GroupIndex } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const byId = (id: string) => p.tabs.find((t) => t.id === id);
 
   // Resolve what the cursor is over: a split drop-zone, a tab, or a group strip.
@@ -54,6 +56,7 @@ export function TabBar(p: Props) {
       moveGroup: zone ? (Number(zone.dataset.movegroup) as GroupIndex) : null,
       group: groupEl ? (Number(groupEl.dataset.tabGroup) as GroupIndex) : null,
       tabId: tabEl?.dataset.tabId ?? null,
+      tabEl,
     };
   };
 
@@ -71,11 +74,30 @@ export function TabBar(p: Props) {
       if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < DRAG_THRESHOLD) return;
       d.moved = true;
       setDragId(d.id);
-      useUi.getState().setTabDrag(d.id); // reveals the split drop-zones over the panes
     }
     const h = hit(e.clientX, e.clientY);
-    setOverGroup(h.moveGroup ?? h.group);
-    setOverId(h.tabId && h.tabId !== d.id ? h.tabId : null);
+    // split zones appear only once the cursor drops below the tab strip
+    const barBottom = barRef.current?.getBoundingClientRect().bottom ?? 0;
+    const overPane = e.clientY > barBottom;
+    useUi.getState().setTabDrag({ id: d.id, overPane, zone: h.moveGroup });
+
+    if (overPane || h.group === null) {
+      overRef.current = null;
+      setOver(null);
+      return;
+    }
+    // within the strip → reorder. Insert before/after the hovered tab by which
+    // half the cursor is in; over the empty strip → append to that group's end.
+    if (h.tabId && h.tabId !== d.id && h.tabEl) {
+      const r = h.tabEl.getBoundingClientRect();
+      const side: 'before' | 'after' = e.clientX < r.left + r.width / 2 ? 'before' : 'after';
+      overRef.current = { id: h.tabId, side, group: h.group };
+    } else if (!h.tabId) {
+      overRef.current = { id: null, side: 'after', group: h.group };
+    } else {
+      overRef.current = null; // hovering the dragged tab itself
+    }
+    setOver(overRef.current);
   };
 
   const endDrag = (e: React.PointerEvent, commit: boolean) => {
@@ -88,38 +110,52 @@ export function TabBar(p: Props) {
     }
     if (commit && d?.moved) {
       const h = hit(e.clientX, e.clientY);
+      const o = overRef.current;
       if (h.moveGroup !== null) {
-        // dropped on a split zone (left / right / "분할")
+        // dropped on a split zone (left / right / 화면 분할)
         p.onMoveTab(d.id, h.moveGroup);
-      } else if (h.group !== null && h.tabId !== d.id) {
-        // released on itself (h.tabId === d.id) is a no-op. Over another tab →
-        // insert before it; over the empty strip (tabId null) → append to end.
-        const before = h.tabId;
-        if (h.group !== d.group && before === null) p.onMoveTab(d.id, h.group);
-        else p.onReorderTab(d.id, h.group, before);
+      } else if (o) {
+        // resolve the insertion point on the de-duped target list (matching the
+        // store's reorder, which first removes the dragged tab)
+        const list = (o.group === 0 ? p.leftTabs : p.rightTabs).filter((t) => t !== d.id);
+        let beforeId: string | null;
+        if (o.id === null) beforeId = null; // end of the group
+        else {
+          const idx = list.indexOf(o.id);
+          beforeId = o.side === 'before' ? o.id : (list[idx + 1] ?? null);
+        }
+        p.onReorderTab(d.id, o.group, beforeId);
       }
     }
     setDragId(null);
-    setOverId(null);
-    setOverGroup(null);
+    setOver(null);
+    overRef.current = null;
     useUi.getState().setTabDrag(null);
   };
 
   const group = (ids: string[], active: string | null, g: GroupIndex) => (
     <div
-      className={`tab-group${p.split && p.activeGroup === g ? ' active' : ''}${
-        dragId && overGroup === g ? ' drop' : ''
-      }`}
+      className={`tab-group${p.split && p.activeGroup === g ? ' active' : ''}`}
       data-tab-group={g}
     >
-      {ids.map((id) => {
+      {ids.map((id, i) => {
         const t = byId(id);
         if (!t) return null;
+        // insertion bar: before/after the hovered tab, or after the last tab when
+        // dropping on the empty strip of this group
+        const ins =
+          over && over.group === g
+            ? over.id === id
+              ? over.side
+              : over.id === null && i === ids.length - 1
+                ? 'after'
+                : null
+            : null;
         return (
           <div
             key={id}
             className={`tab${id === active ? ' active' : ''}${id === dragId ? ' dragging' : ''}${
-              id === overId ? ' drop-before' : ''
+              ins === 'before' ? ' drop-before' : ins === 'after' ? ' drop-after' : ''
             }`}
             title={t.path}
             data-tab-id={id}
@@ -158,6 +194,7 @@ export function TabBar(p: Props) {
 
   return (
     <div
+      ref={barRef}
       className={`tabbar${p.split ? ' split' : ''}`}
       style={{ paddingLeft: p.sidebarVisible ? 8 : 78 }}
     >

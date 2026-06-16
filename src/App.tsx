@@ -63,7 +63,7 @@ export default function App() {
     localStorage.setItem('lastSeenVersion', CURRENT_VERSION);
   }, []);
   const wsTree = useWorkspace((s) => s.tree);
-  const tabDragId = useUi((s) => s.tabDragId);
+  const tabDrag = useUi((s) => s.tabDrag);
 
   const activeControls = useRef<CanvasHandle | null>(null);
 
@@ -322,16 +322,17 @@ export default function App() {
           {split && <div className="pane-divider" />}
           {split && renderPane(rightTab, 1)}
 
-          {/* Drag a tab onto a side to split / move it there (Cursor-style) */}
-          {tabDragId &&
+          {/* Drag a tab DOWN onto the panes to split / move it there. Only shown
+              once the cursor leaves the tab strip, so reordering stays clean. */}
+          {tabDrag?.overPane &&
             (split ? (
               <div className="split-zones">
-                <DropZone variant="left" label="◧ 왼쪽" group={0} />
-                <DropZone variant="right" label="오른쪽 ▶" group={1} />
+                <DropZone variant="left" label="◧ 왼쪽" group={0} over={tabDrag.zone === 0} />
+                <DropZone variant="right" label="오른쪽 ▶" group={1} over={tabDrag.zone === 1} />
               </div>
             ) : (
               <div className="split-zones">
-                <DropZone variant="wide" label="여기에 놓아 화면 분할" group={1} />
+                <DropZone variant="wide" label="화면 분할" group={1} over={tabDrag.zone === 1} />
               </div>
             ))}
         </div>
@@ -456,15 +457,17 @@ function DropZone({
   variant,
   label,
   group,
+  over,
 }: {
   variant: 'left' | 'right' | 'wide';
   label: string;
   group: GroupIndex;
+  over: boolean;
 }) {
   // The drop itself is committed by TabBar's pointer logic (it hit-tests this
   // zone via `data-movegroup`); this element is purely the visible target.
   return (
-    <div className={`split-zone ${variant}`} data-movegroup={group}>
+    <div className={`split-zone ${variant}${over ? ' over' : ''}`} data-movegroup={group}>
       <span>{label}</span>
     </div>
   );
