@@ -12,6 +12,9 @@ import { CURRENT_VERSION, isNewer } from './ui/changelog';
 import { NoteLinkPicker } from './note/NoteLinkPicker';
 import { Home } from './panes/Home';
 import { Search } from './search/Search';
+import { GlobalSearch } from './search/GlobalSearch';
+import { Settings } from './ui/Settings';
+import { Manual } from './ui/Manual';
 import { Toasts } from './ui/Toasts';
 import { QuickOpen } from './ui/QuickOpen';
 import { CommandPalette, type Command } from './ui/CommandPalette';
@@ -47,6 +50,9 @@ export default function App() {
 
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const searchOpen = useUi((s) => s.searchOpen);
+  const globalSearchOpen = useUi((s) => s.globalSearchOpen);
+  const settingsOpen = useUi((s) => s.settingsOpen);
+  const manualOpen = useUi((s) => s.manualOpen);
   const quickOpen = useUi((s) => s.quickOpen);
   const cmdkOpen = useUi((s) => s.cmdkOpen);
   const historyOpen = useUi((s) => s.historyOpen);
@@ -96,6 +102,12 @@ export default function App() {
       } else if (e.code === 'KeyK') {
         e.preventDefault();
         useUi.getState().setCmdkOpen(true);
+      } else if (e.code === 'KeyF' && e.shiftKey) {
+        e.preventDefault();
+        useUi.getState().setGlobalSearch(true); // ⌘⇧F — workspace-wide search
+      } else if (e.code === 'Comma') {
+        e.preventDefault();
+        useUi.getState().openSettings(); // ⌘, — settings
       }
     };
     window.addEventListener('keydown', onKey);
@@ -156,7 +168,9 @@ export default function App() {
           st?.redo();
           break;
         case 'find':
+          // ⌘F: in a map → in-canvas node find; in a note / home → workspace search
           if (sess.activeStore()) useUi.getState().setSearchOpen(true);
+          else useUi.getState().setGlobalSearch(true);
           break;
         case 'toggle-sidebar':
           setSidebarVisible((v) => !v);
@@ -352,6 +366,12 @@ export default function App() {
           onClose={() => useUi.getState().setQuickOpen(false)}
         />
       )}
+      {globalSearchOpen && (
+        <GlobalSearch
+          onOpen={(p) => void openByPath(p)}
+          onClose={() => useUi.getState().setGlobalSearch(false)}
+        />
+      )}
       {cmdkOpen && (
         <CommandPalette
           commands={buildCommands({
@@ -373,6 +393,8 @@ export default function App() {
       {todayOpen && <TodayView />}
       {updatesOpen && <UpdatesOverlay />}
       {whatsNew && <WhatsNewCard />}
+      {settingsOpen && <Settings />}
+      {manualOpen && <Manual />}
     </div>
   );
 }
@@ -388,6 +410,7 @@ function buildCommands(o: {
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
     { id: 'today', icon: 'calendar', label: '오늘 열기', run: () => useUi.getState().openToday() },
     { id: 'history', icon: 'clock', label: '돌아보기 열기', run: () => useUi.getState().openHistory() },
+    { id: 'globalsearch', icon: 'search', label: '전체 검색 (노드·노트)', hint: '⌘⇧F', run: () => useUi.getState().setGlobalSearch(true) },
     { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
     { id: 'theme', icon: 'moon', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },
     { id: 'sidebar', icon: 'menu', label: '사이드바 토글', run: o.toggleSidebar },

@@ -599,6 +599,7 @@ export function createMapStore(): MapStore {
           const parent = d.nodes[newParentId];
           parent.collapsed = false;
           node.parentId = newParentId;
+          node.manualPos = undefined; // a child is laid out by the tree, not free-placed
           const at = index ?? parent.children.length;
           parent.children.splice(at, 0, nodeId);
         } else {

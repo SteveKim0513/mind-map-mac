@@ -165,6 +165,20 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
           st.dx = w.x - st.startWX;
           st.dy = w.y - st.startWY;
           setRootDrag({ rootId: st.id, dx: st.dx, dy: st.dy });
+          // a root can also be dropped ONTO a node to become its child — detect a
+          // target near the cursor, excluding this root's own tree (no cycles)
+          let target: string | null = null;
+          let bestDist = DROP_RADIUS;
+          for (const p of result.nodes) {
+            if (p.node.id === st.id || isDescendant(doc.nodes, st.id, p.node.id)) continue;
+            const cx = p.x + p.width / 2;
+            const d = Math.hypot(cx - w.x, p.y - w.y);
+            if (d < bestDist) {
+              bestDist = d;
+              target = p.node.id;
+            }
+          }
+          setDropTargetId(target);
           return;
         }
 
@@ -225,10 +239,21 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       if (st.mode === 'dragging') {
         setDraggingId(null);
         if (st.kind === 'move-root') {
-          const rootPos = result.nodes.find((p) => p.node.id === st.id);
-          if (rootPos && (st.dx !== 0 || st.dy !== 0)) {
-            setManualPos(st.id, { x: rootPos.x + st.dx, y: rootPos.y + st.dy });
-          }
+          const rootId = st.id;
+          const dx = st.dx;
+          const dy = st.dy;
+          setDropTargetId((target) => {
+            if (target) {
+              // dropped the tree onto a node → make this root its child
+              reparent(rootId, target);
+            } else {
+              const rootPos = result.nodes.find((p) => p.node.id === rootId);
+              if (rootPos && (dx !== 0 || dy !== 0)) {
+                setManualPos(rootId, { x: rootPos.x + dx, y: rootPos.y + dy });
+              }
+            }
+            return null;
+          });
           setRootDrag(null);
         } else {
           setDragPos(null);

@@ -7,7 +7,6 @@ import { emptyDoc, serialize, newId } from '../io/formats';
 import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
 import { fileNameFromTitle } from '../io/autoName';
 import type { NoteStore } from '../store/noteStore';
-import { CURRENT_VERSION } from '../ui/changelog';
 import { extractArticle } from '../note/extractArticle';
 import { renameWikiLinks } from '../note/noteLinks';
 import { UrlImportModal } from '../note/UrlImportModal';
@@ -62,10 +61,8 @@ export function Sidebar({
   const [renaming, setRenaming] = useState<{ path: string; isFile: boolean } | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null); // folder path, or '' = root
-  const [showHelp, setShowHelp] = useState(false);
+  const [createMenu, setCreateMenu] = useState(false);
   const [marked, setMarked] = useState<Set<string>>(new Set());
-  const theme = useUi((s) => s.theme);
-  const fontScale = useUi((s) => s.fontScale);
 
   const toggleMark = (path: string) =>
     setMarked((prev) => {
@@ -426,44 +423,29 @@ export function Sidebar({
 
   return (
     <div className="sidebar">
-      <div className="sidebar-top">
-        <button className="ws-name" title="워크스페이스 폴더 변경" onClick={() => void choose()}>
-          <Icon name="folder" />
-          <span className="ws-name-txt">{root ? basename(root) : '워크스페이스'}</span>
+      <div className="sb-head">
+        <button className="sb-ws" title="워크스페이스 폴더 변경" onClick={() => void choose()}>
+          <span className="sb-ws-name">{root ? basename(root) : '워크스페이스'}</span>
+          <Icon name="chevronDown" />
         </button>
-        <button className="collapse-sidebar" title="사이드바 숨기기" onClick={onToggle}>
+        <button className="sb-collapse" title="사이드바 숨기기" onClick={onToggle}>
           <Icon name="chevronLeft" />
         </button>
       </div>
 
-      <div className="sidebar-actions">
-        <button className="tool-btn" title="새 마인드맵" onClick={() => void newMindmap()}>
-          <Icon name="plus" />
-          마인드맵
-        </button>
-        <button className="tool-btn" title="새 노트" onClick={() => void newNote()}>
-          <Icon name="note" />
-          노트
-        </button>
-        <button
-          className="tool-btn icon"
-          title="링크로 노트 만들기"
-          onClick={() => setUrlImport({ busy: false, error: null })}
-        >
-          <Icon name="link" />
-        </button>
-        <button className="tool-btn icon" title="새 폴더" onClick={() => void newFolder()}>
-          <Icon name="folder" />
-        </button>
-      </div>
+      {/* search is the entry point — opens workspace-wide search */}
+      <button className="sb-search" onClick={() => useUi.getState().setGlobalSearch(true)}>
+        <Icon name="search" />
+        <span>검색</span>
+      </button>
 
-      {/* primary nav — plan (오늘) ↔ reflect (돌아보기); distinct from the settings foot */}
-      <div className="sidebar-nav">
-        <button className="nav-item" onClick={() => useUi.getState().openToday()}>
+      {/* smart items: plan (오늘) ↔ reflect (돌아보기), pinned above the library */}
+      <div className="sb-smart">
+        <button className="sb-smart-item" onClick={() => useUi.getState().openToday()}>
           <Icon name="calendar" />
           <span>오늘</span>
         </button>
-        <button className="nav-item" onClick={() => useUi.getState().openHistory()}>
+        <button className="sb-smart-item" onClick={() => useUi.getState().openHistory()}>
           <Icon name="clock" />
           <span>돌아보기</span>
         </button>
@@ -508,86 +490,42 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="sidebar-foot">
+      <div className="sb-foot">
         <FocusPill docked />
-        {showHelp && (
-          <div className="settings-panel">
-            <div className="settings-row">
-              <span className="settings-label">테마</span>
-              <div className="seg">
-                <button
-                  className={`seg-btn${theme === 'light' ? ' on' : ''}`}
-                  onClick={() => useUi.getState().setTheme('light')}
-                >
-                  <Icon name="sun" />
-                  라이트
-                </button>
-                <button
-                  className={`seg-btn${theme === 'dark' ? ' on' : ''}`}
-                  onClick={() => useUi.getState().setTheme('dark')}
-                >
-                  <Icon name="moon" />
-                  다크
-                </button>
-              </div>
-            </div>
-
-            <div className="settings-row">
-              <span className="settings-label">글자 크기</span>
-              <div className="fs-stepper">
-                <button
-                  className="fs-btn"
-                  title="작게"
-                  onClick={() => useUi.getState().setFontScale(fontScale - 0.1)}
-                >
-                  <span className="fs-a sm">A</span>
-                </button>
-                <span className="fs-val">{Math.round(fontScale * 100)}%</span>
-                <button
-                  className="fs-btn"
-                  title="크게"
-                  onClick={() => useUi.getState().setFontScale(fontScale + 0.1)}
-                >
-                  <span className="fs-a lg">A</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="settings-sub">단축키</div>
-            <div className="help-panel">
-              <Row k="Tab" d="자식 노드 추가" />
-              <Row k="Enter" d="형제 노드 추가" />
-              <Row k="Space" d="편집" />
-              <Row k="↑ ↓ ← →" d="노드 사이 이동" />
-              <Row k="⌥↑ ⌥↓" d="형제 순서 변경" />
-              <Row k="⌘← ⌘→" d="접기 / 펼치기" />
-              <Row k="⌘Enter" d="완료 표시 / 해제" />
-              <Row k="Z" d="선택한 노드 확대" />
-              <Row k="Delete" d="삭제" />
-              <Row k="⌘C ⌘V" d="복사 / 붙여넣기" />
-              <Row k="⌘Z ⌘⇧Z" d="실행 취소 / 다시 실행" />
-              <Row k="Shift+클릭" d="다중 선택" />
-              <Row k="⌘F" d="검색" />
-              <Row k="⌘P ⌘K" d="파일 열기 / 명령 팔레트" />
-              <Row k="Esc" d="선택·집중 해제" />
-              <Row k="우클릭" d="노드 메뉴" />
-              <Row k="더블클릭" d="빈 곳에 새 중심 주제" />
-            </div>
-
-            <div className="settings-sub">버전</div>
-            <button className="settings-ver" onClick={() => useUi.getState().openUpdates()}>
-              <span>v{CURRENT_VERSION}</span>
-              <span className="settings-ver-link">업데이트 내역</span>
+        <div className="sb-foot-bar">
+          <div className="sb-create-wrap">
+            <button
+              className={`sb-foot-btn${createMenu ? ' on' : ''}`}
+              title="새로 만들기"
+              onClick={() => setCreateMenu((v) => !v)}
+            >
+              <Icon name="plus" />
             </button>
+            {createMenu && (
+              <>
+                <div className="ctx-backdrop" onMouseDown={() => setCreateMenu(false)} />
+                <div className="sb-create-menu">
+                  <button onClick={() => { setCreateMenu(false); void newMindmap(); }}>
+                    <Icon name="mindmap" /> 마인드맵
+                  </button>
+                  <button onClick={() => { setCreateMenu(false); void newNote(); }}>
+                    <Icon name="note" /> 노트
+                  </button>
+                  <button onClick={() => { setCreateMenu(false); setUrlImport({ busy: false, error: null }); }}>
+                    <Icon name="link" /> 링크로 노트
+                  </button>
+                  <button onClick={() => { setCreateMenu(false); void newFolder(); }}>
+                    <Icon name="folder" /> 새 폴더
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-        )}
-        <button className="help-toggle" onClick={() => setShowHelp((v) => !v)}>
-          <span className="help-toggle-lbl">
+          <span className="sb-foot-grow" />
+          <button className="sb-foot-btn" title="설정 (⌘,)" onClick={() => useUi.getState().openSettings()}>
             <Icon name="settings" />
-            설정
-          </span>
-          <Icon name={showHelp ? 'chevronDown' : 'chevronRight'} />
-        </button>
+          </button>
+        </div>
       </div>
 
       {urlImport && (
@@ -602,14 +540,6 @@ export function Sidebar({
   );
 }
 
-function Row({ k, d }: { k: string; d: string }) {
-  return (
-    <div className="help-row">
-      <kbd>{k}</kbd>
-      <span>{d}</span>
-    </div>
-  );
-}
 
 function RenameInput({
   initial,

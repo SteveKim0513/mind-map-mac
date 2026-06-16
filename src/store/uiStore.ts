@@ -20,6 +20,9 @@ interface UiState {
   // overlays (controllable from anywhere)
   searchOpen: boolean;
   setSearchOpen: (b: boolean) => void;
+  // workspace-wide search (all maps' nodes + all notes' title/body)
+  globalSearchOpen: boolean;
+  setGlobalSearch: (b: boolean) => void;
 
   // note/link popover, anchored to a node id (the owning pane renders it)
   notePopoverId: string | null;
@@ -129,6 +132,13 @@ interface UiState {
   closeUpdates: () => void;
   whatsNew: string | null;
   setWhatsNew: (v: string | null) => void;
+  // settings (overlay) + the in-app manual (shortcuts + usage)
+  settingsOpen: boolean;
+  openSettings: () => void;
+  closeSettings: () => void;
+  manualOpen: boolean;
+  openManual: () => void;
+  closeManual: () => void;
 }
 
 /** The running session, mirrored to localStorage for crash recovery. */
@@ -181,6 +191,8 @@ export const useUi = create<UiState>((set, get) => ({
 
   searchOpen: false,
   setSearchOpen: (b) => set({ searchOpen: b }),
+  globalSearchOpen: false,
+  setGlobalSearch: (b) => set({ globalSearchOpen: b }),
 
   notePopoverId: null,
   openNote: (id) => set({ notePopoverId: id }),
@@ -271,6 +283,12 @@ export const useUi = create<UiState>((set, get) => ({
   updatesOpen: false,
   openUpdates: () => set({ updatesOpen: true }),
   closeUpdates: () => set({ updatesOpen: false }),
+  settingsOpen: false,
+  openSettings: () => set({ settingsOpen: true }),
+  closeSettings: () => set({ settingsOpen: false }),
+  manualOpen: false,
+  openManual: () => set({ manualOpen: true }),
+  closeManual: () => set({ manualOpen: false }),
   whatsNew: null,
   setWhatsNew: (v) => set({ whatsNew: v }),
 }));
