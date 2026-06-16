@@ -9,6 +9,7 @@ import { fileNameFromTitle } from '../io/autoName';
 import type { NoteStore } from '../store/noteStore';
 import { CURRENT_VERSION } from '../ui/changelog';
 import { extractArticle } from '../note/extractArticle';
+import { renameWikiLinks } from '../note/noteLinks';
 import { UrlImportModal } from '../note/UrlImportModal';
 import type { NoteDoc } from '../types';
 import { Icon } from '../ui/Icon';
@@ -191,17 +192,22 @@ export function Sidebar({
     // its store so the pane updates; closed note on disk), then rename to match.
     if (isNoteFile(node)) {
       const tab = useSession.getState().tabs.find((t) => t.kind === 'note' && t.path === node.path);
+      let oldTitle = displayName(node); // fallback: filename-derived
       if (tab) {
+        oldTitle = (tab.store as NoteStore).getState().note.title;
         (tab.store as NoteStore).getState().setTitle(trimmed);
         await useSession.getState().flushSaves(node.path); // persist new title before moving
       } else {
         try {
           const note = parseNote(await window.api.readFile(node.path), trimmed);
+          oldTitle = note.title;
           await window.api.save(node.path, serializeNote({ ...note, title: trimmed }));
         } catch { /* ignore — fall through to a plain rename */ }
       }
       const newPath = await window.api.rename(node.path, `${fileNameFromTitle(trimmed) ?? trimmed}.md`);
       await refresh();
+      // keep note↔note links pointing here: [[oldTitle]] → [[trimmed]] everywhere
+      await renameWikiLinks(oldTitle, trimmed);
       onRenamed(node.path, newPath);
       setSelected({ path: newPath, type: 'file' });
       return;

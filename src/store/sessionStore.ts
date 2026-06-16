@@ -48,6 +48,9 @@ interface SessionState {
   // actions
   openPath: (path: string, content: string) => void;
   openInRight: (path: string, content: string) => void; // open/activate beside (right split)
+  // open in the pane OPPOSITE the source group (keeps the source note visible);
+  // used by note-link "열기" so the original never gets covered
+  openBeside: (path: string, content: string, sourceGroup: GroupIndex) => void;
   selectTab: (tabId: string, group: GroupIndex) => void;
   closeTab: (tabId: string) => void;
   closeAllTabs: () => void;
@@ -229,6 +232,44 @@ export const useSession = create<SessionState>((set, get) => {
         split: true,
         activeGroup: 1,
       });
+      pushRecent(path);
+      persist();
+    },
+
+    openBeside: (path, content, sourceGroup) => {
+      // source on the LEFT → target on the right is exactly openInRight
+      if (sourceGroup === 0) return get().openInRight(path, content);
+
+      // source on the RIGHT → open the target in the LEFT, keep the source on the right
+      let tab = get().tabs.find((t) => t.path === path);
+      let tabs = get().tabs;
+      if (!tab) {
+        const made = tryMakeTab(path, content);
+        if (!made) {
+          useUi.getState().toast('파일을 열 수 없습니다');
+          return;
+        }
+        tab = made;
+        tabs = [...tabs, made];
+      }
+      const id = tab.id;
+      const s = get();
+      const rightTabs = s.rightTabs.filter((t) => t !== id); // pull target out of the right if it lived there
+      const leftTabs = s.leftTabs.includes(id) ? s.leftTabs : [...s.leftTabs, id];
+      if (rightTabs.length === 0) {
+        // moving the target emptied the right → collapse the split
+        set({ tabs, leftTabs, leftActive: id, rightTabs: [], rightActive: null, split: false, activeGroup: 0 });
+      } else {
+        set({
+          tabs,
+          leftTabs,
+          leftActive: id,
+          rightTabs,
+          rightActive: neighborActive(rightTabs, id, s.rightActive),
+          split: true,
+          activeGroup: 0,
+        });
+      }
       pushRecent(path);
       persist();
     },

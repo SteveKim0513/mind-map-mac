@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useWorkspace } from '../store/workspaceStore';
 
 // Compact, dependency-free Markdown → React renderer used for the read-only note
 // peek popup (NotePopup). Handles the common blocks (headings, lists, quotes,
@@ -17,7 +18,7 @@ function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   // image ![alt](src) must precede link [text](url) so the "!" isn't left dangling
   const re =
-    /(!\[([^\]]*)\]\(([^)]+)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))/g;
+    /(!\[([^\]]*)\]\(([^)]+)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))|(\[\[([^[\]\n]+)\]\])/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
@@ -36,6 +37,17 @@ function inline(text: string): ReactNode[] {
           {m[11]}
         </a>,
       );
+    else if (m[13] !== undefined) {
+      // note wiki-link → styled chip (inert in this read-only preview); dim when
+      // the target note doesn't exist
+      const title = m[14].trim();
+      const resolved = !!useWorkspace.getState().noteByTitle(title);
+      out.push(
+        <span key={k()} className={`wikilink wikilink-static${resolved ? '' : ' wikilink-unresolved'}`}>
+          {title}
+        </span>,
+      );
+    }
     last = m.index + m[0].length;
   }
   if (last < text.length) out.push(text.slice(last));

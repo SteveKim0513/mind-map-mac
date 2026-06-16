@@ -95,9 +95,12 @@ export function NotePopup() {
 
   if (!popup || !path) return null;
 
-  const editInSplit = async () => {
+  const openBeside = async () => {
+    // open the peeked note in the pane OPPOSITE its source (keeps the source
+    // visible). Node-chip peeks have no sourceGroup → fall back to the active pane.
+    const sg = popup?.sourceGroup ?? useSession.getState().activeGroup;
     try {
-      useSession.getState().openInRight(path, await window.api.readFile(path));
+      useSession.getState().openBeside(path, await window.api.readFile(path), sg);
     } catch {
       /* ignore */
     }
@@ -163,8 +166,9 @@ export function NotePopup() {
               연동 해제
             </button>
           )}
-          <button className="note-popup-btn" title="수정 (오른쪽 분할로 열기)" onClick={() => void editInSplit()}>
+          <button className="note-popup-btn open" title="열기 (반대쪽 분할)" onClick={() => void openBeside()}>
             <Icon name="edit" />
+            <span>열기</span>
           </button>
           <button className="note-popup-btn" title="닫기 (Esc)" onClick={requestClose}>
             <Icon name="close" />

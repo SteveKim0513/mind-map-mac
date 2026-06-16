@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { TreeNode } from '../../electron/preload';
 import type { NoteMeta } from '../types';
 import { parseNote } from '../io/noteFormat';
+import { extractWikiTargets } from '../note/wikiLinkText';
 
 interface WorkspaceState {
   root: string;
@@ -17,6 +18,12 @@ interface WorkspaceState {
   // link-index queries / updates
   notesForNode: (mapId: string, nodeId: string) => NoteMeta[];
   noteByPath: (path: string) => NoteMeta | undefined;
+  /** resolve a `[[wiki link]]` by note title (case-insensitive); excludes session
+   *  notes so a work-log can't shadow a real note. Undefined ⇒ unresolved link. */
+  noteByTitle: (title: string) => NoteMeta | undefined;
+  /** notes that wiki-link TO `title` (backlinks). `selfPath` excludes the note
+   *  itself; session notes are excluded as link sources. */
+  backlinks: (title: string, selfPath?: string) => NoteMeta[];
   sessions: () => import('../types').FocusSession[]; // every indexed focus session
   reindexNote: (meta: NoteMeta) => void; // upsert one note (after save/link change)
 }
@@ -42,7 +49,7 @@ async function buildNoteIndex(tree: TreeNode[]): Promise<NoteMeta[]> {
       try {
         const content = await window.api.readFile(path);
         const n = parseNote(content, nameOf(path));
-        return { path, id: n.id, title: n.title, links: n.links, session: n.session };
+        return { path, id: n.id, title: n.title, links: n.links, session: n.session, refs: extractWikiTargets(n.body) };
       } catch {
         return null;
       }
@@ -87,6 +94,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   notesForNode: (mapId, nodeId) =>
     get().noteIndex.filter((m) => m.links.some((l) => l.mapId === mapId && l.nodeId === nodeId)),
   noteByPath: (path) => get().noteIndex.find((m) => m.path === path),
+  noteByTitle: (title) => {
+    const t = title.trim().toLowerCase();
+    return get().noteIndex.find((m) => !m.session && m.title.trim().toLowerCase() === t);
+  },
+  backlinks: (title, selfPath) => {
+    const t = title.trim().toLowerCase();
+    if (!t) return [];
+    return get().noteIndex.filter(
+      (m) => m.path !== selfPath && !m.session && (m.refs ?? []).includes(t),
+    );
+  },
   sessions: () =>
     get().noteIndex.map((m) => m.session).filter((s): s is NonNullable<typeof s> => !!s),
   reindexNote: (meta) =>

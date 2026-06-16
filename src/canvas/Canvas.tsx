@@ -77,6 +77,11 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragPos, setDragPos] = useState<{ id: string; x: number; y: number } | null>(null);
+  // sibling-reorder insertion marker (world coords) shown while dragging a node
+  // into the gap above/below one of its (future) siblings
+  const [insertMark, setInsertMark] = useState<{ x: number; y: number; w: number } | null>(null);
+  // read synchronously in pointerup (state is async); null ⇒ no sibling insert
+  const insertRef = useRef<{ parentId: string | null; index: number } | null>(null);
   // live offset while a whole root tree is being moved
   const [rootDrag, setRootDrag] = useState<{ rootId: string; dx: number; dy: number } | null>(null);
   // true after a drag ends → keep the selection toolbar hidden until the next click
@@ -179,6 +184,34 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
             best = p.node.id;
           }
         }
+
+        // Decide intent against the nearest node T: hovering its top/bottom third
+        // (and T is a non-root, single-target) ⇒ reorder as a SIBLING before/after
+        // T; hovering its middle ⇒ reparent as T's CHILD (legacy behavior).
+        const Tp = best ? result.nodes.find((p) => p.node.id === best) : null;
+        const tEl = best
+          ? (containerRef.current?.querySelector(`[data-node-id="${best}"]`) as HTMLElement | null)
+          : null;
+        const rect = tEl?.getBoundingClientRect();
+        const multi = mapStore.getState().selectedIds.length > 1;
+        if (Tp && rect && !multi && Tp.node.parentId) {
+          const band = rect.height * 0.34;
+          const before = e.clientY < rect.top + band;
+          const after = e.clientY > rect.bottom - band;
+          if (before || after) {
+            const z = mapStore.getState().doc.view.zoom || 1;
+            const halfH = rect.height / z / 2;
+            const parentId = Tp.node.parentId;
+            const sibs = doc.nodes[parentId].children.filter((id) => id !== st.id);
+            const ti = sibs.indexOf(best!);
+            insertRef.current = { parentId, index: before ? ti : ti + 1 };
+            setInsertMark({ x: Tp.x, y: Tp.y + (before ? -halfH - 13 : halfH + 13), w: Tp.width });
+            setDropTargetId(null);
+            return;
+          }
+        }
+        insertRef.current = null;
+        setInsertMark(null);
         setDropTargetId(best);
       }
     };
@@ -200,15 +233,24 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
         } else {
           setDragPos(null);
           const draggedId = st.id;
-          setDropTargetId((target) => {
-            if (target) {
-              const sel = mapStore.getState().selectedIds;
-              // if the dragged node is part of a multi-selection, move them all
-              if (sel.length > 1 && sel.includes(draggedId)) reparentMany(sel, target);
-              else reparent(draggedId, target);
-            }
-            return null;
-          });
+          const ins = insertRef.current;
+          if (ins) {
+            // dropped in a sibling gap → reorder (reparent at a specific index)
+            reparent(draggedId, ins.parentId, ins.index);
+            insertRef.current = null;
+            setInsertMark(null);
+            setDropTargetId(null);
+          } else {
+            setDropTargetId((target) => {
+              if (target) {
+                const sel = mapStore.getState().selectedIds;
+                // if the dragged node is part of a multi-selection, move them all
+                if (sel.length > 1 && sel.includes(draggedId)) reparentMany(sel, target);
+                else reparent(draggedId, target);
+              }
+              return null;
+            });
+          }
         }
       }
       setPanning(false);
@@ -222,6 +264,8 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       setDragPos(null);
       setRootDrag(null);
       setDropTargetId(null);
+      setInsertMark(null);
+      insertRef.current = null;
       setPanning(false);
       interaction.current = { mode: 'idle' };
     };
@@ -500,6 +544,12 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
           sectionDrag={sectionDrag}
           setSectionDrag={setSectionDrag}
         />
+        {insertMark && (
+          <div
+            className="node-insert-line"
+            style={{ left: insertMark.x, top: insertMark.y, width: insertMark.w }}
+          />
+        )}
       </div>
 
       {selToolbar && (

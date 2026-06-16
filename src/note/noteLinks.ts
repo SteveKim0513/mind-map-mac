@@ -6,6 +6,7 @@ import { useSession } from '../store/sessionStore';
 import { useUi } from '../store/uiStore';
 import type { MapStore } from '../store/mapStore';
 import type { NoteStore } from '../store/noteStore';
+import { extractWikiTargets } from './wikiLinkText';
 
 function noteName(path: string): string {
   return (path.split('/').pop() ?? path).replace(/\.md$/, '');
@@ -29,7 +30,13 @@ export async function ensureMapPersisted(mapId: string): Promise<void> {
 /** Reindex a note from its store state into the workspace link index. */
 export function reindexFromNote(
   path: string,
-  note: { id: string; title: string; links: NoteLink[]; session?: import('../types').FocusSession },
+  note: {
+    id: string;
+    title: string;
+    links: NoteLink[];
+    body?: string;
+    session?: import('../types').FocusSession;
+  },
 ) {
   useWorkspace.getState().reindexNote({
     path,
@@ -37,6 +44,7 @@ export function reindexFromNote(
     title: note.title,
     links: note.links,
     session: note.session,
+    refs: extractWikiTargets(note.body ?? ''), // keep backlinks fresh on every save
   });
 }
 
@@ -64,6 +72,52 @@ export async function addLinkToNoteFile(notePath: string, link: NoteLink): Promi
   }
   await window.api.save(notePath, serializeNote(note));
   reindexFromNote(notePath, note);
+}
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Rewrite every `[[old title]]` → `[[new title]]` across ALL notes when a note is
+ * renamed — this is what keeps note↔note links from breaking on rename (spec
+ * note-to-note-links, decision A). Works on open tabs (live store) and closed
+ * files alike. No-op when the title didn't really change.
+ *
+ * Cost: one pass over the note index reading each closed note's body. Renames are
+ * infrequent (debounced, only when the file name actually changes) so this is fine.
+ */
+export async function renameWikiLinks(oldTitle: string, newTitle: string): Promise<void> {
+  const o = oldTitle.trim();
+  const n = newTitle.trim();
+  if (!o || !n || o.toLowerCase() === n.toLowerCase()) return;
+  // [[  old title  ]] — tolerate spaces inside the brackets, case-insensitive
+  const re = new RegExp(`\\[\\[\\s*${escapeRegExp(o)}\\s*\\]\\]`, 'gi');
+  const replacement = `[[${n}]]`;
+
+  for (const meta of useWorkspace.getState().noteIndex) {
+    const tab = useSession.getState().tabs.find((t) => t.kind === 'note' && t.path === meta.path);
+    if (tab) {
+      const store = tab.store as NoteStore;
+      const body = store.getState().note.body;
+      const next = body.replace(re, replacement);
+      if (next === body) continue;
+      store.getState().setBody(next);
+      await useSession.getState().flushSaves(meta.path);
+      reindexFromNote(meta.path, store.getState().note);
+    } else {
+      let content: string;
+      try {
+        content = await window.api.readFile(meta.path);
+      } catch {
+        continue; // unreadable → skip
+      }
+      const doc = parseNote(content, noteName(meta.path));
+      const next = doc.body.replace(re, replacement);
+      if (next === doc.body) continue;
+      doc.body = next;
+      await window.api.save(meta.path, serializeNote(doc));
+      reindexFromNote(meta.path, doc);
+    }
+  }
 }
 
 /**

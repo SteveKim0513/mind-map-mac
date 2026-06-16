@@ -237,6 +237,18 @@ button {
   border-color: var(--hairline);
   font-weight: 500;
 }
+/* pointer-drag reorder feedback (see TabBar.tsx) */
+.tab {
+  user-select: none;
+  touch-action: none; /* don't let the OS claim the drag gesture */
+}
+.tab.dragging {
+  opacity: 0.4;
+}
+/* insertion marker: the dragged tab will land before this one */
+.tab.drop-before {
+  box-shadow: inset 2px 0 0 0 var(--primary);
+}
 .tab-ic {
   display: inline-flex;
   align-items: center;
@@ -848,6 +860,28 @@ button {
 }
 
 /* ── Node ───────────────────────────────────────────────────────────────────── */
+/* sibling-reorder drop indicator: a primary-colored bar in the gap where the
+   dragged node will land (Canvas.tsx insertMark) */
+.node-insert-line {
+  position: absolute;
+  transform: translateY(-50%);
+  height: 3px;
+  background: var(--primary);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 5;
+}
+.node-insert-line::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  transform: translateY(-50%);
+}
 .node {
   position: absolute;
   transform: translateY(-50%);
@@ -3394,6 +3428,44 @@ textarea:focus-visible,
 .note-rich .ProseMirror,
 .note-preview { font-size: 15.5px; line-height: 1.7; }
 .note-preview { color: var(--ink-secondary); }
+
+/* ── note ↔ note wiki-links ([[title]]) ─────────────────────────────────────
+   Decorated plain text in the editor (see wikiLink.ts) + a styled span in the
+   read-only preview. Note identity color, link affordance. */
+.wikilink {
+  color: var(--state-note);
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--state-note) 35%, transparent);
+  transition: background 0.12s ease;
+}
+.note-rich .ProseMirror .wikilink:hover,
+.wikilink:hover {
+  background: color-mix(in srgb, var(--state-note) 12%, transparent);
+}
+/* the framing "[[" / "]]" — present but de-emphasised */
+.wikilink-bracket {
+  color: color-mix(in srgb, var(--state-note) 45%, var(--ink-muted));
+  opacity: 0.6;
+}
+/* in the read-only preview the chip is inert (no editor to click into) */
+.wikilink-static {
+  cursor: default;
+}
+/* the target note doesn't exist (yet) — dim + dashed underline. Still clickable
+   in the editor (→ creates the note). */
+.wikilink-unresolved {
+  color: var(--ink-faint);
+  border-bottom-style: dashed;
+  border-bottom-color: color-mix(in srgb, var(--ink-faint) 55%, transparent);
+}
+.note-rich .ProseMirror .wikilink-unresolved:hover {
+  background: color-mix(in srgb, var(--ink-faint) 12%, transparent);
+}
+/* the "[[" autocomplete reuses .slash-menu; widen a touch for note titles */
+.slash-menu.linkmenu { min-width: 220px; }
 .note-rich .ProseMirror > :first-child,
 .note-preview > :first-child { margin-top: 0; }
 /* embedded images never overflow the column; centered with a soft frame */
@@ -3598,6 +3670,87 @@ textarea:focus-visible,
   color: var(--state-map);
 }
 .note-link-btn .ic { width: 14px; height: 14px; }
+
+/* ── "정보" toggle + accordion (connections + backlinks) ─────────────────────
+   Collapsed by default; the count badge signals there's something to see. */
+.note-info-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: var(--r-md);
+  padding: 5px 9px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.note-info-btn:hover,
+.note-info-btn.open {
+  border-color: color-mix(in srgb, var(--state-note) 45%, var(--hairline));
+  color: var(--state-note);
+}
+.note-info-btn .ic { width: 13px; height: 13px; }
+.note-info-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--state-note) 16%, transparent);
+  color: var(--state-note);
+  font-size: 11px;
+  font-weight: 600;
+}
+.note-info {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 18px 14px;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--state-note) 3%, var(--surface));
+}
+.note-info-sec { display: flex; flex-direction: column; gap: 7px; }
+.note-info-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  text-transform: none;
+}
+.note-backlinks { display: flex; flex-wrap: wrap; gap: 6px; }
+.note-backlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 240px;
+  border: 1px solid color-mix(in srgb, var(--state-note) 30%, var(--hairline));
+  background: color-mix(in srgb, var(--state-note) 8%, var(--surface));
+  color: var(--ink-secondary);
+  font-family: var(--font);
+  font-size: 12px;
+  border-radius: var(--r-full);
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.note-backlink .ic { width: 13px; height: 13px; color: var(--state-note); flex: none; }
+.note-backlink:hover {
+  background: color-mix(in srgb, var(--state-note) 16%, var(--surface));
+  color: var(--ink);
+}
+/* the connected-nodes row, now nested inside .note-info, sheds its own framing */
+.note-info .note-links {
+  padding: 0;
+  border-bottom: none;
+}
 
 /* connected-nodes chip row under the note header */
 .note-links {
@@ -3900,6 +4053,19 @@ textarea:focus-visible,
 }
 .note-popup-btn:hover { background: var(--canvas-soft); color: var(--ink); }
 .note-popup-btn .ic { width: 14px; height: 14px; }
+/* the primary "열기" action carries a label → auto width, accent tint */
+.note-popup-btn.open {
+  width: auto;
+  gap: 4px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--state-note);
+}
+.note-popup-btn.open:hover {
+  background: color-mix(in srgb, var(--state-note) 12%, transparent);
+  color: var(--state-note);
+}
 /* text variant — 연동 해제 */
 .note-popup-btn.unlink {
   width: auto;

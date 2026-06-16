@@ -58,7 +58,12 @@ export function NoteLinkPicker() {
 
   const linkExisting = async (path: string) => {
     close();
-    await addLinkToNoteFile(path, link);
+    try {
+      await addLinkToNoteFile(path, link);
+    } catch (e) {
+      console.error('[note-link] linkExisting failed', e);
+      useUi.getState().toast('노트 연결에 실패했습니다');
+    }
   };
   const createAndLink = async () => {
     close();
@@ -67,14 +72,38 @@ export function NoteLinkPicker() {
     const mapDir = link.mapPath?.includes('/') ? link.mapPath.slice(0, link.mapPath.lastIndexOf('/')) : '';
     const dir = mapDir || root;
     const title = (q.trim() || target.nodeText?.trim() || '제목 없음').slice(0, 80);
-    const path = await window.api.createFile(dir, title, serializeNote(emptyNote(title)), '.md');
-    await refresh();
-    await addLinkToNoteFile(path, link);
-    // open it for editing in the right split
+
+    // Creating the file is the only truly fatal step — without it there's nothing
+    // to link or open. Surface a failure instead of silently doing nothing
+    // (the old code had no error handling: ANY throw here left the user with the
+    // picker closed and seemingly "nothing happened").
+    let path: string;
+    try {
+      path = await window.api.createFile(dir, title, serializeNote(emptyNote(title)), '.md');
+    } catch (e) {
+      console.error('[note-link] createFile failed', e);
+      useUi.getState().toast('노트를 만들 수 없습니다');
+      return;
+    }
+
+    // Write the link (the user's actual intent) and open the note FIRST, so the
+    // action is visibly successful even if the workspace refresh below is slow or
+    // throws on a large/real workspace. Each step is independent and non-fatal.
+    try {
+      await addLinkToNoteFile(path, link);
+    } catch (e) {
+      console.error('[note-link] addLink failed', e);
+    }
     try {
       useSession.getState().openInRight(path, await window.api.readFile(path));
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.error('[note-link] open failed', e);
+    }
+    // Sidebar/index refresh last — a failure here must not abort the rest.
+    try {
+      await refresh();
+    } catch (e) {
+      console.error('[note-link] refresh failed', e);
     }
   };
 

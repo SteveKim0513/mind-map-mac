@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEditorState, type Editor } from '@tiptap/react';
 import { NoteContext, useNote, useNoteStore, type NoteStore } from '../store/noteStore';
-import { serializeNote } from '../io/noteFormat';
+import { emptyNote, serializeNote } from '../io/noteFormat';
 import { fileNameFromTitle } from '../io/autoName';
 import { NoteEditor } from './NoteEditor';
 import { NodePicker } from './NodePicker';
-import { addLinkToNoteFile, reindexFromNote, revealNode } from './noteLinks';
+import { addLinkToNoteFile, reindexFromNote, renameWikiLinks, revealNode } from './noteLinks';
 import { useSession } from '../store/sessionStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
@@ -41,6 +42,60 @@ function NotePaneBody() {
   const removeLink = useNote((s) => s.removeLink);
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  // live editor (handed up from NoteEditor) + its headings, for the 목차 section
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [headings, setHeadings] = useState<Head[]>([]);
+  const tocCount = headings.length >= 2 ? headings.length : 0; // a TOC needs ≥2 headings
+  const goHeading = (pos: number) => {
+    if (!editor) return;
+    editor.chain().focus().setTextSelection(pos + 1).run();
+    const at = editor.view.domAtPos(pos + 1).node;
+    const el = (at instanceof HTMLElement ? at : at.parentElement)?.closest('h1, h2, h3') as HTMLElement | null;
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setInfoOpen(false);
+  };
+
+  // backlinks: notes that wiki-link ([[ ]]) to THIS note — the other half of
+  // bidirectional linking (navigate back even if only the other side linked).
+  const noteIndex = useWorkspace((s) => s.noteIndex);
+  const backlinks = useMemo(
+    () => (filePath && !note.session ? useWorkspace.getState().backlinks(note.title, filePath) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [noteIndex, note.title, filePath, note.session],
+  );
+  // open a peek of a related note, anchored to the clicked chip (same model as a
+  // body wiki-link: glance first, "열기" promotes to the opposite pane)
+  const peekNote = (path: string, e: React.MouseEvent) => {
+    const sg = useSession.getState().activeGroup;
+    if (e.metaKey || e.ctrlKey) {
+      // ⌘/Ctrl-click: skip the peek, open straight in the opposite pane
+      void window.api.readFile(path).then((c) => useSession.getState().openBeside(path, c, sg)).catch(() => {});
+      return;
+    }
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    useUi.getState().openNotePopup([path], { x: r.left, y: r.bottom }, undefined, sg);
+  };
+  // node links live in the panel for ordinary notes; session notes show theirs in
+  // the SessionMetaBanner instead, so don't double-count them here
+  const nodeLinkCount = note.session ? 0 : note.links.length;
+  const metaCount = tocCount + nodeLinkCount + backlinks.length;
+
+  // create a note for a `[[ ]]` that targets one that doesn't exist yet — in the
+  // SAME folder as this note (ADR 0009 sibling rule), then refresh so it resolves
+  const createSiblingNote = async (title: string): Promise<string | null> => {
+    if (!filePath) return null;
+    const dir = filePath.slice(0, filePath.lastIndexOf('/'));
+    const t = title.trim() || '제목 없음';
+    try {
+      const path = await window.api.createFile(dir, t, serializeNote(emptyNote(t)), '.md');
+      await useWorkspace.getState().refresh();
+      return path;
+    } catch {
+      useUi.getState().toast('노트를 만들 수 없습니다');
+      return null;
+    }
+  };
 
   // attached notes live in the hidden .notes/ folder; offer to promote into the tree
   const isAttached = !!filePath && filePath.includes('/.notes/');
@@ -84,6 +139,11 @@ function NotePaneBody() {
   // and tab follow. Attached notes stay in .notes/ (rename keeps the dirname).
   const renaming = useRef(false);
   const isSession = !!note.session;
+  // the title as of the last settled rename / load — the `[[old title]]` to rewrite
+  const prevTitle = useRef(note.title);
+  useEffect(() => {
+    prevTitle.current = store.getState().note.title;
+  }, [filePath, store]);
   useEffect(() => {
     // Session notes are named once at creation (start time) and never renamed —
     // their title contains ":" which the filename sanitizer would churn forever (§14-H).
@@ -93,6 +153,8 @@ function NotePaneBody() {
     if (!wanted || wanted === base) return;
     const t = setTimeout(() => {
       renaming.current = true;
+      const oldTitle = prevTitle.current;
+      const newTitle = note.title;
       void (async () => {
         const sess = useSession.getState();
         try {
@@ -100,6 +162,9 @@ function NotePaneBody() {
           const newPath = await window.api.rename(filePath, `${wanted}.md`);
           sess.renamePath(filePath, newPath);
           await useWorkspace.getState().refresh();
+          // keep note↔note links pointing here: [[oldTitle]] → [[newTitle]] everywhere
+          await renameWikiLinks(oldTitle, newTitle);
+          prevTitle.current = newTitle;
         } catch {
           /* keep the current name; a later edit retries */
         } finally {
@@ -108,7 +173,7 @@ function NotePaneBody() {
       })();
     }, 600);
     return () => clearTimeout(t);
-  }, [note.title, filePath, isSession]);
+  }, [note.title, filePath, isSession, store]);
 
   return (
     <div className="note-doc">
@@ -130,6 +195,18 @@ function NotePaneBody() {
             사이드바에 보이기
           </button>
         )}
+        {/* "정보": 목차 + 연결 + 백링크 for this note (collapsed by default) */}
+        {metaCount > 0 && (
+          <button
+            className={`note-info-btn${infoOpen ? ' open' : ''}`}
+            title="이 노트의 목차·연결·백링크"
+            onClick={() => setInfoOpen((o) => !o)}
+          >
+            <Icon name={infoOpen ? 'chevronDown' : 'chevronRight'} />
+            정보
+            <span className="note-info-count">{metaCount}</span>
+          </button>
+        )}
         {/* session notes have an immutable node attribution — no link editing */}
         {!isSession && (
           <button className="note-link-btn" title="노드에 연동" onClick={() => setPickerOpen(true)}>
@@ -139,19 +216,60 @@ function NotePaneBody() {
         )}
       </div>
 
-      {!isSession && note.links.length > 0 && (
-        <div className="note-links">
-          {note.links.map((l) => (
-            <span key={`${l.mapId}:${l.nodeId}`} className="note-link-chip">
-              <button className="nlc-go" title="노드로 이동" onClick={() => void revealNode(l)}>
-                <Icon name="mindmap" />
-                <span className="nlc-text">{l.nodeText || '노드'}</span>
-              </button>
-              <button className="nlc-x" title="연동 해제" onClick={() => unlink(l.mapId, l.nodeId)}>
-                <Icon name="close" />
-              </button>
-            </span>
-          ))}
+      {infoOpen && metaCount > 0 && (
+        <div className="note-info">
+          {tocCount > 0 && (
+            <div className="note-info-sec">
+              <div className="note-info-label">목차</div>
+              <div className="note-toc-list">
+                {headings.map((h, i) => (
+                  <button
+                    key={`${h.pos}-${i}`}
+                    className={`note-toc-item lvl${h.level}`}
+                    onClick={() => goHeading(h.pos)}
+                  >
+                    {h.text.trim() || '제목 없음'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {nodeLinkCount > 0 && (
+            <div className="note-info-sec">
+              <div className="note-info-label">연결된 노드</div>
+              <div className="note-links">
+                {note.links.map((l) => (
+                  <span key={`${l.mapId}:${l.nodeId}`} className="note-link-chip">
+                    <button className="nlc-go" title="노드로 이동" onClick={() => void revealNode(l)}>
+                      <Icon name="mindmap" />
+                      <span className="nlc-text">{l.nodeText || '노드'}</span>
+                    </button>
+                    <button className="nlc-x" title="연동 해제" onClick={() => unlink(l.mapId, l.nodeId)}>
+                      <Icon name="close" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {backlinks.length > 0 && (
+            <div className="note-info-sec">
+              <div className="note-info-label">백링크 · 이 노트를 참조하는 노트</div>
+              <div className="note-backlinks">
+                {backlinks.map((m) => (
+                  <button
+                    key={m.path}
+                    className="note-backlink"
+                    title="미리보기 · ⌘-클릭은 바로 옆에 열기"
+                    onClick={(e) => peekNote(m.path, e)}
+                  >
+                    <Icon name="note" />
+                    <span className="nlc-text">{m.title || '제목 없음'}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -166,9 +284,47 @@ function NotePaneBody() {
       )}
 
       {/* key by note id so switching to another note loads its content fresh */}
-      <NoteEditor key={note.id} body={note.body} onChange={setBody} scaffold={isSession} />
+      <NoteEditor
+        key={note.id}
+        body={note.body}
+        onChange={setBody}
+        scaffold={isSession}
+        onCreateNote={isSession ? undefined : createSiblingNote}
+        onReady={setEditor}
+      />
+      {/* invisible: keeps the 목차 heading list / count live off the editor */}
+      {editor && <NoteHeadingsProbe editor={editor} onChange={setHeadings} />}
     </div>
   );
+}
+
+interface Head {
+  level: number;
+  text: string;
+  pos: number;
+}
+
+/** Mirrors the editor's headings up to the pane so the 정보 panel can show a 목차
+ *  (and the button knows whether there is one). Renders nothing. */
+function NoteHeadingsProbe({ editor, onChange }: { editor: Editor; onChange: (h: Head[]) => void }) {
+  const headings = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      const items: Head[] = [];
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'heading')
+          items.push({ level: (node.attrs.level as number) ?? 1, text: node.textContent, pos });
+        return true;
+      });
+      return items;
+    },
+    equalityFn: (a, b) =>
+      !!a && !!b && a.length === b.length && a.every((x, i) => x.pos === b[i].pos && x.text === b[i].text && x.level === b[i].level),
+  });
+  useEffect(() => {
+    onChange(headings ?? []);
+  }, [headings, onChange]);
+  return null;
 }
 
 const clock = (ms: number) => {

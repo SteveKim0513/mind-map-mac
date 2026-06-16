@@ -23,7 +23,7 @@ import { useSession, loadSessionSnapshot } from './store/sessionStore';
 import { useWorkspace } from './store/workspaceStore';
 import { useUi } from './store/uiStore';
 import type { CanvasHandle } from './canvas/Canvas';
-import type { Tab } from './store/sessionStore';
+import type { Tab, GroupIndex } from './store/sessionStore';
 import {
   serialize,
   emptyDoc,
@@ -326,12 +326,12 @@ export default function App() {
           {tabDragId &&
             (split ? (
               <div className="split-zones">
-                <DropZone variant="left" label="◧ 왼쪽" onDrop={() => useSession.getState().moveTab(tabDragId, 0)} />
-                <DropZone variant="right" label="오른쪽 ▶" onDrop={() => useSession.getState().moveTab(tabDragId, 1)} />
+                <DropZone variant="left" label="◧ 왼쪽" group={0} />
+                <DropZone variant="right" label="오른쪽 ▶" group={1} />
               </div>
             ) : (
               <div className="split-zones">
-                <DropZone variant="wide" label="여기에 놓아 화면 분할" onDrop={() => useSession.getState().moveTab(tabDragId, 1)} />
+                <DropZone variant="wide" label="여기에 놓아 화면 분할" group={1} />
               </div>
             ))}
         </div>
@@ -455,30 +455,16 @@ function flattenFiles(
 function DropZone({
   variant,
   label,
-  onDrop,
+  group,
 }: {
   variant: 'left' | 'right' | 'wide';
   label: string;
-  onDrop: () => void;
+  group: GroupIndex;
 }) {
-  const [over, setOver] = useState(false);
+  // The drop itself is committed by TabBar's pointer logic (it hit-tests this
+  // zone via `data-movegroup`); this element is purely the visible target.
   return (
-    <div
-      className={`split-zone ${variant}${over ? ' over' : ''}`}
-      onDragOver={(e) => {
-        e.preventDefault();
-        if (!over) setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        // Clear the drag guide here too: moveTab() unmounts the dragged tab,
-        // so onDragEnd may never fire and the split-zones overlay would linger.
-        useUi.getState().setTabDrag(null);
-        onDrop();
-      }}
-    >
+    <div className={`split-zone ${variant}`} data-movegroup={group}>
       <span>{label}</span>
     </div>
   );

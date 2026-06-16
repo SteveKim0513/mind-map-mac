@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { useUi } from '../store/uiStore';
 import { Icon } from '../ui/Icon';
@@ -30,30 +30,87 @@ interface Props {
   onShowSidebar: () => void;
 }
 
+const DRAG_THRESHOLD = 5; // px before a press becomes a drag (vs. a plain click)
+
 export function TabBar(p: Props) {
+  // Pointer-based drag, NOT native HTML5 DnD: the tab strip sits on a
+  // `-webkit-app-region: drag` titlebar, where Chromium fails to fire reliable
+  // dragstart events — so native reordering silently never worked. Pointer
+  // events + setPointerCapture bypass app-region entirely.
+  const drag = useRef<{ id: string; group: GroupIndex; sx: number; sy: number; moved: boolean } | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [dropGroup, setDropGroup] = useState<GroupIndex | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [overGroup, setOverGroup] = useState<GroupIndex | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const byId = (id: string) => p.tabs.find((t) => t.id === id);
+
+  // Resolve what the cursor is over: a split drop-zone, a tab, or a group strip.
+  const hit = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const zone = el?.closest('[data-movegroup]') as HTMLElement | null;
+    const groupEl = el?.closest('[data-tab-group]') as HTMLElement | null;
+    const tabEl = el?.closest('[data-tab-id]') as HTMLElement | null;
+    return {
+      moveGroup: zone ? (Number(zone.dataset.movegroup) as GroupIndex) : null,
+      group: groupEl ? (Number(groupEl.dataset.tabGroup) as GroupIndex) : null,
+      tabId: tabEl?.dataset.tabId ?? null,
+    };
+  };
+
+  const onPointerDown = (e: React.PointerEvent, id: string, g: GroupIndex) => {
+    if (e.button !== 0) return; // left button only
+    p.onSelectTab(id, g);
+    drag.current = { id, group: g, sx: e.clientX, sy: e.clientY, moved: false };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    if (!d.moved) {
+      if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < DRAG_THRESHOLD) return;
+      d.moved = true;
+      setDragId(d.id);
+      useUi.getState().setTabDrag(d.id); // reveals the split drop-zones over the panes
+    }
+    const h = hit(e.clientX, e.clientY);
+    setOverGroup(h.moveGroup ?? h.group);
+    setOverId(h.tabId && h.tabId !== d.id ? h.tabId : null);
+  };
+
+  const endDrag = (e: React.PointerEvent, commit: boolean) => {
+    const d = drag.current;
+    drag.current = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* capture may already be gone */
+    }
+    if (commit && d?.moved) {
+      const h = hit(e.clientX, e.clientY);
+      if (h.moveGroup !== null) {
+        // dropped on a split zone (left / right / "분할")
+        p.onMoveTab(d.id, h.moveGroup);
+      } else if (h.group !== null && h.tabId !== d.id) {
+        // released on itself (h.tabId === d.id) is a no-op. Over another tab →
+        // insert before it; over the empty strip (tabId null) → append to end.
+        const before = h.tabId;
+        if (h.group !== d.group && before === null) p.onMoveTab(d.id, h.group);
+        else p.onReorderTab(d.id, h.group, before);
+      }
+    }
+    setDragId(null);
+    setOverId(null);
+    setOverGroup(null);
+    useUi.getState().setTabDrag(null);
+  };
 
   const group = (ids: string[], active: string | null, g: GroupIndex) => (
     <div
       className={`tab-group${p.split && p.activeGroup === g ? ' active' : ''}${
-        dropGroup === g ? ' drop' : ''
+        dragId && overGroup === g ? ' drop' : ''
       }`}
-      onDragOver={(e) => {
-        if (!dragId) return;
-        e.preventDefault();
-        if (dropGroup !== g) setDropGroup(g);
-      }}
-      onDragLeave={() => setDropGroup((d) => (d === g ? null : d))}
-      onDrop={(e) => {
-        e.preventDefault();
-        const id = e.dataTransfer.getData('text/plain') || dragId;
-        if (id) p.onMoveTab(id, g);
-        setDropGroup(null);
-        setDragId(null);
-      }}
+      data-tab-group={g}
     >
       {ids.map((id) => {
         const t = byId(id);
@@ -61,32 +118,15 @@ export function TabBar(p: Props) {
         return (
           <div
             key={id}
-            className={`tab${id === active ? ' active' : ''}`}
+            className={`tab${id === active ? ' active' : ''}${id === dragId ? ' dragging' : ''}${
+              id === overId ? ' drop-before' : ''
+            }`}
             title={t.path}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData('text/plain', id);
-              e.dataTransfer.effectAllowed = 'move';
-              setDragId(id);
-              useUi.getState().setTabDrag(id);
-            }}
-            onDragEnd={() => {
-              setDragId(null);
-              setDropGroup(null);
-              useUi.getState().setTabDrag(null);
-            }}
-            onDragOver={(e) => {
-              if (dragId && dragId !== id) e.preventDefault();
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const src = e.dataTransfer.getData('text/plain') || dragId;
-              if (src && src !== id) p.onReorderTab(src, g, id);
-              setDropGroup(null);
-              setDragId(null);
-            }}
-            onPointerDown={() => p.onSelectTab(id, g)}
+            data-tab-id={id}
+            onPointerDown={(e) => onPointerDown(e, id, g)}
+            onPointerMove={onPointerMove}
+            onPointerUp={(e) => endDrag(e, true)}
+            onPointerCancel={(e) => endDrag(e, false)}
             onContextMenu={(e) => {
               e.preventDefault();
               setMenu({ x: e.clientX, y: e.clientY, id });

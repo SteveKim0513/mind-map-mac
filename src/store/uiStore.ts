@@ -51,11 +51,15 @@ interface UiState {
     anchor?: { x: number; y: number };
     /** the node the popup was opened from — enables unlinking from the node side */
     link?: { mapId: string; nodeId: string };
+    /** for a note→note peek: the pane the source note is in, so "열기" opens the
+     *  target in the OPPOSITE pane (keeps the source visible) */
+    sourceGroup?: 0 | 1;
   } | null;
   openNotePopup: (
     paths: string[],
     anchor?: { x: number; y: number },
     link?: { mapId: string; nodeId: string },
+    sourceGroup?: 0 | 1,
   ) => void;
   closeNotePopup: () => void;
 
@@ -195,8 +199,8 @@ export const useUi = create<UiState>((set, get) => ({
   closeContextMenu: () => set({ contextMenu: null }),
 
   notePopup: null,
-  openNotePopup: (paths, anchor, link) =>
-    set({ notePopup: paths.length ? { paths, anchor, link } : null }),
+  openNotePopup: (paths, anchor, link, sourceGroup) =>
+    set({ notePopup: paths.length ? { paths, anchor, link, sourceGroup } : null }),
   closeNotePopup: () => set({ notePopup: null }),
 
   linkTarget: null,

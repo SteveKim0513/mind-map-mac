@@ -98,6 +98,7 @@ export interface NoteMeta {
   title: string;
   links: NoteLink[];
   session?: FocusSession; // carried so the dashboard aggregates from the index, no re-scan
+  refs?: string[]; // lowercased titles this note's body wiki-links to ([[ ]]) — powers backlinks
 }
 
 /** A node with its computed on-canvas position. `x` is the node's LEFT edge;
