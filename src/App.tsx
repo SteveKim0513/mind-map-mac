@@ -15,6 +15,7 @@ import { Search } from './search/Search';
 import { GlobalSearch } from './search/GlobalSearch';
 import { Settings } from './ui/Settings';
 import { Manual } from './ui/Manual';
+import { UpdateStatus } from './ui/UpdateStatus';
 import { Toasts } from './ui/Toasts';
 import { QuickOpen } from './ui/QuickOpen';
 import { CommandPalette, type Command } from './ui/CommandPalette';
@@ -24,7 +25,7 @@ import { startReminderSync } from './sync/reminderSync';
 import { MapContext, useMap, type MapStore } from './store/mapStore';
 import { useSession, loadSessionSnapshot } from './store/sessionStore';
 import { useWorkspace } from './store/workspaceStore';
-import { useUi } from './store/uiStore';
+import { useUi, type UpdateStatus as UpdateStatusType } from './store/uiStore';
 import type { CanvasHandle } from './canvas/Canvas';
 import type { Tab, GroupIndex } from './store/sessionStore';
 import {
@@ -130,6 +131,11 @@ export default function App() {
     },
     [openByPath],
   );
+
+  // ── Update-check status → in-app popup (instant feedback) ───────────────────
+  useEffect(() => {
+    return window.api.onUpdateStatus((s) => useUi.getState().setUpdateStatus(s as UpdateStatusType));
+  }, []);
 
   // ── Native menu commands (operate on the active pane) ───────────────────────
   useEffect(() => {
@@ -395,6 +401,7 @@ export default function App() {
       {whatsNew && <WhatsNewCard />}
       {settingsOpen && <Settings />}
       {manualOpen && <Manual />}
+      <UpdateStatus />
     </div>
   );
 }

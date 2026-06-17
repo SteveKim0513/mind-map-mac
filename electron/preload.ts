@@ -90,6 +90,18 @@ const api = {
       ipcRenderer.off('menu', handler);
     };
   },
+
+  // ── auto-update (manual check drives an in-app popup) ──────────────────────
+  checkForUpdates: (): Promise<void> => ipcRenderer.invoke('update:check'),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke('update:install'),
+  /** Subscribe to update status pushes. Returns an unsubscribe function. */
+  onUpdateStatus: (cb: (status: unknown) => void) => {
+    const handler = (_e: unknown, status: unknown) => cb(status);
+    ipcRenderer.on('update:status', handler);
+    return () => {
+      ipcRenderer.off('update:status', handler);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld('api', api);

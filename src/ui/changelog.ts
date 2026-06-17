@@ -1,7 +1,8 @@
-// Release history, bundled from CHANGELOG.md at build time (no network). The app
-// only ever needs history up to its own version; a newer build brings a newer
-// CHANGELOG. The top entry is the current version.
-import CHANGELOG from '../../CHANGELOG.md?raw';
+// Release history shown IN THE APP ("업데이트 내역" + the post-update card). It is
+// bundled from the USER-facing changelog (customer language, concise) — the
+// technical CHANGELOG.md stays for developers. The top entry is the current
+// version, kept in sync with package.json at release time.
+import CHANGELOG from '../../CHANGELOG.user.md?raw';
 
 export interface Release {
   version: string;

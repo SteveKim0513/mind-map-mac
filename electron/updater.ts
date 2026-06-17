@@ -16,9 +16,25 @@ import log from './logger';
 const FIRST_CHECK_DELAY_MS = 10_000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
-let manualCheck = false;
+// Status pushed to the renderer so a manual check shows an immediate in-app popup
+// (checking → result) instead of a slow native dialog that feels like a hang.
+export type UpdateStatus =
+  | { phase: 'checking' }
+  | { phase: 'available'; version: string }
+  | { phase: 'downloading'; version: string; percent: number }
+  | { phase: 'downloaded'; version: string }
+  | { phase: 'up-to-date'; version: string }
+  | { phase: 'error'; message?: string }
+  | { phase: 'dev-disabled' };
+
+let interactive = false; // a manual check is driving the in-app popup
+let pendingVersion = '';
 let downloadedVersion: string | null = null;
 let getWin: () => BrowserWindow | null = () => null;
+
+function emit(status: UpdateStatus) {
+  getWin()?.webContents.send('update:status', status);
+}
 
 function isUpdateEnabled(): boolean {
   if (process.env.MINDMAP_UPDATE_URL) return true; // test hook
@@ -63,30 +79,36 @@ export function initAutoUpdate(getWindow: () => BrowserWindow | null) {
     log.info('[updater] feed overridden:', process.env.MINDMAP_UPDATE_URL);
   }
 
-  autoUpdater.on('update-available', (info) => log.info('[updater] available:', info.version));
+  autoUpdater.on('update-available', (info) => {
+    pendingVersion = info.version;
+    log.info('[updater] available:', info.version);
+    if (interactive) emit({ phase: 'available', version: info.version });
+  });
+  autoUpdater.on('download-progress', (p) => {
+    if (interactive) emit({ phase: 'downloading', version: pendingVersion, percent: Math.round(p.percent) });
+  });
   autoUpdater.on('update-not-available', () => {
-    if (manualCheck) {
-      manualCheck = false;
-      void dialog.showMessageBox({ type: 'info', message: '최신 버전을 사용하고 있습니다', buttons: ['확인'] });
+    if (interactive) {
+      interactive = false;
+      emit({ phase: 'up-to-date', version: app.getVersion() });
     }
   });
   autoUpdater.on('update-downloaded', (info) => {
     downloadedVersion = info.version;
-    manualCheck = false;
     log.info('[updater] downloaded:', info.version);
-    void promptRestart(info.version);
+    if (interactive) {
+      interactive = false;
+      emit({ phase: 'downloaded', version: info.version }); // popup shows 재시동
+    } else {
+      void promptRestart(info.version); // background download → native prompt
+    }
   });
   autoUpdater.on('error', (err) => {
     // Background failures must never interrupt the user — log and retry later.
     log.warn('[updater] error:', err?.message ?? err);
-    if (manualCheck) {
-      manualCheck = false;
-      void dialog.showMessageBox({
-        type: 'warning',
-        message: '업데이트 확인에 실패했습니다',
-        detail: '네트워크 연결을 확인해 주세요. 앱은 계속 정상적으로 사용할 수 있습니다.',
-        buttons: ['확인'],
-      });
+    if (interactive) {
+      interactive = false;
+      emit({ phase: 'error', message: err?.message });
     }
   });
 
@@ -95,20 +117,28 @@ export function initAutoUpdate(getWindow: () => BrowserWindow | null) {
   log.info('[updater] enabled — first check in 10s, then every 4h');
 }
 
-/** App menu "업데이트 확인…" — the only path that reports a no-update/failure result. */
+/** Manual "업데이트 확인" (app menu / Settings) — drives the in-app popup so the
+ *  user gets instant feedback ("확인 중…") and a clear result. */
 export function checkForUpdatesManually() {
   if (!isUpdateEnabled()) {
-    void dialog.showMessageBox({
-      type: 'info',
-      message: '개발 빌드에서는 자동 업데이트가 비활성화되어 있습니다',
-      buttons: ['확인'],
-    });
+    emit({ phase: 'dev-disabled' });
     return;
   }
   if (downloadedVersion) {
-    void promptRestart(downloadedVersion);
+    emit({ phase: 'downloaded', version: downloadedVersion }); // already ready → offer restart
     return;
   }
-  manualCheck = true;
-  void autoUpdater.checkForUpdates().catch(() => {});
+  interactive = true;
+  emit({ phase: 'checking' });
+  void autoUpdater.checkForUpdates().catch((e) => {
+    if (interactive) {
+      interactive = false;
+      emit({ phase: 'error', message: String(e?.message ?? e) });
+    }
+  });
+}
+
+/** Restart now and install the downloaded update (popup "지금 재시동"). */
+export function installUpdate() {
+  if (downloadedVersion) autoUpdater.quitAndInstall();
 }

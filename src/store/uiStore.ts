@@ -139,7 +139,19 @@ interface UiState {
   manualOpen: boolean;
   openManual: () => void;
   closeManual: () => void;
+  // in-app update-check popup (immediate feedback on "업데이트 확인")
+  updateStatus: UpdateStatus | null;
+  setUpdateStatus: (s: UpdateStatus | null) => void;
 }
+
+export type UpdateStatus =
+  | { phase: 'checking' }
+  | { phase: 'available'; version: string }
+  | { phase: 'downloading'; version: string; percent: number }
+  | { phase: 'downloaded'; version: string }
+  | { phase: 'up-to-date'; version: string }
+  | { phase: 'error'; message?: string }
+  | { phase: 'dev-disabled' };
 
 /** The running session, mirrored to localStorage for crash recovery. */
 export interface ActiveFocus {
@@ -289,6 +301,8 @@ export const useUi = create<UiState>((set, get) => ({
   manualOpen: false,
   openManual: () => set({ manualOpen: true }),
   closeManual: () => set({ manualOpen: false }),
+  updateStatus: null,
+  setUpdateStatus: (s) => set({ updateStatus: s }),
   whatsNew: null,
   setWhatsNew: (v) => set({ whatsNew: v }),
 }));

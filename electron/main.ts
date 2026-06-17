@@ -12,7 +12,7 @@ import {
   heartbeat,
 } from './reminders';
 import log, { logEvent, openLogsDir, type LogLevel } from './logger';
-import { initAutoUpdate, checkForUpdatesManually } from './updater';
+import { initAutoUpdate, checkForUpdatesManually, installUpdate } from './updater';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -456,6 +456,10 @@ ipcMain.handle('reminders:query', async () => (isMac ? queryReminders() : []));
 ipcMain.handle('reminders:heartbeat', async () =>
   isMac ? heartbeat() : { ok: false, kind: 'denied' as const },
 );
+
+// In-app update check (Settings button / menu) — drives the renderer popup
+ipcMain.handle('update:check', () => checkForUpdatesManually());
+ipcMain.handle('update:install', () => installUpdate());
 
 // ─── Web fetch (for "URL → note") — runs in main so there's no CORS ──────────
 ipcMain.handle('web:fetch', async (_e, rawUrl: string) => {

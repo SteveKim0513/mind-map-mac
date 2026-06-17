@@ -79,12 +79,20 @@ export function Settings() {
             <Icon name="chevronRight" />
           </button>
 
+          <button className="set-link" onClick={() => void window.api.checkForUpdates()}>
+            <span className="set-link-main">
+              <Icon name="download" />
+              업데이트 확인
+            </span>
+            <span className="set-link-sub">v{CURRENT_VERSION}</span>
+            <Icon name="chevronRight" />
+          </button>
+
           <button className="set-link" onClick={() => useUi.getState().openUpdates()}>
             <span className="set-link-main">
               <Icon name="flag" />
               업데이트 내역
             </span>
-            <span className="set-link-sub">v{CURRENT_VERSION}</span>
             <Icon name="chevronRight" />
           </button>
         </div>
