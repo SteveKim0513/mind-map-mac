@@ -650,7 +650,7 @@ button {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  z-index: 60;
+  z-index: 70; /* above .ctx-backdrop (69), like .ctx-menu — else clicks hit the backdrop */
   min-width: 168px;
   background: var(--surface);
   border: 1px solid var(--hairline);
