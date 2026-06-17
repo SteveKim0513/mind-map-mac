@@ -84,12 +84,14 @@ interface MapState {
   deleteSelected: () => void;
   reparentMany: (ids: string[], newParentId: string | null) => void;
   setColor: (id: string, color: string | undefined) => void;
+  setColorSelected: (color: string | undefined) => void; // apply to the whole multi-selection
   setNote: (id: string, note: string) => void;
   setLink: (id: string, link: string | undefined) => void;
   addNodeLink: (id: string, url: string) => void;
   removeNodeLink: (id: string, url: string) => void;
   setIcon: (id: string, icon: string | undefined) => void;
   toggleDone: (id: string) => void;
+  toggleDoneSelected: () => void; // toggle done across the whole multi-selection
   // schedule / reminders
   setScheduled: (id: string, on: boolean) => void; // applies to the node + all descendants
   setScheduleAt: (id: string, iso: string | undefined) => void;
@@ -400,6 +402,11 @@ export function createMapStore(): MapStore {
         if (d.nodes[id]) d.nodes[id].color = color;
       }),
 
+    setColorSelected: (color) =>
+      commit((d) => {
+        for (const id of get().selectedIds) if (d.nodes[id]) d.nodes[id].color = color;
+      }),
+
     setNote: (id, note) =>
       commit((d) => {
         if (d.nodes[id]) d.nodes[id].note = note || undefined;
@@ -438,6 +445,18 @@ export function createMapStore(): MapStore {
         if (n) {
           n.done = !n.done;
           n.updatedAt = Date.now(); // mark for reminder push
+        }
+      }),
+
+    toggleDoneSelected: () =>
+      commit((d) => {
+        const ids = get().selectedIds.filter((id) => d.nodes[id]);
+        if (!ids.length) return;
+        // if everything is already done, clear them all; otherwise mark all done
+        const next = !ids.every((id) => d.nodes[id].done);
+        for (const id of ids) {
+          d.nodes[id].done = next;
+          d.nodes[id].updatedAt = Date.now();
         }
       }),
 

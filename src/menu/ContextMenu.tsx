@@ -50,6 +50,60 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
   };
   const hasChildren = node.children.length > 0;
 
+  // Multi-selection gets its OWN menu — only actions that apply to the whole
+  // selection (the single-node items would silently act on just one node).
+  const sel = map.selectedIds;
+  if (sel.length >= 2) {
+    const colorSet = new Set(sel.map((i) => map.doc.nodes[i]?.color));
+    const uniformColor = colorSet.size === 1 ? [...colorSet][0] : undefined;
+    const allDone = sel.every((i) => map.doc.nodes[i]?.done);
+    return (
+      <div
+        ref={ref}
+        className="ctx-menu"
+        style={{ left: pos.left, top: pos.top }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <div className="ctx-head">{sel.length}개 선택됨</div>
+        {sel.length === 2 && (
+          <button className="ctx-item" onClick={run(() => map.addConnection(sel[0], sel[1]))}>
+            <span>두 노드 연결</span>
+          </button>
+        )}
+        <button className="ctx-item" onClick={run(() => map.addSection(sel))}>
+          <span>섹션으로 묶기</span>
+        </button>
+        <div className="ctx-sep" />
+
+        {/* 색상 — 선택 전체에 한 번에 적용 */}
+        <div className="ctx-colors">
+          {TAG_KEYS.map((c) => (
+            <button
+              key={c}
+              className={`ctx-swatch${uniformColor === c ? ' on' : ''}`}
+              style={{ background: tagVar(c), ['--sw' as string]: tagVar(c) }}
+              onClick={run(() => map.setColorSelected(uniformColor === c ? undefined : c))}
+            />
+          ))}
+          <button
+            className={`ctx-swatch none${!uniformColor ? ' on' : ''}`}
+            title="색 제거"
+            onClick={run(() => map.setColorSelected(undefined))}
+          />
+        </div>
+        <button className="ctx-item" onClick={run(() => map.toggleDoneSelected())}>
+          <span>{allDone ? '완료 해제' : '완료 표시'}</span>
+        </button>
+        <div className="ctx-sep" />
+
+        <button className="ctx-item danger" onClick={run(() => map.deleteSelected())}>
+          <span>삭제</span>
+          <kbd>⌫</kbd>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={ref}
@@ -57,22 +111,6 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       style={{ left: pos.left, top: pos.top }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      {map.selectedIds.length >= 2 && (
-        <>
-          {map.selectedIds.length === 2 && (
-            <button
-              className="ctx-item"
-              onClick={run(() => map.addConnection(map.selectedIds[0], map.selectedIds[1]))}
-            >
-              <span>두 노드 연결</span>
-            </button>
-          )}
-          <button className="ctx-item" onClick={run(() => map.addSection(map.selectedIds))}>
-            <span>섹션으로 묶기 ({map.selectedIds.length})</span>
-          </button>
-          <div className="ctx-sep" />
-        </>
-      )}
       <button className="ctx-item" onClick={run(() => map.addChild(id))}>
         <span>자식 추가</span>
         <kbd>Tab</kbd>
