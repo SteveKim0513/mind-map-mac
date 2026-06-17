@@ -5,7 +5,7 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
-import { Table } from '@tiptap/extension-table';
+import { TableMarkdown as Table } from './tableMarkdown';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
@@ -328,10 +328,15 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady }: 
     },
     onUpdate: ({ editor }) => {
       const md = (editor.storage as unknown as { markdown: MarkdownStorage }).markdown.getMarkdown();
-      // tiptap-markdown escapes "[" / "]" → a typed [[note]] serializes as
-      // \[\[note\]\] on disk, which breaks the wiki-link regex (index, backlinks,
-      // preview). Un-escape just the wiki-link brackets so the file stays clean.
-      onChange(md.replace(/\\\[\\\[(.+?)\\\]\\\]/g, '[[$1]]'));
+      const clean = md
+        // tiptap-markdown escapes "[" / "]" → a typed [[note]] serializes as
+        // \[\[note\]\] on disk, which breaks the wiki-link regex (index, backlinks,
+        // preview). Un-escape just the wiki-link brackets so the file stays clean.
+        .replace(/\\\[\\\[(.+?)\\\]\\\]/g, '[[$1]]')
+        // tiptap-markdown serializes task lists "loose" (a blank line between items);
+        // collapse it to a standard tight GFM checklist (- [ ] a\n- [ ] b).
+        .replace(/^(- \[[ xX]\].*)\n\n(?=- \[[ xX]\])/gm, '$1\n');
+      onChange(clean);
       recompute(editor);
     },
     onSelectionUpdate: ({ editor }) => recompute(editor),
