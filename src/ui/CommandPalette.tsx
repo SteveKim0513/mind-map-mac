@@ -32,14 +32,14 @@ export function CommandPalette({
       id: `file:${f.path}`,
       label: f.name,
       hint: f.folder,
-      icon: 'file',
+      icon: 'file' as const,
       run: f.run,
-      group: '파일',
+      group: '파일' as const,
     }));
-    const all = [...cmds, ...fileItems];
     const s = q.trim().toLowerCase();
-    if (!s) return all.slice(0, 60);
-    return all
+    // Empty query: show only commands (files are reachable via ⌘P)
+    if (!s) return cmds.slice(0, 60);
+    return [...cmds, ...fileItems]
       .filter((i) => `${i.label} ${i.hint ?? ''}`.toLowerCase().includes(s))
       .slice(0, 60);
   }, [q, commands, files]);
@@ -63,7 +63,7 @@ export function CommandPalette({
         <input
           ref={inputRef}
           className="qo-input"
-          placeholder="명령 실행 또는 파일 열기…"
+          placeholder="명령 실행… (파일 열기는 ⌘P)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {

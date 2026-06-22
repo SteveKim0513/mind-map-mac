@@ -88,7 +88,12 @@ export function GlobalSearch({ onOpen, onClose }: { onOpen: (path: string) => vo
   const results = useMemo(() => {
     if (!entries) return [];
     const s = q.trim().toLowerCase();
-    if (!s) return [];
+    if (!s) {
+      // Show up to 20 files when query is empty (notes first, then maps)
+      const notes = entries.filter((e) => e.kind === 'note').slice(0, 20);
+      const nodes = entries.filter((e) => e.kind === 'node').slice(0, Math.max(0, 20 - notes.length));
+      return [...notes, ...nodes];
+    }
     const out: Hit[] = [];
     for (const e of entries) {
       if (e.kind === 'node') {
@@ -122,7 +127,7 @@ export function GlobalSearch({ onOpen, onClose }: { onOpen: (path: string) => vo
         <input
           ref={inputRef}
           className="qo-input"
-          placeholder={entries ? '전체 검색 — 노드 · 노트 제목 · 노트 내용…' : '불러오는 중…'}
+          placeholder="전체 검색 (⌘F) — 노드, 노트 제목, 본문 · 파일 열기는 ⌘P"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -142,10 +147,10 @@ export function GlobalSearch({ onOpen, onClose }: { onOpen: (path: string) => vo
           }}
         />
         <div className="qo-list" ref={listRef}>
-          {q.trim() === '' ? (
-            <div className="qo-empty">노드와 노트를 한 번에 검색합니다.</div>
+          {q.trim() === '' && !entries ? (
+            <div className="qo-empty">불러오는 중…</div>
           ) : results.length === 0 ? (
-            <div className="qo-empty">{entries ? '일치하는 결과가 없습니다' : '불러오는 중…'}</div>
+            <div className="qo-empty">일치하는 결과가 없습니다</div>
           ) : (
             results.map((h, i) => (
               <button

@@ -36,6 +36,7 @@ import {
   toOpml,
   fromOpml,
 } from './io/formats';
+import { emptyNote, serializeNote } from './io/noteFormat';
 
 export default function App() {
   useKeyboard();
@@ -88,8 +89,23 @@ export default function App() {
       useSession.getState().openPath(path, content);
     } catch (err) {
       console.error('open failed', err);
-      useUi.getState().toast('파일을 열 수 없습니다');
+      // If the file is gone, close any stale tab and remove from sidebar
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('ENOENT') || msg.includes('no such file')) {
+        useSession.getState().closeByPath(path);
+        await useWorkspace.getState().refresh();
+      } else {
+        useUi.getState().toast('파일을 열 수 없습니다');
+      }
     }
+  }, []);
+
+  // Refresh the workspace tree when the window regains focus so external
+  // changes made in Finder are reflected without any manual action.
+  useEffect(() => {
+    return window.api.onWorkspaceFocus(() => {
+      void useWorkspace.getState().refresh();
+    });
   }, []);
 
   // ⌘P quick-open · ⌘K command palette (key code → layout-independent)
@@ -118,6 +134,13 @@ export default function App() {
   const newMindmap = useCallback(async () => {
     const root = useWorkspace.getState().root;
     const path = await window.api.createFile(root, '제목 없음', serialize(emptyDoc()));
+    await useWorkspace.getState().refresh();
+    await openByPath(path);
+  }, [openByPath]);
+
+  const newNote = useCallback(async () => {
+    const root = useWorkspace.getState().root;
+    const path = await window.api.createFile(root, '제목 없음', serializeNote(emptyNote('제목 없음')), '.md');
     await useWorkspace.getState().refresh();
     await openByPath(path);
   }, [openByPath]);
@@ -301,7 +324,7 @@ export default function App() {
       )
     ) : (
       <div className="pane" onPointerDownCapture={() => useSession.getState().setActiveGroup(group)}>
-        <Home recent={recent} onNew={() => void newMindmap()} onOpenRecent={(p) => void openByPath(p)} />
+        <Home recent={recent} onNew={() => void newMindmap()} onNewNote={() => void newNote()} onOpenRecent={(p) => void openByPath(p)} />
       </div>
     );
 
@@ -313,7 +336,14 @@ export default function App() {
           activePath={activeTab?.path ?? null}
           onOpenFile={(p) => void openByPath(p)}
           onRenamed={(o, n) => useSession.getState().renamePath(o, n)}
-          onDeleted={(p) => useSession.getState().closeByPath(p)}
+          onDeleted={(p) => {
+            useSession.getState().closeByPath(p);
+            // Also dismiss any peek popup that was showing the deleted file
+            const popup = useUi.getState().notePopup;
+            if (popup?.paths.some((pp) => pp === p || pp.startsWith(p + '/'))) {
+              useUi.getState().closeNotePopup();
+            }
+          }}
           onToggle={() => setSidebarVisible(false)}
         />
       )}

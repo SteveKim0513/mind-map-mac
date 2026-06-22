@@ -104,6 +104,8 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
     );
   }
 
+  const focusing = useUi((s) => !!s.activeFocus);
+
   return (
     <div
       ref={ref}
@@ -111,6 +113,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       style={{ left: pos.left, top: pos.top }}
       onPointerDown={(e) => e.stopPropagation()}
     >
+      <div className="ctx-group-label">편집</div>
       <button className="ctx-item" onClick={run(() => map.addChild(id))}>
         <span>자식 추가</span>
         <kbd>Tab</kbd>
@@ -125,7 +128,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       </button>
       <div className="ctx-sep" />
 
-      {/* 속성: 색상 · 아이콘 · 완료 — 그룹 구분은 decisions/0004 (진입점 매트릭스 A안) */}
+      <div className="ctx-group-label">속성</div>
       <div className="ctx-colors">
         {TAG_KEYS.map((c) => (
           <button
@@ -150,7 +153,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       </button>
       <div className="ctx-sep" />
 
-      {/* 첨부: 메모 · 링크 · 노트 */}
+      <div className="ctx-group-label">첨부</div>
       <button
         className="ctx-item"
         onClick={run(() => useUi.getState().setMemoEditFor(id))}
@@ -172,11 +175,11 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
           }),
         )}
       >
-        <span>노트 추가·연결</span>
+        <span>노드에 노트 연결</span>
       </button>
       <div className="ctx-sep" />
 
-      {/* 일정 */}
+      <div className="ctx-group-label">일정 · 집중</div>
       {node.scheduled ? (
         <>
           <button className="ctx-item" onClick={run(() => useUi.getState().openSchedule(id))}>
@@ -191,15 +194,15 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
           <span>{hasChildren ? '하위까지 스케줄 노드로 지정' : '스케줄 노드로 지정'}</span>
         </button>
       )}
-      <div className="ctx-sep" />
-
-      {/* 집중 세션 */}
-      <button className="ctx-item" onClick={run(() => requestFocusStart(mapStore, id))}>
-        <span>집중 세션 시작</span>
+      <button className="ctx-item" onClick={run(() => {
+        if (focusing) useUi.getState().toast('집중 세션이 이미 진행 중입니다');
+        else requestFocusStart(mapStore, id);
+      })}>
+        <span>{focusing ? '집중 세션 진행 중…' : '집중 세션 시작'}</span>
       </button>
       <div className="ctx-sep" />
 
-      {/* 보기 · 기타 */}
+      <div className="ctx-group-label">보기</div>
       {hasChildren && (
         <button className="ctx-item" onClick={run(() => map.toggleCollapse(id))}>
           <span>{node.collapsed ? '펼치기' : '접기'}</span>
@@ -215,6 +218,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       <button className="ctx-item" onClick={run(() => map.duplicateNode(id))}>
         <span>복제</span>
       </button>
+      <div className="ctx-sep" />
       <button className="ctx-item danger" onClick={run(() => map.deleteNode(id))}>
         <span>삭제</span>
         <kbd>⌫</kbd>

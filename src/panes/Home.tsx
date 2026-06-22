@@ -16,20 +16,27 @@ function ago(ts: number): string {
 interface Props {
   recent: RecentFile[];
   onNew: () => void;
+  onNewNote: () => void;
   onOpenRecent: (path: string) => void;
 }
 
-export function Home({ recent, onNew, onOpenRecent }: Props) {
+export function Home({ recent, onNew, onNewNote, onOpenRecent }: Props) {
   return (
     <div className="home">
       <div className="home-inner">
         <div className="home-brand">MindMap</div>
         <div className="home-tagline">생각을 잇고, 펼치는 가장 빠른 방법.</div>
 
-        <button className="home-new" onClick={onNew}>
-          <Icon name="plus" />
-          새 마인드맵
-        </button>
+        <div className="home-actions">
+          <button className="home-new" onClick={onNew}>
+            <Icon name="plus" />
+            새 마인드맵
+          </button>
+          <button className="home-new home-new--note" onClick={onNewNote}>
+            <Icon name="note" />
+            새 노트
+          </button>
+        </div>
 
         <div className="home-section">최근 파일</div>
         {recent.length === 0 ? (

@@ -82,6 +82,15 @@ const api = {
     { ok: true; finalUrl: string; status: number; html: string } | { ok: false; error: string }
   > => ipcRenderer.invoke('web:fetch', url),
 
+  /** Subscribe to window-focus events (for sidebar refresh). Returns an unsubscribe function. */
+  onWorkspaceFocus: (cb: () => void) => {
+    const handler = () => cb();
+    ipcRenderer.on('workspace:focus', handler);
+    return () => {
+      ipcRenderer.off('workspace:focus', handler);
+    };
+  },
+
   /** Subscribe to native menu commands. Returns an unsubscribe function. */
   onMenu: (cb: (action: string) => void) => {
     const handler = (_e: unknown, action: string) => cb(action);

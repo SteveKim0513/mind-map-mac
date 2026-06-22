@@ -130,6 +130,8 @@ function PaneBody({
       )}
 
       <div className="toolbar">
+        <span className={`map-save${dirty ? ' saving' : ''}`} title={dirty ? '저장 중' : '저장됨'} />
+        <span className="sep" />
         <button className="tool-btn icon" title="축소" onClick={() => handle?.zoomOut()}>
           <Icon name="minus" />
         </button>

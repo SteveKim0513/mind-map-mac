@@ -1,6 +1,6 @@
 {
   "name": "mind-map",
-  "version": "0.7.5",
+  "version": "0.7.8",
   "description": "A keyboard-first mind mapping app for macOS",
   "main": "dist-electron/main.js",
   "author": "",
@@ -14,7 +14,9 @@
     "dist:dev": "npm run build && electron-builder --config.productName='MindMap Dev' --config.extraMetadata.productName='MindMap Dev' --config.appId=co.imaginefutures.mindmap.dev --config.mac.icon=build/icon-dev.icns --config.mac.target=dmg --config.directories.output=release-dev",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
+    "test:all": "vitest run && playwright test"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
@@ -41,6 +43,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "@types/d3-hierarchy": "^3.1.7",
     "@types/node": "^22.19.20",
     "@types/react": "^18.3.12",
@@ -49,6 +52,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "jsdom": "^29.1.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vite-plugin-electron": "^0.29.0",

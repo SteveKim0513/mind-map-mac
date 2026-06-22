@@ -76,21 +76,30 @@ export function Sidebar({
     setMarked(new Set());
   };
 
-  const deleteMarked = async () => {
+  const deleteMarked = () => {
     const paths = [...marked];
-    const res = await window.api.message({
-      message: `${paths.length}개 파일을 삭제할까요?`,
-      detail: '휴지통으로 이동합니다.',
-      buttons: ['삭제', '취소'],
-      cancelId: 1,
-    });
-    if (res !== 0) return;
-    for (const p of paths) {
-      await window.api.remove(p);
-      onDeleted(p);
-    }
-    await refresh();
     setMarked(new Set());
+
+    let cancelled = false;
+    const timerId = setTimeout(async () => {
+      if (cancelled) return;
+      for (const p of paths) await useSession.getState().flushSaves(p);
+      for (const p of paths) {
+        try {
+          await window.api.remove(p);
+          onDeleted(p);
+        } catch {
+          useUi.getState().toastError(`"${p.split('/').pop()}" 삭제 실패`);
+        }
+      }
+      await useWorkspace.getState().refresh();
+    }, 4000);
+
+    useUi.getState().toastAction(
+      `${paths.length}개 파일 삭제됨`,
+      '실행 취소',
+      () => { cancelled = true; clearTimeout(timerId); },
+    );
   };
 
   // The folder new items are created in: selected folder, or the parent of a selected file.
@@ -121,7 +130,7 @@ export function Sidebar({
     await refresh();
     setSelected({ path, type: 'file' });
     onOpenFile(path);
-    setRenaming({ path, isFile: true });
+    // note-title input in the editor serves as the rename entry point for notes
   };
 
   // ── URL → note: fetch the page, extract the article, save as a linked note ──
@@ -225,19 +234,32 @@ export function Sidebar({
     setSelected({ path: newPath, type: node.type });
   };
 
-  const removeNode = async (node: TreeNode) => {
-    const isFile = node.type === 'file';
-    const res = await window.api.message({
-      message: `"${displayName(node)}"${isFile ? ' 파일' : ' 폴더'}을 삭제할까요?`,
-      detail: '휴지통으로 이동합니다.',
-      buttons: ['삭제', '취소'],
-      cancelId: 1,
-    });
-    if (res !== 0) return;
-    await window.api.remove(node.path);
-    await refresh();
-    if (selected?.path === node.path) setSelected(null);
-    onDeleted(node.path);
+  const removeNode = (node: TreeNode) => {
+    const name = displayName(node);
+    const nodePath = node.path;
+
+    let cancelled = false;
+    const timerId = setTimeout(async () => {
+      if (cancelled) return;
+      // Flush pending autosaves before trashing — fs.writeFile creates a new file even
+      // after trashItem, so cancelling the debounce timer first is essential.
+      await useSession.getState().flushSaves(nodePath);
+      try {
+        await window.api.remove(nodePath);
+      } catch {
+        useUi.getState().toastError('삭제할 수 없습니다. 잠시 후 다시 시도하세요.');
+        return;
+      }
+      await useWorkspace.getState().refresh();
+      setSelected((s) => (s?.path === nodePath ? null : s));
+      onDeleted(nodePath);
+    }, 4000);
+
+    useUi.getState().toastAction(
+      `"${name}" 삭제됨`,
+      '실행 취소',
+      () => { cancelled = true; clearTimeout(timerId); },
+    );
   };
 
   const moveInto = async (src: string, destDir: string) => {
@@ -448,11 +470,11 @@ export function Sidebar({
 
       {/* smart items: plan (오늘) ↔ reflect (돌아보기), pinned above the library */}
       <div className="sb-smart">
-        <button className="sb-smart-item" onClick={() => useUi.getState().openToday()}>
+        <button className="sb-smart-item" title="예정된 일정 보기" onClick={() => useUi.getState().openToday()}>
           <Icon name="calendar" />
           <span>오늘</span>
         </button>
-        <button className="sb-smart-item" onClick={() => useUi.getState().openHistory()}>
+        <button className="sb-smart-item" title="집중 세션 기록 보기" onClick={() => useUi.getState().openHistory()}>
           <Icon name="clock" />
           <span>돌아보기</span>
         </button>
@@ -464,7 +486,11 @@ export function Sidebar({
           <button className="sel-act" onClick={openMarked}>
             열기
           </button>
-          <button className="sel-act danger" onClick={() => void deleteMarked()}>
+          <button
+            className="sel-act danger"
+            data-testid="btn-delete-marked"
+            onClick={() => void deleteMarked()}
+          >
             삭제
           </button>
           <button className="sel-act" onClick={() => setMarked(new Set())}>
@@ -490,7 +516,17 @@ export function Sidebar({
       >
         <div onClick={(e) => e.stopPropagation()}>
           {tree.length === 0 ? (
-            <div className="tree-empty">위 ＋ 마인드맵 / 노트로 시작하세요</div>
+            <div className="tree-empty">
+              <p>워크스페이스가 비어 있어요.</p>
+              <div className="tree-empty-acts">
+                <button className="tree-empty-btn" onClick={() => void newMindmap()}>
+                  <Icon name="mindmap" /> 새 마인드맵
+                </button>
+                <button className="tree-empty-btn" onClick={() => void newNote()}>
+                  <Icon name="note" /> 새 노트
+                </button>
+              </div>
+            </div>
           ) : (
             renderTree(tree)
           )}

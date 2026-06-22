@@ -110,6 +110,12 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady }: 
     void (async () => {
       for (const file of files) {
         try {
+          // Warn when the source file is large — base64 encoding adds ~33% overhead
+          if (file.size > 400_000) {
+            useUi.getState().toast(
+              `이미지가 큽니다 (${Math.round(file.size / 1024)}KB). 노트 파일 크기가 늘어날 수 있습니다.`,
+            );
+          }
           const src = await fileToDataUrl(file);
           editorRef.current?.chain().focus().setImage({ src }).run();
         } catch {

@@ -209,9 +209,9 @@ function NotePaneBody() {
         )}
         {/* session notes have an immutable node attribution — no link editing */}
         {!isSession && (
-          <button className="note-link-btn" title="노드에 연동" onClick={() => setPickerOpen(true)}>
+          <button className="note-link-btn" title="이 노트를 마인드맵 노드에 연결" onClick={() => setPickerOpen(true)}>
             <Icon name="link" />
-            연동
+            노드에 연동
           </button>
         )}
       </div>

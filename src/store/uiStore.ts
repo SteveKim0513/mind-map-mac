@@ -99,8 +99,10 @@ interface UiState {
   relayout: () => void;
 
   // toasts
-  toasts: { id: number; msg: string }[];
+  toasts: { id: number; msg: string; action?: { label: string; onClick: () => void } }[];
   toast: (msg: string) => void;
+  toastError: (msg: string) => void;
+  toastAction: (msg: string, actionLabel: string, onAction: () => void) => void;
   dismissToast: (id: number) => void;
 
   // node text scale (persisted)
@@ -256,7 +258,18 @@ export const useUi = create<UiState>((set, get) => ({
   toast: (msg) => {
     const id = ++toastSeq;
     set((s) => ({ toasts: [...s.toasts, { id, msg }] }));
-    setTimeout(() => get().dismissToast(id), 2200);
+    setTimeout(() => get().dismissToast(id), 2500);
+  },
+  toastError: (msg) => {
+    const id = ++toastSeq;
+    set((s) => ({ toasts: [...s.toasts, { id, msg }] }));
+    setTimeout(() => get().dismissToast(id), 5000);
+  },
+  toastAction: (msg, actionLabel, onAction) => {
+    const id = ++toastSeq;
+    const onClick = () => { onAction(); get().dismissToast(id); };
+    set((s) => ({ toasts: [...s.toasts, { id, msg, action: { label: actionLabel, onClick } }] }));
+    setTimeout(() => get().dismissToast(id), 5000);
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 

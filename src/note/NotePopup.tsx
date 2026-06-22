@@ -192,7 +192,12 @@ export function NotePopup() {
 
         <div className="note-popup-body note-preview">
           {note === null ? (
-            <p className="note-preview-empty">불러오는 중…</p>
+            <div className="note-popup-skeleton" aria-label="불러오는 중">
+              <div className="np-skel np-skel--title" />
+              <div className="np-skel np-skel--line" />
+              <div className="np-skel np-skel--line np-skel--short" />
+              <div className="np-skel np-skel--line" />
+            </div>
           ) : note.body.trim() ? (
             renderMarkdown(note.body)
           ) : (

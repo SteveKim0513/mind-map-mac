@@ -7,5 +7,10 @@ node_modules/
 /build/*.iconset/
 /release-dev/
 
+# E2E test artifacts (generated; not source)
+/playwright-report/
+/test-results/
+/etc/
+
 # Local agent/editor config
 .claude/

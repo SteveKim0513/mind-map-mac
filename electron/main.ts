@@ -21,6 +21,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.MINDMAP_USER_DATA) {
   app.setPath('userData', process.env.MINDMAP_USER_DATA);
 }
+// Test/E2E isolation: override the workspace directory directly.
+const E2E_WORKSPACE = process.env.MINDMAP_WORKSPACE ?? null;
 
 // vite-plugin-electron injects these env vars during dev
 process.env.APP_ROOT = path.join(__dirname, '..');
@@ -155,6 +157,12 @@ function createWindow() {
     log.error(`[renderer] process gone: ${details.reason}`);
   });
 
+  // Refresh the sidebar when the window regains focus so external changes
+  // made in Finder (rename, delete, add) are reflected immediately.
+  win.on('focus', () => {
+    win?.webContents.send('workspace:focus');
+  });
+
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
   } else {
@@ -262,6 +270,10 @@ async function writeSettings(s: { workspace?: string }) {
 
 /** Resolve the workspace dir, creating a default one under ~/Documents on first run. */
 async function getWorkspace(): Promise<string> {
+  if (E2E_WORKSPACE) {
+    await fs.mkdir(E2E_WORKSPACE, { recursive: true });
+    return E2E_WORKSPACE;
+  }
   const s = await readSettings();
   let ws = s.workspace;
   if (!ws) {
@@ -397,7 +409,17 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
 });
 
 ipcMain.handle('fs:delete', async (_e, target: string) => {
-  await shell.trashItem(target);
+  try {
+    await fs.access(target);
+  } catch {
+    return true; // already gone — treat as success
+  }
+  try {
+    await shell.trashItem(target);
+  } catch (err) {
+    log.error(`[file] trash failed (${path.basename(target)}): ${(err as Error).message}`);
+    throw err;
+  }
   return true;
 });
 
