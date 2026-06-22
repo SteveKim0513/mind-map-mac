@@ -3815,7 +3815,6 @@ textarea:focus-visible,
   display: flex; flex-direction: column; gap: 1px;
   margin: 0 8px 6px; padding: 4px; max-height: 40vh; overflow-y: auto;
   background: var(--canvas-soft); border: 1px solid var(--hairline); border-radius: var(--r-md);
-  animation: pillPop 0.16s var(--spring) both;
 }
 .note-toc-item {
   text-align: left; border: none; background: transparent; cursor: pointer;

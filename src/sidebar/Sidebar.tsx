@@ -126,9 +126,13 @@ export function Sidebar({
 
   // ── URL → note: fetch the page, extract the article, save as a linked note ──
   const [urlImport, setUrlImport] = useState<{ busy: boolean; error: string | null } | null>(null);
+  const importingRef = useRef(false); // synchronous guard — React state update is async
 
   const importNoteFromUrl = async (rawUrl: string) => {
+    if (importingRef.current) return; // drop concurrent calls (key-repeat race)
+    importingRef.current = true;
     setUrlImport({ busy: true, error: null });
+    try {
     const res = await window.api.webFetch(rawUrl);
     if (!res.ok) {
       setUrlImport({ busy: false, error: '링크를 가져오지 못했습니다. 주소를 확인하세요.' });
@@ -162,6 +166,9 @@ export function Sidebar({
     onOpenFile(path);
     window.api?.log?.('info', 'web', 'imported url → note');
     setUrlImport(null);
+    } finally {
+      importingRef.current = false;
+    }
   };
 
   const newFolder = async () => {
