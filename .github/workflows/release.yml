@@ -1,0 +1,58 @@
+name: Release
+
+# 배포 자동화: 태그(vX.Y.Z) push 또는 수동 실행 시
+# 빌드 → 서명 → 공증 → GitHub Release(SteveKim0513/mind-map-mac) 퍼블리시.
+# 자세한 설명·시크릿 목록: docs/release/DEPLOY-UPDATE-SPEC.md §9
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {} # 수동 재배포 (현재 package.json 버전으로 빌드)
+
+permissions:
+  contents: write # GITHUB_TOKEN 으로 Release 생성/자산 업로드
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-14 # Apple Silicon (arm64) — 현재 배포 arch 와 동일
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Gate (typecheck + unit test)
+        run: npm run typecheck && npm test
+
+      - name: Build · sign · notarize · publish
+        run: npm run dist -- --publish always
+        env:
+          # 퍼블리시 (같은 repo 의 Release 라 GITHUB_TOKEN 으로 충분)
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 코드 서명 (Developer ID Application .p12 → base64)
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          # 공증 (notarytool / @electron/notarize 가 이 셋을 읽음)
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify published feed
+        run: |
+          echo "Release assets for ${GITHUB_REF_NAME}:"
+          gh release view "${GITHUB_REF_NAME}" \
+            -R SteveKim0513/mind-map-mac \
+            --json assets -q '.assets[].name' || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
