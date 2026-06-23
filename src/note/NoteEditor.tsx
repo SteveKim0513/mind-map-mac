@@ -13,13 +13,14 @@ import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 import { CodeBlock } from './CodeBlock';
 import { EditorToolbar } from './EditorToolbar';
 import { SlashMenu, type SlashItem } from './SlashMenu';
-import { fileToDataUrl, imageFilesFrom } from './imageInsert';
+import { fileToImageData, imageFilesFrom } from './imageInsert';
 import { SESSION_NOTE_PLACEHOLDER } from '../focus/sessionNote';
 import { WikiLink } from './wikiLink';
 import { Icon } from '../ui/Icon';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { useSession } from '../store/sessionStore';
+import { openLightbox } from './ImageLightbox';
 
 interface Props {
   /** Initial Markdown body. The editor owns the document after mount; the parent
@@ -33,6 +34,7 @@ interface Props {
   onCreateNote?: (title: string) => Promise<string | null>;
   /** Hand the live editor up to the pane (for the 정보 panel's 목차 section). */
   onReady?: (editor: Editor | null) => void;
+  notePath?: string;
 }
 
 const PLACEHOLDER = '메모를 시작하세요…  (“/” 를 눌러 블록 추가)';
@@ -60,7 +62,7 @@ interface MenuState {
 
 /** Notion-style rich editor: Markdown is applied live as you type, no edit/preview
  *  toggle. Stored on disk as Markdown via tiptap-markdown. A "/" opens a block menu. */
-export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady }: Props) {
+export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, notePath }: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   // mirror used by the (creation-time) keydown handler so it sees fresh values
   const m = useRef<{ open: boolean; items: SlashItem[]; active: number; query: string }>({
@@ -70,6 +72,8 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady }: 
     query: '',
   });
   const editorRef = useRef<Editor | null>(null);
+  const imagePathMap = useRef(new Map<string, string>());
+  const pendingContent = useRef<string | null>(null);
 
   // ── "[[" note-link autocomplete ──────────────────────────────────────────
   type LinkItem = { title: string; path: string; create?: boolean };
@@ -112,16 +116,18 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady }: 
     void (async () => {
       for (const file of files) {
         try {
-          // Warn when the source file is large — base64 encoding adds ~33% overhead
-          if (file.size > 400_000) {
-            useUi.getState().toast(
-              `이미지가 큽니다 (${Math.round(file.size / 1024)}KB). 노트 파일 크기가 늘어날 수 있습니다.`,
-            );
+          const { dataUrl, buffer, filename } = await fileToImageData(file);
+          if (notePath) {
+            try {
+              const fp = await window.api.imagesWrite({ notePath, filename, buffer });
+              imagePathMap.current.set(dataUrl, fp);
+            } catch {
+              /* fall back to inline base64 if write fails */
+            }
           }
-          const src = await fileToDataUrl(file);
-          editorRef.current?.chain().focus().setImage({ src }).run();
+          editorRef.current?.chain().focus().setImage({ src: dataUrl }).run();
         } catch {
-          /* skip an unreadable image */
+          /* skip unreadable image */
         }
       }
     })();
@@ -266,6 +272,11 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady }: 
       // Cmd/Ctrl-click a link to open it externally (plain click keeps editing).
       // openOnClick stays false so a bare click never navigates the Electron shell.
       handleClick: (_view, _pos, event) => {
+        const imgEl = (event.target as HTMLElement)?.closest('img') as HTMLImageElement | null;
+        if (imgEl?.src) {
+          openLightbox(imgEl.src);
+          return true;
+        }
         // note wiki-link chip → open a peek of the target note (default = glance,
         // not navigate). "열기" inside the peek opens it in the opposite pane.
         const wl = (event.target as HTMLElement)?.closest('[data-wikilink]') as HTMLElement | null;
@@ -338,7 +349,15 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady }: 
     },
     onUpdate: ({ editor }) => {
       const md = (editor.storage as unknown as { markdown: MarkdownStorage }).markdown.getMarkdown();
-      const clean = md
+      const imap = imagePathMap.current;
+      const withRefs =
+        imap.size > 0
+          ? md.replace(/!\[([^\]]*)\]\((data:image\/[^)]+)\)/g, (match, alt, dataUrl) => {
+              const fp = imap.get(dataUrl);
+              return fp ? `![${alt}](${fp})` : match;
+            })
+          : md;
+      const clean = withRefs
         // tiptap-markdown escapes "[" / "]" → a typed [[note]] serializes as
         // \[\[note\]\] on disk, which breaks the wiki-link regex (index, backlinks,
         // preview). Un-escape just the wiki-link brackets so the file stays clean.
@@ -357,6 +376,41 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady }: 
   });
 
   editorRef.current = editor;
+
+  // On mount: if the body has relative image paths (./note.assets/…), load them via IPC
+  // and substitute data URLs so the editor can display them.
+  useEffect(() => {
+    if (!notePath) return;
+    const relPaths = [...body.matchAll(/!\[[^\]]*\]\((\.\/[^)]+)\)/g)].map((m) => m[1]);
+    if (!relPaths.length) return;
+    void Promise.all(
+      relPaths.map((fp) =>
+        window.api.imagesRead({ notePath, filepath: fp })
+          .then((dataUrl) => ({ fp, dataUrl }))
+          .catch(() => null),
+      ),
+    ).then((results) => {
+      let processed = body;
+      for (const r of results) {
+        if (!r) continue;
+        processed = processed.replaceAll(r.fp, r.dataUrl);
+        imagePathMap.current.set(r.dataUrl, r.fp);
+      }
+      if (editorRef.current) {
+        editorRef.current.commands.setContent(processed, { emitUpdate: false });
+      } else {
+        pendingContent.current = processed;
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally mount-only
+
+  useEffect(() => {
+    if (editor && pendingContent.current !== null) {
+      editor.commands.setContent(pendingContent.current, { emitUpdate: false });
+      pendingContent.current = null;
+    }
+  }, [editor]);
 
   // re-decorate wiki-links when the note index changes (a target was created or
   // deleted) so the dim "unresolved" state stays accurate without an edit

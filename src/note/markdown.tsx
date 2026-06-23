@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useWorkspace } from '../store/workspaceStore';
+import { openLightbox } from './ImageLightbox';
 
 // Compact, dependency-free Markdown → React renderer used for the read-only note
 // peek popup (NotePopup). Handles the common blocks (headings, lists, quotes,
@@ -26,7 +27,9 @@ function inline(text: string): ReactNode[] {
     if (m[1] !== undefined) {
       // only inline base64 data images render — block remote/file src as a guard
       const src = m[3];
-      if (/^data:image\//.test(src)) out.push(<img key={k()} src={src} alt={m[2]} />);
+      if (/^data:image\//.test(src)) out.push(
+        <img key={k()} src={src} alt={m[2]} className="md-image" onClick={() => openLightbox(src)} />,
+      );
       else out.push(<span key={k()}>{m[2] || '이미지'}</span>);
     } else if (m[5] !== undefined) out.push(<strong key={k()}>{m[5]}</strong>);
     else if (m[7] !== undefined) out.push(<em key={k()}>{m[7]}</em>);

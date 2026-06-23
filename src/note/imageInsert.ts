@@ -4,7 +4,7 @@
  * the markdown so a single .md file stays fully portable.
  */
 
-const MAX_EDGE = 1600; // cap the longest side; keeps base64 from bloating the note
+const MAX_EDGE = 2400; // cap the longest side; keeps base64 from bloating the note
 
 export async function fileToDataUrl(file: File): Promise<string> {
   const bitmap = await loadBitmap(file);
@@ -29,7 +29,7 @@ export async function fileToDataUrl(file: File): Promise<string> {
   // Keep PNG when the source is PNG (may carry transparency); otherwise JPEG to
   // shrink photos. WebP/others fall back to PNG.
   const usePng = file.type === 'image/png';
-  return canvas.toDataURL(usePng ? 'image/png' : 'image/jpeg', usePng ? undefined : 0.82);
+  return canvas.toDataURL(usePng ? 'image/png' : 'image/jpeg', usePng ? undefined : 0.92);
 }
 
 function loadBitmap(file: File): Promise<ImageBitmap | HTMLImageElement> {
@@ -62,6 +62,26 @@ function readAsDataUrl(file: File): Promise<string> {
     r.onerror = reject;
     r.readAsDataURL(file);
   });
+}
+
+/** Process image file and return both a data URL (for editor display) and raw
+ *  buffer (for writing to disk as an external asset file). */
+export async function fileToImageData(file: File): Promise<{
+  dataUrl: string;
+  buffer: number[];
+  filename: string;
+}> {
+  const dataUrl = await fileToDataUrl(file);
+  const base64 = dataUrl.split(',')[1] ?? '';
+  const raw = atob(base64);
+  const buffer = Array.from({ length: raw.length }, (_, i) => raw.charCodeAt(i));
+  const mimeMatch = dataUrl.match(/^data:image\/([^;]+)/);
+  const rawExt = mimeMatch?.[1] ?? 'jpeg';
+  const ext = rawExt === 'jpeg' ? 'jpg' : rawExt;
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const filename = `image-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.${ext}`;
+  return { dataUrl, buffer, filename };
 }
 
 /** Pull image files out of a paste/drop payload. */

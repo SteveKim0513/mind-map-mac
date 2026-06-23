@@ -4,6 +4,7 @@ import { NoteContext, useNote, useNoteStore, type NoteStore } from '../store/not
 import { emptyNote, serializeNote } from '../io/noteFormat';
 import { fileNameFromTitle } from '../io/autoName';
 import { NoteEditor } from './NoteEditor';
+import { ImageLightbox } from './ImageLightbox';
 import { NodePicker } from './NodePicker';
 import { addLinkToNoteFile, reindexFromNote, renameWikiLinks, revealNode } from './noteLinks';
 import { useSession } from '../store/sessionStore';
@@ -293,9 +294,11 @@ function NotePaneBody() {
         scaffold={isSession}
         onCreateNote={isSession ? undefined : createSiblingNote}
         onReady={setEditor}
+        notePath={filePath ?? undefined}
       />
       {/* invisible: keeps the 목차 heading list / count live off the editor */}
       {editor && <NoteHeadingsProbe editor={editor} onChange={setHeadings} />}
+      <ImageLightbox />
     </div>
   );
 }

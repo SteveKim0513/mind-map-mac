@@ -357,6 +357,36 @@ ipcMain.handle('fs:read', async (_e, filePath: string) => {
 });
 
 ipcMain.handle(
+  'images:write',
+  async (_e, args: { notePath: string; filename: string; buffer: number[] }) => {
+    const ws = await getWorkspace();
+    const resolved = path.resolve(args.notePath);
+    if (!resolved.startsWith(ws)) throw new Error('Path outside workspace');
+    const base = path.basename(resolved, path.extname(resolved));
+    const assetsDir = path.join(path.dirname(resolved), `${base}.assets`);
+    await fs.mkdir(assetsDir, { recursive: true });
+    await fs.writeFile(path.join(assetsDir, args.filename), Buffer.from(args.buffer));
+    return `./${base}.assets/${args.filename}`;
+  },
+);
+
+ipcMain.handle(
+  'images:read',
+  async (_e, args: { notePath: string; filepath: string }) => {
+    const ws = await getWorkspace();
+    const resolved = path.resolve(path.dirname(args.notePath), args.filepath);
+    if (!resolved.startsWith(ws)) throw new Error('Path outside workspace');
+    const buf = await fs.readFile(resolved);
+    const ext = path.extname(args.filepath).toLowerCase().slice(1);
+    const mime: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+      gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+    };
+    return `data:${mime[ext] ?? 'image/jpeg'};base64,${buf.toString('base64')}`;
+  },
+);
+
+ipcMain.handle(
   'fs:createFile',
   async (_e, args: { dir: string; name: string; content: string; ext?: string }) => {
     await fs.mkdir(args.dir, { recursive: true }); // auto-create dir (e.g. hidden .notes)

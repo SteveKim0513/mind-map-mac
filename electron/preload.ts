@@ -43,6 +43,10 @@ const api = {
   workspaceTree: (): Promise<{ root: string; tree: TreeNode[] }> =>
     ipcRenderer.invoke('workspace:tree'),
   readFile: (filePath: string): Promise<string> => ipcRenderer.invoke('fs:read', filePath),
+  imagesWrite: (args: { notePath: string; filename: string; buffer: number[] }): Promise<string> =>
+    ipcRenderer.invoke('images:write', args),
+  imagesRead: (args: { notePath: string; filepath: string }): Promise<string> =>
+    ipcRenderer.invoke('images:read', args),
   /** Hidden attached-notes (.notes/*.md) — indexed but not shown in the sidebar. */
   attachedNotes: (): Promise<string[]> => ipcRenderer.invoke('attached:list'),
   createFile: (dir: string, name: string, content: string, ext?: string): Promise<string> =>
