@@ -92,6 +92,25 @@ APPLE_KEYCHAIN_PROFILE=mindmap-notary GH_TOKEN=<repo 쓰기 토큰> \
 # 7) 정리: rm -rf release/mac-arm64 release-dev/mac-arm64  (Spotlight 중복 방지)
 ```
 
+### 같은 버전 재배포 (이미 published 릴리즈가 있을 때)
+
+`--publish always` 는 draft 로 올리려다 기존 published 릴리즈와 충돌해 **전부 skip** 한다.
+빌드(서명·공증)는 하되, 업로드는 **소유자 계정으로 clobber**:
+
+```bash
+# 1) 서명·공증 빌드 (퍼블리시 실패는 무시 — 자산은 release/ 에 생성됨)
+APPLE_KEYCHAIN_PROFILE=mindmap-notary npm run dist
+# 2) gh 활성 계정을 repo 소유자로 전환 (imaginefutures 는 쓰기 불가)
+gh auth switch --user SteveKim0513
+# 3) 5종 자산을 기존 릴리즈에 덮어쓰기
+gh release upload vX.Y.Z -R SteveKim0513/mind-map-mac --clobber \
+  release/MindMap-X.Y.Z-arm64.dmg release/MindMap-X.Y.Z-arm64.dmg.blockmap \
+  release/MindMap-X.Y.Z-arm64-mac.zip release/MindMap-X.Y.Z-arm64-mac.zip.blockmap \
+  release/latest-mac.yml
+# 4) 계정 복구
+gh auth switch --user imaginefutures
+```
+
 ---
 
 ## 5. 아키텍처 커버리지 (지금의 약점)
@@ -117,7 +136,8 @@ APPLE_KEYCHAIN_PROFILE=mindmap-notary GH_TOKEN=<repo 쓰기 토큰> \
 | **Intel Mac에서 설치/업데이트 안 됨** | arm64 전용 빌드 | §5 — universal/2-arch 빌드 |
 | **인앱 "새로운 점"이 안 뜸/버전 어긋남** | `CHANGELOG.user.md` 최상단 버전 ≠ 빌드 버전 | 최상단 `## [X.Y.Z]`를 빌드 버전과 맞춤 (`CURRENT_VERSION` 출처) |
 | **공증 실패/멈춤** | 앱 암호 만료 / Team ID 불일치 / 네트워크 | `xcrun notarytool history --keychain-profile mindmap-notary` 로 상태 확인, 자격 재저장 |
-| **`--publish` 가 401/403** | `GH_TOKEN` 누락/스코프 부족(repo 쓰기) | `mind-map-mac` 쓰기 권한 토큰 사용 |
+| **`--publish` 가 401/403/404 (자산 업로드·삭제 실패)** | `gh` **활성 계정이 `imaginefutures`** — 이 repo(소유자 `SteveKim0513`)에 **쓰기 권한 없음**. git push는 SSH 키(stevekim)로 되지만 `gh` API는 활성 계정 토큰을 씀 | `gh auth switch --user SteveKim0513` 로 전환 후 업로드. 끝나면 `--user imaginefutures` 로 복구. (`GH_TOKEN=$(gh auth token)` 도 활성 계정 토큰이라 같은 함정) |
+| **`--publish always` 인데 아무것도 안 올라감 / "skipped, existing type not compatible"** | electron-builder는 **draft**로 publish하려는데 이미 **published 릴리즈**가 같은 버전으로 존재 → 전부 skip | **같은 버전 재배포**는 `gh release upload vX.Y.Z --clobber <자산들>` 로 직접 덮어쓰기(§4 재배포 레시피). 또는 새 버전으로 올림 |
 | **Spotlight에 MindMap 두 개** | 빌드 부산물 `release/mac-arm64/` 미삭제 | §4 step7 정리 |
 | **dev/dev-dist에서 업데이트가 뜸(원치 않게)** | 이름/패키지 분기 깨짐 | `isUpdateEnabled` = `isPackaged && name==='MindMap'`. `extraMetadata.productName` 박혔는지 |
 
