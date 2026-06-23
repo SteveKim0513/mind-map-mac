@@ -105,7 +105,18 @@ function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
   return (
     <NodeViewWrapper className="cb">
       <div className="cb-head" contentEditable={false}>
-        <select className="cb-lang" value={current} onChange={(e) => setLang(e.target.value)}>
+        <select
+          className="cb-lang"
+          value={current}
+          onChange={(e) => setLang(e.target.value)}
+          // Stop ProseMirror from handling these — otherwise it steals focus /
+          // resets the selection on mousedown and the native dropdown closes the
+          // instant it opens. NOTE: stopPropagation only (no preventDefault, which
+          // would block the dropdown from opening at all).
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
           {CODE_LANGUAGES.map((l) => (
             <option key={l.value} value={l.value}>
               {l.label}

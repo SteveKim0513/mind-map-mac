@@ -4,6 +4,11 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.7.13] - 2026-06-23
+
+### 버그 수정
+- **코드블록 언어 드롭다운이 열리자마자 닫히던 문제** — `<select>`의 mousedown이 ProseMirror로 전파돼 에디터가 포커스를 가져가며 네이티브 드롭다운이 즉시 닫힘. select에 `stopPropagation`(mousedown/pointerdown/click) 추가, preventDefault는 하지 않아 드롭다운은 정상 개방.
+
 ## [0.7.12] - 2026-06-23
 
 ### 새 기능
