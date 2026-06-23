@@ -4,6 +4,11 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.7.12] - 2026-06-23
+
+### 새 기능
+- **노트 코드블록 + 문법 강조** — StarterKit 기본 codeBlock을 `@tiptap/extension-code-block-lowlight`(lowlight + highlight.js)로 교체. 흔한 언어 18종 등록(JS/TS/Python/JSON/Bash/Shell/HTML(xml)/CSS/SQL/Markdown/YAML/Java/Go/Rust/C/C++/PHP/Ruby; 별칭 자동). React NodeView에 **언어 드롭다운 + 자동 감지(highlightAuto) + 코드 복사**. `/` 슬래시 메뉴·툴바 `{ }` 버튼·백틱3 입력룰로 추가. 토큰 색은 `--code-*` CSS 변수(다크/라이트). 마크다운 펜스(```lang)로 라운드트립 — e2e로 강조 렌더 + .md 보존 검증.
+
 ## [0.7.11] - 2026-06-23
 
 ### 새 기능

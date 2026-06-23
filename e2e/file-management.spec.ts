@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
 import { launchApp, createNoteFromMenu, getTabTitles, getSidebarLabels, writeExternalFile } from './helpers';
 
 // ── App launch ─────────────────────────────────────────────────────────────
@@ -80,6 +82,37 @@ test('a deleted file lands in the trash panel and restores from it', async () =>
     expect(await page.locator('.trash-row').count()).toBe(0);
     await page.keyboard.press('Escape'); // close the (now empty) panel
     expect(await getSidebarLabels(page)).toHaveLength(1);
+  } finally {
+    await cleanup();
+  }
+});
+
+// ── Code block: syntax highlighting + markdown round-trip ────────────────────
+test('a note code block highlights by language and round-trips to markdown', async () => {
+  const { page, workspace, cleanup } = await launchApp();
+  try {
+    await createNoteFromMenu(page);
+
+    // insert a code block via the "/" slash menu
+    const body = page.locator('.note-rich .ProseMirror');
+    await body.click();
+    await page.keyboard.type('/');
+    await page.waitForSelector('.slash-menu', { timeout: 2_000 });
+    await page.locator('.slash-item', { hasText: '코드블록' }).click();
+    await page.waitForSelector('.cb', { timeout: 2_000 });
+
+    // pick a language, type code → lowlight produces token spans
+    await page.locator('.cb-lang').selectOption('javascript');
+    await page.locator('.cb-pre code').click();
+    await page.keyboard.type('const x = 1');
+    await expect(page.locator('.cb-pre .hljs-keyword').first()).toBeVisible({ timeout: 3_000 });
+
+    // saved markdown keeps the fenced block + language (round-trip)
+    await page.waitForTimeout(1_000); // autosave debounce
+    const mdName = readdirSync(workspace).find((f) => f.endsWith('.md'))!;
+    const md = readFileSync(join(workspace, mdName), 'utf-8');
+    expect(md).toMatch(/```javascript/);
+    expect(md).toContain('const x = 1');
   } finally {
     await cleanup();
   }

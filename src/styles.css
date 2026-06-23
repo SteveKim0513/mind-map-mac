@@ -4067,6 +4067,61 @@ textarea:focus-visible,
   margin: 0.8em 0;
 }
 .note-rich .ProseMirror pre code, .note-preview pre code { background: none; border: none; padding: 0; }
+
+/* ── Code block (lowlight syntax highlighting + language dropdown) ── */
+.note-rich .ProseMirror .cb {
+  margin: 0.8em 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--canvas-soft);
+  overflow: hidden;
+}
+.cb-head {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 6px 4px 8px;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--canvas-soft) 55%, var(--surface));
+  user-select: none;
+}
+.cb-lang {
+  font-size: 11px; color: var(--ink-muted); background: transparent;
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  padding: 2px 4px; cursor: pointer; font-family: inherit; max-width: 140px;
+}
+.cb-lang:hover { background: var(--hover); }
+.cb-grow { flex: 1; }
+.cb-btn {
+  font-size: 11px; color: var(--ink-faint); background: transparent; border: none;
+  border-radius: var(--r-sm); padding: 3px 7px; cursor: pointer; font-family: inherit;
+}
+.cb-btn:hover { background: var(--hover); color: var(--ink); }
+/* the .cb card supplies the frame — neutralize the generic pre styling */
+.note-rich .ProseMirror pre.cb-pre {
+  margin: 0; border: none; border-radius: 0; background: transparent; padding: 12px 14px;
+}
+.cb-pre code { font-size: 0.86em; line-height: 1.6; }
+
+/* syntax token palette — bounded code-highlight colors (not the 3-layer UI system) */
+:root {
+  --code-comment: #8a8f98; --code-keyword: #a626a4; --code-string: #50a14f;
+  --code-number: #b76b01; --code-title: #4078f2; --code-attr: #986801;
+  --code-builtin: #c18401; --code-name: #e45649;
+}
+:root[data-theme='dark'] {
+  --code-comment: #7f848e; --code-keyword: #c678dd; --code-string: #98c379;
+  --code-number: #d19a66; --code-title: #61afef; --code-attr: #e5c07b;
+  --code-builtin: #e5c07b; --code-name: #e06c75;
+}
+.note-rich .hljs-comment, .note-rich .hljs-quote { color: var(--code-comment); font-style: italic; }
+.note-rich .hljs-keyword, .note-rich .hljs-selector-tag, .note-rich .hljs-literal, .note-rich .hljs-type { color: var(--code-keyword); }
+.note-rich .hljs-string, .note-rich .hljs-regexp, .note-rich .hljs-meta-string { color: var(--code-string); }
+.note-rich .hljs-number, .note-rich .hljs-symbol, .note-rich .hljs-bullet { color: var(--code-number); }
+.note-rich .hljs-title, .note-rich .hljs-section, .note-rich .hljs-meta { color: var(--code-title); }
+.note-rich .hljs-variable, .note-rich .hljs-template-variable, .note-rich .hljs-attr, .note-rich .hljs-attribute { color: var(--code-attr); }
+.note-rich .hljs-built_in, .note-rich .hljs-class .hljs-title, .note-rich .hljs-tag { color: var(--code-builtin); }
+.note-rich .hljs-name, .note-rich .hljs-selector-id, .note-rich .hljs-selector-class { color: var(--code-name); }
+.note-rich .hljs-emphasis { font-style: italic; }
+.note-rich .hljs-strong { font-weight: 600; }
 .note-rich .ProseMirror blockquote, .note-preview blockquote {
   margin: 0.8em 0;
   padding: 2px 0 2px 14px;

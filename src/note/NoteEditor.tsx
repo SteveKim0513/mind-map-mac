@@ -10,6 +10,7 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
+import { CodeBlock } from './CodeBlock';
 import { EditorToolbar } from './EditorToolbar';
 import { SlashMenu, type SlashItem } from './SlashMenu';
 import { fileToDataUrl, imageFilesFrom } from './imageInsert';
@@ -45,6 +46,7 @@ const SLASH: SlashItem[] = [
   { id: 'ordered', label: '번호 목록', keys: 'ordered number ol 번호 목록', icon: 'listOrdered', run: (c) => c.toggleOrderedList() },
   { id: 'task', label: '체크리스트', keys: 'task todo check 체크 할일', icon: 'checklist', run: (c) => c.toggleTaskList() },
   { id: 'quote', label: '인용', keys: 'quote blockquote 인용', icon: 'quote', run: (c) => c.toggleBlockquote() },
+  { id: 'code', label: '코드블록', keys: 'code block 코드 코드블록 syntax', badge: '{ }', run: (c) => c.toggleCodeBlock() },
   { id: 'table', label: '표', keys: 'table grid 표 테이블', icon: 'table', run: (c) => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
   { id: 'divider', label: '구분선', keys: 'divider hr rule 구분선', icon: 'divider', run: (c) => c.setHorizontalRule() },
 ];
@@ -241,7 +243,9 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady }: 
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         link: { openOnClick: false, autolink: true },
+        codeBlock: false, // replaced by the lowlight CodeBlock (syntax highlighting)
       }),
+      CodeBlock,
       TaskList,
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: scaffold ? SESSION_NOTE_PLACEHOLDER : PLACEHOLDER }),

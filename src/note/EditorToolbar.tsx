@@ -16,6 +16,7 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
       bold: editor.isActive('bold'),
       italic: editor.isActive('italic'),
       code: editor.isActive('code'),
+      codeBlock: editor.isActive('codeBlock'),
       h1: editor.isActive('heading', { level: 1 }),
       h2: editor.isActive('heading', { level: 2 }),
       h3: editor.isActive('heading', { level: 3 }),
@@ -158,6 +159,7 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
         <Btn on={active.ordered} title="번호 목록" onClick={() => chain().toggleOrderedList().run()}><Icon name="listOrdered" /></Btn>
         <Btn on={active.task} title="체크리스트" onClick={() => chain().toggleTaskList().run()}><Icon name="checklist" /></Btn>
         <Btn on={active.quote} title="인용" onClick={() => chain().toggleBlockquote().run()}><Icon name="quote" /></Btn>
+        <Btn on={active.codeBlock} title="코드블록" cls="md-tb-type mdb-code" onClick={() => chain().toggleCodeBlock().run()}>{'{ }'}</Btn>
       </div>
       <span className="md-tb-sep" aria-hidden="true" />
       <div className="md-tb-group">
