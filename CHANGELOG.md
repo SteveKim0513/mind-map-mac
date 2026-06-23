@@ -4,6 +4,13 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.7.9] - 2026-06-23
+
+### 버그 수정
+- **자동 업데이트가 패키지 빌드에서 비활성화되던 회귀 (v0.7.5–0.7.7)** — asar의 `package.json`에 `productName`이 빠지면 `app.getName()`이 lowercase `name`('mind-map')으로 떨어지고, `isUpdateEnabled()`가 `app.getName()==='MindMap'`을 요구해 `false`가 됨. 설치 사용자는 한 번 업데이트한 뒤 "개발 빌드예요"만 떠 더 이상 업데이트를 못 받음(자기 자신을 못 고침). 로그도 `~/Library/Logs/mind-map/`로 분리됨.
+  - `build.extraMetadata.productName="MindMap"`를 빌드 설정에 영구 추가 → 모든 electron-builder 빌드가 asar에 productName을 주입(CLI 플래그에 의존하지 않음).
+  - `isUpdateEnabled()` 견고화: 정확한 이름 일치 대신 `isPackaged && !getName().endsWith('Dev')`로 변경(prod는 productName 회귀 시에도 fail-open, Dev만 제외).
+
 ## [0.7.8] - 2026-06-22
 
 ### 버그 수정

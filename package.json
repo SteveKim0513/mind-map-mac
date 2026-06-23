@@ -1,6 +1,6 @@
 {
   "name": "mind-map",
-  "version": "0.7.8",
+  "version": "0.7.9",
   "description": "A keyboard-first mind mapping app for macOS",
   "main": "dist-electron/main.js",
   "author": "",
@@ -62,6 +62,9 @@
   "build": {
     "appId": "co.imaginefutures.mindmap",
     "productName": "MindMap",
+    "extraMetadata": {
+      "productName": "MindMap"
+    },
     "directories": {
       "output": "release"
     },

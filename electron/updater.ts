@@ -38,7 +38,16 @@ function emit(status: UpdateStatus) {
 
 function isUpdateEnabled(): boolean {
   if (process.env.MINDMAP_UPDATE_URL) return true; // test hook
-  return app.isPackaged && app.getName() === 'MindMap';
+  // Any packaged release updates EXCEPT the "MindMap Dev" test build.
+  // We deliberately do not require an exact name === 'MindMap': if productName
+  // ever fails to land in the asar, app.getName() falls back to the lowercase
+  // package "name" ('mind-map') — and that regression previously *silently
+  // disabled auto-update on shipped builds* (v0.7.5–0.7.7). The Dev build is
+  // the only other packaged identity and always carries the 'Dev' suffix
+  // (dist:dev sets extraMetadata.productName='MindMap Dev'), so excluding it
+  // is enough while keeping the real build fail-open.
+  if (!app.isPackaged) return false;
+  return !app.getName().endsWith('Dev');
 }
 
 async function promptRestart(version: string) {
