@@ -128,6 +128,10 @@ interface UiState {
   todayOpen: boolean;
   openToday: () => void;
   closeToday: () => void;
+  // workspace trash (overlay)
+  trashOpen: boolean;
+  openTrash: () => void;
+  closeTrash: () => void;
   // release history (overlay) + post-update "what's new" card (a version string)
   updatesOpen: boolean;
   openUpdates: () => void;
@@ -305,6 +309,9 @@ export const useUi = create<UiState>((set, get) => ({
   todayOpen: false,
   openToday: () => set({ todayOpen: true }),
   closeToday: () => set({ todayOpen: false }),
+  trashOpen: false,
+  openTrash: () => set({ trashOpen: true }),
+  closeTrash: () => set({ trashOpen: false }),
   updatesOpen: false,
   openUpdates: () => set({ updatesOpen: true }),
   closeUpdates: () => set({ updatesOpen: false }),

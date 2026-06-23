@@ -9,6 +9,14 @@ export interface TreeNode {
   children?: TreeNode[];
 }
 
+export interface TrashItem {
+  name: string;
+  trashedPath: string;
+  originalPath: string;
+  type: 'file' | 'dir';
+  deletedAt: string; // ISO timestamp
+}
+
 export interface ReminderInfo {
   id: string;
   title: string;
@@ -46,6 +54,20 @@ const api = {
   remove: (target: string): Promise<boolean> => ipcRenderer.invoke('fs:delete', target),
   move: (src: string, destDir: string): Promise<string | null> =>
     ipcRenderer.invoke('fs:move', { src, destDir }),
+  // ── in-workspace trash (.trash) ──
+  /** Move a file/folder into the workspace trash. Returns its path inside .trash. */
+  trashMove: (target: string): Promise<{ trashedPath: string }> =>
+    ipcRenderer.invoke('trash:move', target),
+  /** List trashed items (newest first). */
+  trashList: (): Promise<TrashItem[]> => ipcRenderer.invoke('trash:list'),
+  /** Restore one item to its original location. Returns the restored path (or null). */
+  trashRestore: (trashedPath: string): Promise<string | null> =>
+    ipcRenderer.invoke('trash:restore', trashedPath),
+  /** Permanently remove one trashed item (→ OS Trash). */
+  trashDeleteOne: (trashedPath: string): Promise<boolean> =>
+    ipcRenderer.invoke('trash:deleteOne', trashedPath),
+  /** Empty the whole trash (each item → OS Trash). */
+  trashEmpty: (): Promise<boolean> => ipcRenderer.invoke('trash:empty'),
   message: (opts: {
     message: string;
     detail?: string;

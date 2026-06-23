@@ -423,6 +423,124 @@ ipcMain.handle('fs:delete', async (_e, target: string) => {
   return true;
 });
 
+// ── Trash (in-workspace .trash folder) ──────────────────────────────────────
+// Delete = move into <root>/.trash and record where it came from, so it can be
+// restored. "Empty trash" hands items to the OS Trash as a final safety net.
+// .trash is a dot-folder, so walk() already hides it from the sidebar tree.
+const TRASH_DIR = '.trash';
+const TRASH_META = '.trashmeta.json';
+
+interface TrashEntry {
+  name: string; // basename inside .trash
+  trashedPath: string; // absolute path inside .trash
+  originalPath: string; // where it lived before deletion
+  type: 'file' | 'dir';
+  deletedAt: string; // ISO timestamp
+}
+
+async function trashLoc(): Promise<{ dir: string; metaFile: string }> {
+  const dir = path.join(await getWorkspace(), TRASH_DIR);
+  return { dir, metaFile: path.join(dir, TRASH_META) };
+}
+async function readTrash(metaFile: string): Promise<TrashEntry[]> {
+  try {
+    return JSON.parse(await fs.readFile(metaFile, 'utf-8'));
+  } catch {
+    return [];
+  }
+}
+async function writeTrash(metaFile: string, items: TrashEntry[]): Promise<void> {
+  await fs.writeFile(metaFile, JSON.stringify(items, null, 2), 'utf-8');
+}
+
+ipcMain.handle('trash:move', async (_e, target: string) => {
+  const { dir, metaFile } = await trashLoc();
+  await fs.mkdir(dir, { recursive: true });
+  const stat = await fs.stat(target);
+  const baseName = path.basename(target);
+  const ext = stat.isDirectory() ? '' : path.extname(baseName);
+  const stem = ext ? baseName.slice(0, -ext.length) : baseName;
+  const dest = await uniquePath(dir, stem, ext); // never clobber inside .trash
+  await fs.rename(target, dest);
+  const items = await readTrash(metaFile);
+  items.push({
+    name: path.basename(dest),
+    trashedPath: dest,
+    originalPath: target,
+    type: stat.isDirectory() ? 'dir' : 'file',
+    deletedAt: new Date().toISOString(),
+  });
+  await writeTrash(metaFile, items);
+  return { trashedPath: dest };
+});
+
+ipcMain.handle('trash:list', async () => {
+  const { metaFile } = await trashLoc();
+  const items = await readTrash(metaFile);
+  const alive: TrashEntry[] = [];
+  for (const it of items) {
+    try {
+      await fs.access(it.trashedPath);
+      alive.push(it);
+    } catch {
+      /* file vanished (manual delete) — drop the stale entry */
+    }
+  }
+  if (alive.length !== items.length) await writeTrash(metaFile, alive);
+  return alive.sort((a, b) => (a.deletedAt < b.deletedAt ? 1 : -1)); // newest first
+});
+
+ipcMain.handle('trash:restore', async (_e, trashedPath: string) => {
+  const { metaFile } = await trashLoc();
+  const items = await readTrash(metaFile);
+  const idx = items.findIndex((it) => it.trashedPath === trashedPath);
+  if (idx === -1) return null;
+  const it = items[idx];
+  const parent = path.dirname(it.originalPath);
+  await fs.mkdir(parent, { recursive: true }); // original folder may have been removed
+  let dest = it.originalPath;
+  try {
+    await fs.access(dest);
+    const ext = it.type === 'dir' ? '' : path.extname(it.originalPath);
+    dest = await uniquePath(parent, path.basename(it.originalPath, ext), ext); // occupied → de-dupe
+  } catch {
+    /* original path is free */
+  }
+  await fs.rename(it.trashedPath, dest);
+  items.splice(idx, 1);
+  await writeTrash(metaFile, items);
+  return dest;
+});
+
+ipcMain.handle('trash:deleteOne', async (_e, trashedPath: string) => {
+  const { metaFile } = await trashLoc();
+  const items = await readTrash(metaFile);
+  try {
+    await shell.trashItem(trashedPath);
+  } catch {
+    await fs.rm(trashedPath, { recursive: true, force: true });
+  }
+  await writeTrash(
+    metaFile,
+    items.filter((it) => it.trashedPath !== trashedPath),
+  );
+  return true;
+});
+
+ipcMain.handle('trash:empty', async () => {
+  const { metaFile } = await trashLoc();
+  const items = await readTrash(metaFile);
+  for (const it of items) {
+    try {
+      await shell.trashItem(it.trashedPath);
+    } catch {
+      await fs.rm(it.trashedPath, { recursive: true, force: true });
+    }
+  }
+  await writeTrash(metaFile, []);
+  return true;
+});
+
 // Move a file/folder into destDir. Returns the new path (or null if it was a no-op
 // or an illegal move, e.g. a folder into its own descendant).
 ipcMain.handle('fs:move', async (_e, args: { src: string; destDir: string }) => {

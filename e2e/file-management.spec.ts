@@ -39,18 +39,47 @@ test('deleting a note closes its tab and removes it from the sidebar', async () 
     await createNoteFromMenu(page);
     expect(await getTabTitles(page)).toHaveLength(1);
 
-    // Delete uses a 4-second undo-toast. Use ⌘+click to multi-select the
-    // row, then click the always-visible "삭제" button in the selection bar.
+    // Delete moves to the workspace trash immediately (no timed window).
+    // ⌘+click to multi-select the row, then click the selection-bar "삭제".
     await page.locator('.row').first().click({ modifiers: ['Meta'] });
     await page.waitForSelector('.sel-bar', { timeout: 2_000 });
     await page.getByTestId('btn-delete-marked').click();
     await page.waitForSelector('.sel-bar', { state: 'hidden', timeout: 3_000 });
-
-    // Wait for the 4 s undo window to expire + file removal + UI refresh
-    await page.waitForTimeout(5_500);
+    await page.waitForTimeout(800); // move + refresh
 
     expect(await getTabTitles(page)).toHaveLength(0);
     expect(await getSidebarLabels(page)).toHaveLength(0);
+  } finally {
+    await cleanup();
+  }
+});
+
+// ── Trash: delete → restore ─────────────────────────────────────────────────
+test('a deleted file lands in the trash panel and restores from it', async () => {
+  const { page, cleanup } = await launchApp();
+  try {
+    await createNoteFromMenu(page);
+    expect(await getSidebarLabels(page)).toHaveLength(1);
+
+    // delete it
+    await page.locator('.row').first().click({ modifiers: ['Meta'] });
+    await page.waitForSelector('.sel-bar', { timeout: 2_000 });
+    await page.getByTestId('btn-delete-marked').click();
+    await page.waitForTimeout(800);
+    expect(await getSidebarLabels(page)).toHaveLength(0);
+
+    // trash badge appears; open the trash panel and confirm the item is there
+    await page.waitForSelector('.sb-trash-badge', { timeout: 3_000 });
+    await page.locator('.sb-foot-btn[title^="휴지통"]').click();
+    await page.waitForSelector('.trash-panel', { timeout: 3_000 });
+    expect(await page.locator('.trash-row').count()).toBe(1);
+
+    // restore → file returns to the sidebar, trash empties
+    await page.locator('.trash-row').first().getByRole('button', { name: '복원' }).click();
+    await page.waitForTimeout(800);
+    expect(await page.locator('.trash-row').count()).toBe(0);
+    await page.keyboard.press('Escape'); // close the (now empty) panel
+    expect(await getSidebarLabels(page)).toHaveLength(1);
   } finally {
     await cleanup();
   }

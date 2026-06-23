@@ -3,6 +3,7 @@ import type { TreeNode } from '../../electron/preload';
 import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
 import { useSession } from '../store/sessionStore';
+import { useTrash } from '../store/trashStore';
 import { emptyDoc, serialize, newId } from '../io/formats';
 import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
 import { fileNameFromTitle } from '../io/autoName';
@@ -53,6 +54,8 @@ export function Sidebar({
   const toggle = useWorkspace((s) => s.toggle);
   const setExpanded = useWorkspace((s) => s.setExpanded);
   const noteByPath = useWorkspace((s) => s.noteByPath);
+  const trashCount = useTrash((s) => s.items.length);
+  useEffect(() => void useTrash.getState().refresh(), []); // hydrate the trash badge on mount
   // work-log session notes have an immutable name (title = start time, fixed at
   // creation); they can't be renamed from the tree either.
   const isLocked = (path: string) => !!noteByPath(path)?.session || path.split('/').includes('work-log');
@@ -76,33 +79,31 @@ export function Sidebar({
     setMarked(new Set());
   };
 
-  const deleteMarked = () => {
+  const deleteMarked = async () => {
     const paths = [...marked];
     setMarked(new Set());
-
-    let cancelled = false;
-    const timerId = setTimeout(async () => {
-      if (cancelled) return;
-      const sess = useSession.getState();
-      for (const p of paths) await sess.flushSaves(p);
-      for (const p of paths) {
-        sess.beginDelete(p); // block autosave from recreating it post-trash
-        try {
-          await window.api.remove(p);
-          onDeleted(p);
-        } catch {
-          useUi.getState().toastError(`"${p.split('/').pop()}" 삭제 실패`);
-        }
+    const sess = useSession.getState();
+    const trashed: string[] = [];
+    for (const p of paths) {
+      sess.beginDelete(p); // block autosave from recreating it during the move
+      await sess.flushSaves(p);
+      try {
+        const { trashedPath } = await window.api.trashMove(p);
+        trashed.push(trashedPath);
+        onDeleted(p);
+      } catch {
+        useUi.getState().toastError(`"${p.split('/').pop()}" 휴지통으로 이동 실패`);
+      } finally {
+        sess.endDelete(p);
       }
-      await useWorkspace.getState().refresh();
-      for (const p of paths) sess.endDelete(p); // unguard after tabs unmounted
-    }, 4000);
+    }
+    await Promise.all([useWorkspace.getState().refresh(), useTrash.getState().refresh()]);
+    if (trashed.length === 0) return;
 
-    useUi.getState().toastAction(
-      `${paths.length}개 파일 삭제됨`,
-      '실행 취소',
-      () => { cancelled = true; clearTimeout(timerId); },
-    );
+    useUi.getState().toastAction(`${trashed.length}개 휴지통으로 이동`, '실행 취소', async () => {
+      for (const tp of trashed) await window.api.trashRestore(tp);
+      await Promise.all([useWorkspace.getState().refresh(), useTrash.getState().refresh()]);
+    });
   };
 
   // The folder new items are created in: selected folder, or the parent of a selected file.
@@ -237,37 +238,32 @@ export function Sidebar({
     setSelected({ path: newPath, type: node.type });
   };
 
-  const removeNode = (node: TreeNode) => {
+  const removeNode = async (node: TreeNode) => {
     const name = displayName(node);
     const nodePath = node.path;
 
-    let cancelled = false;
-    const timerId = setTimeout(async () => {
-      if (cancelled) return;
-      const sess = useSession.getState();
-      // Guard autosave BEFORE trashing: shell.trashItem succeeds, but a debounced
-      // save (Pane.tsx, independent of flushSaves) can otherwise recreate the file
-      // right after — leaving it alive in the sidebar while the tab already closed.
-      sess.beginDelete(nodePath);
-      await sess.flushSaves(nodePath);
-      try {
-        await window.api.remove(nodePath);
-      } catch {
-        sess.endDelete(nodePath); // keep file + tab; let autosave resume
-        useUi.getState().toastError('삭제할 수 없습니다. 잠시 후 다시 시도하세요.');
-        return;
-      }
-      onDeleted(nodePath); // close the tab on success
-      setSelected((s) => (s?.path === nodePath ? null : s));
-      await useWorkspace.getState().refresh();
-      sess.endDelete(nodePath); // unguard once the tab has unmounted
-    }, 4000);
+    const sess = useSession.getState();
+    // Guard autosave first: Pane/NotePane's debounced save (independent of
+    // flushSaves) could otherwise recreate the file right after we move it.
+    sess.beginDelete(nodePath);
+    await sess.flushSaves(nodePath); // persist latest into the file before it moves
+    let trashedPath: string;
+    try {
+      ({ trashedPath } = await window.api.trashMove(nodePath));
+    } catch {
+      sess.endDelete(nodePath);
+      useUi.getState().toastError('휴지통으로 이동할 수 없습니다.');
+      return;
+    }
+    onDeleted(nodePath); // close the tab — the file is gone from its place
+    setSelected((s) => (s?.path === nodePath ? null : s));
+    await Promise.all([useWorkspace.getState().refresh(), useTrash.getState().refresh()]);
+    sess.endDelete(nodePath);
 
-    useUi.getState().toastAction(
-      `"${name}" 삭제됨`,
-      '실행 취소',
-      () => { cancelled = true; clearTimeout(timerId); },
-    );
+    useUi.getState().toastAction(`"${name}" 휴지통으로 이동`, '실행 취소', async () => {
+      await window.api.trashRestore(trashedPath);
+      await Promise.all([useWorkspace.getState().refresh(), useTrash.getState().refresh()]);
+    });
   };
 
   const moveInto = async (src: string, destDir: string) => {
@@ -573,6 +569,14 @@ export function Sidebar({
             )}
           </div>
           <span className="sb-foot-grow" />
+          <button
+            className={`sb-foot-btn${trashCount > 0 ? ' has-items' : ''}`}
+            title={trashCount > 0 ? `휴지통 (${trashCount})` : '휴지통'}
+            onClick={() => useUi.getState().openTrash()}
+          >
+            <Icon name="trash" />
+            {trashCount > 0 && <span className="sb-trash-badge">{trashCount}</span>}
+          </button>
           <button className="sb-foot-btn" title="설정 (⌘,)" onClick={() => useUi.getState().openSettings()}>
             <Icon name="settings" />
           </button>

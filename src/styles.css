@@ -653,6 +653,14 @@ button {
 .sb-foot-btn:hover,
 .sb-foot-btn.on { background: var(--hover); color: var(--ink); }
 .sb-foot-btn .ic { width: 17px; height: 17px; }
+.sb-foot-btn { position: relative; }
+.sb-foot-btn.has-items { color: var(--ink); }
+.sb-trash-badge {
+  position: absolute; top: 1px; right: 1px;
+  min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box;
+  border-radius: 7px; background: var(--state-danger); color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
+}
 .sb-create-wrap { position: relative; }
 .sb-create-menu {
   position: absolute;
@@ -5051,6 +5059,41 @@ textarea:focus-visible,
 }
 .today-summary { font-size: 12px; color: var(--ink-muted); margin-left: 8px; }
 .today-empty { padding: 56px 24px; text-align: center; color: var(--ink-muted); line-height: 1.8; }
+
+/* ── Workspace trash panel ───────────────────────────────────────── */
+.trash-panel {
+  width: 520px; max-width: 95vw; max-height: 88vh; overflow: auto;
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-2);
+  animation: modalPop 0.2s var(--spring) both;
+  display: flex; flex-direction: column;
+}
+.trash-body { padding: 8px 10px; }
+.trash-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-md); }
+.trash-row:hover { background: var(--canvas-soft); }
+.trash-ic {
+  width: 28px; height: 28px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm); color: var(--ink-muted); background: var(--canvas-soft);
+}
+.trash-ic .ic { width: 15px; height: 15px; }
+.trash-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.trash-name { font-size: 13.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trash-meta { font-size: 11px; color: var(--ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trash-acts { display: flex; align-items: center; gap: 4px; flex: none; }
+.trash-act {
+  border: 1px solid var(--hairline); background: var(--surface); cursor: pointer; color: var(--ink);
+  font-size: 12px; padding: 4px 10px; border-radius: var(--r-sm); display: inline-flex; align-items: center;
+}
+.trash-act:hover { background: var(--hover); }
+.trash-act.danger { border: none; background: transparent; color: var(--ink-faint); padding: 5px; }
+.trash-act.danger .ic { width: 15px; height: 15px; }
+.trash-act.danger:hover { color: var(--state-danger); background: color-mix(in srgb, var(--state-danger) 12%, transparent); }
+.trash-foot {
+  display: flex; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--hairline);
+  position: sticky; bottom: 0; background: var(--surface);
+}
+.trash-empty { border: none; background: transparent; color: var(--state-danger); font-size: 13px; font-weight: 500; cursor: pointer; padding: 7px 12px; border-radius: var(--r-sm); }
+.trash-empty:hover { background: color-mix(in srgb, var(--state-danger) 12%, transparent); }
 .today-body { padding: 12px 16px 20px; }
 .today-sec { margin-bottom: 14px; }
 .today-sec-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--ink-faint); padding: 2px 4px 6px; }

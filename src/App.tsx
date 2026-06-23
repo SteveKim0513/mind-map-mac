@@ -7,6 +7,7 @@ import { NotePopup } from './note/NotePopup';
 import { FocusOverlay } from './focus/FocusWidget';
 import { WorkHistory } from './focus/WorkHistory';
 import { TodayView } from './focus/TodayView';
+import { TrashPanel } from './ui/TrashPanel';
 import { UpdatesOverlay, WhatsNewCard } from './ui/Updates';
 import { CURRENT_VERSION, isNewer } from './ui/changelog';
 import { NoteLinkPicker } from './note/NoteLinkPicker';
@@ -59,6 +60,7 @@ export default function App() {
   const cmdkOpen = useUi((s) => s.cmdkOpen);
   const historyOpen = useUi((s) => s.historyOpen);
   const todayOpen = useUi((s) => s.todayOpen);
+  const trashOpen = useUi((s) => s.trashOpen);
   const updatesOpen = useUi((s) => s.updatesOpen);
   const whatsNew = useUi((s) => s.whatsNew);
 
@@ -427,6 +429,7 @@ export default function App() {
       <FocusOverlay sidebarVisible={sidebarVisible} />
       {historyOpen && <WorkHistory />}
       {todayOpen && <TodayView />}
+      {trashOpen && <TrashPanel />}
       {updatesOpen && <UpdatesOverlay />}
       {whatsNew && <WhatsNewCard />}
       {settingsOpen && <Settings />}
@@ -447,6 +450,7 @@ function buildCommands(o: {
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
     { id: 'today', icon: 'calendar', label: '오늘 열기', run: () => useUi.getState().openToday() },
     { id: 'history', icon: 'clock', label: '돌아보기 열기', run: () => useUi.getState().openHistory() },
+    { id: 'trash', icon: 'trash', label: '휴지통 열기', run: () => useUi.getState().openTrash() },
     { id: 'globalsearch', icon: 'search', label: '전체 검색 (노드·노트)', hint: '⌘⇧F', run: () => useUi.getState().setGlobalSearch(true) },
     { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
     { id: 'theme', icon: 'moon', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },
