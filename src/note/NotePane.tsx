@@ -122,6 +122,8 @@ function NotePaneBody() {
   useEffect(() => {
     if (!dirty || !filePath) return;
     const t = setTimeout(() => {
+      // Never recreate a note that's being trashed — see useSession.deletingPaths.
+      if (useSession.getState().isDeleting(filePath)) return;
       void window.api.save(filePath, serializeNote(store.getState().note)).then((p) => {
         if (p) {
           markSaved(p);

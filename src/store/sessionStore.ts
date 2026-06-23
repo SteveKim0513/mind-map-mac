@@ -38,6 +38,9 @@ interface SessionState {
   split: boolean; // is the right group shown?
   activeGroup: GroupIndex;
   recent: RecentFile[];
+  // Paths mid-trash. Autosave must NOT write these — otherwise a debounced save
+  // can recreate the file just after shell.trashItem (delete-race guard).
+  deletingPaths: Set<string>;
 
   // queries
   activeTab: () => Tab | null;
@@ -61,6 +64,9 @@ interface SessionState {
   setActiveGroup: (group: GroupIndex) => void;
   renamePath: (oldPath: string, newPath: string) => void;
   flushSaves: (target: string) => Promise<void>;
+  beginDelete: (path: string) => void; // suppress autosave for path while trashing
+  endDelete: (path: string) => void; // resume autosave (on failure or after settle)
+  isDeleting: (path: string) => boolean; // true for the path or anything under it
   closeByPath: (path: string) => void;
   hydrate: (files: { path: string; content: string }[], snap: SessionSnapshot) => void;
 }
@@ -157,6 +163,7 @@ export const useSession = create<SessionState>((set, get) => {
     split: false,
     activeGroup: 0,
     recent: loadRecent(),
+    deletingPaths: new Set<string>(),
 
     tabById: (id) => get().tabs.find((t) => t.id === id),
     activeTab: () => {
@@ -465,6 +472,19 @@ export const useSession = create<SessionState>((set, get) => {
           }
         }),
       );
+    },
+
+    beginDelete: (path) =>
+      set((s) => ({ deletingPaths: new Set(s.deletingPaths).add(path) })),
+    endDelete: (path) =>
+      set((s) => {
+        const next = new Set(s.deletingPaths);
+        next.delete(path);
+        return { deletingPaths: next };
+      }),
+    isDeleting: (path) => {
+      for (const p of get().deletingPaths) if (path === p || path.startsWith(p + '/')) return true;
+      return false;
     },
 
     closeByPath: (path) => {

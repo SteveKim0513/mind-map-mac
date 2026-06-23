@@ -4,6 +4,13 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.7.10] - 2026-06-23
+
+### 버그 수정
+- **삭제 후 파일이 사이드바에 살아있던 레이스 (재발)** — `shell.trashItem`은 성공하지만, Pane/NotePane의 독립 디바운스 autosave가 `flushSaves`와 무관하게 trash 직후 같은 경로에 파일을 다시 써서, 탭은 닫히고(onDeleted) 파일은 사이드바에 남던 현상. 다시 열면 내용이 그대로 있었음.
+  - `useSession.deletingPaths` 가드 추가: `beginDelete()`/`endDelete()`/`isDeleting()`. trash 직전 켜고, 실패 시 또는 UI 정리 후 끔.
+  - Pane·NotePane autosave가 저장 직전 `isDeleting(target)`이면 쓰지 않음(삭제 중인 폴더 하위 경로 포함). 단위 테스트 `deletingPaths.test.ts` 추가.
+
 ## [0.7.9] - 2026-06-23
 
 ### 버그 수정

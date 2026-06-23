@@ -108,6 +108,8 @@ function PaneBody({
       // when the timer was scheduled — guards against writing to a just-renamed path.
       const target = store.getState().filePath;
       if (!target) return;
+      // Never recreate a file that's being trashed — see useSession.deletingPaths.
+      if (useSession.getState().isDeleting(target)) return;
       void window.api.save(target, serialize(store.getState().doc)).then((p) => {
         if (p) markSaved(p);
       });

@@ -83,8 +83,10 @@ export function Sidebar({
     let cancelled = false;
     const timerId = setTimeout(async () => {
       if (cancelled) return;
-      for (const p of paths) await useSession.getState().flushSaves(p);
+      const sess = useSession.getState();
+      for (const p of paths) await sess.flushSaves(p);
       for (const p of paths) {
+        sess.beginDelete(p); // block autosave from recreating it post-trash
         try {
           await window.api.remove(p);
           onDeleted(p);
@@ -93,6 +95,7 @@ export function Sidebar({
         }
       }
       await useWorkspace.getState().refresh();
+      for (const p of paths) sess.endDelete(p); // unguard after tabs unmounted
     }, 4000);
 
     useUi.getState().toastAction(
@@ -241,18 +244,23 @@ export function Sidebar({
     let cancelled = false;
     const timerId = setTimeout(async () => {
       if (cancelled) return;
-      // Flush pending autosaves before trashing — fs.writeFile creates a new file even
-      // after trashItem, so cancelling the debounce timer first is essential.
-      await useSession.getState().flushSaves(nodePath);
+      const sess = useSession.getState();
+      // Guard autosave BEFORE trashing: shell.trashItem succeeds, but a debounced
+      // save (Pane.tsx, independent of flushSaves) can otherwise recreate the file
+      // right after — leaving it alive in the sidebar while the tab already closed.
+      sess.beginDelete(nodePath);
+      await sess.flushSaves(nodePath);
       try {
         await window.api.remove(nodePath);
       } catch {
+        sess.endDelete(nodePath); // keep file + tab; let autosave resume
         useUi.getState().toastError('삭제할 수 없습니다. 잠시 후 다시 시도하세요.');
         return;
       }
-      await useWorkspace.getState().refresh();
+      onDeleted(nodePath); // close the tab on success
       setSelected((s) => (s?.path === nodePath ? null : s));
-      onDeleted(nodePath);
+      await useWorkspace.getState().refresh();
+      sess.endDelete(nodePath); // unguard once the tab has unmounted
     }, 4000);
 
     useUi.getState().toastAction(
