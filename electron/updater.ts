@@ -1,6 +1,7 @@
 import { app, dialog, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from './logger';
+import { shouldEnableUpdates } from '../src/shared/updateGate';
 
 /**
  * Auto-update via GitHub Releases (spec: docs/product/specs/2026-06-11-auto-update.md).
@@ -37,17 +38,12 @@ function emit(status: UpdateStatus) {
 }
 
 function isUpdateEnabled(): boolean {
-  if (process.env.MINDMAP_UPDATE_URL) return true; // test hook
-  // Any packaged release updates EXCEPT the "MindMap Dev" test build.
-  // We deliberately do not require an exact name === 'MindMap': if productName
-  // ever fails to land in the asar, app.getName() falls back to the lowercase
-  // package "name" ('mind-map') — and that regression previously *silently
-  // disabled auto-update on shipped builds* (v0.7.5–0.7.7). The Dev build is
-  // the only other packaged identity and always carries the 'Dev' suffix
-  // (dist:dev sets extraMetadata.productName='MindMap Dev'), so excluding it
-  // is enough while keeping the real build fail-open.
-  if (!app.isPackaged) return false;
-  return !app.getName().endsWith('Dev');
+  // Logic + rationale live in src/shared/updateGate.ts (unit-tested there).
+  return shouldEnableUpdates({
+    packaged: app.isPackaged,
+    name: app.getName(),
+    feedOverride: !!process.env.MINDMAP_UPDATE_URL,
+  });
 }
 
 async function promptRestart(version: string) {

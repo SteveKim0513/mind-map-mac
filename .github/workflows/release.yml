@@ -35,24 +35,46 @@ jobs:
       - name: Gate (typecheck + unit test)
         run: npm run typecheck && npm test
 
-      - name: Build · sign · notarize · publish
-        run: npm run dist -- --publish always
+      # Build → sign → notarize → VERIFY. `npm run dist` ends with
+      # scripts/verify-release.mjs, which fails the job if the artifact is broken
+      # (productName missing, version drift, unsigned, feed sha mismatch).
+      # Publish is a SEPARATE step so a failed verify NEVER ships.
+      - name: Build · sign · notarize · verify
+        run: npm run dist
         env:
-          # 퍼블리시 (같은 repo 의 Release 라 GITHUB_TOKEN 으로 충분)
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 코드 서명 (Developer ID Application .p12 → base64)
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          # 공증 (notarytool / @electron/notarize 가 이 셋을 읽음)
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Verify published feed
-        run: |
-          echo "Release assets for ${GITHUB_REF_NAME}:"
-          gh release view "${GITHUB_REF_NAME}" \
-            -R SteveKim0513/mind-map-mac \
-            --json assets -q '.assets[].name' || true
+      # Only reached when the build verified clean. gh uses the repo's own
+      # GITHUB_TOKEN (this repo IS the publish target), so no account-switch
+      # foot-gun. --clobber path handles re-runs / pre-existing releases.
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v$(node -p "require('./package.json').version")"
+          fi
+          echo "Publishing $TAG"
+          ASSETS=(
+            release/MindMap-*-arm64.dmg
+            release/MindMap-*-arm64.dmg.blockmap
+            release/MindMap-*-arm64-mac.zip
+            release/MindMap-*-arm64-mac.zip.blockmap
+            release/latest-mac.yml
+          )
+          NOTES_ARGS=(--generate-notes)
+          [ -f "docs/release/notes/${TAG}.md" ] && NOTES_ARGS=(--notes-file "docs/release/notes/${TAG}.md")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" --clobber "${ASSETS[@]}"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "${TAG#v}" "${NOTES_ARGS[@]}" "${ASSETS[@]}"
+          fi
+          echo "Published assets:"
+          gh release view "$TAG" --json assets -q '.assets[].name'
