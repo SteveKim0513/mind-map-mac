@@ -139,7 +139,8 @@ gh auth switch --user imaginefutures
 | **`--publish` 가 401/403/404 (자산 업로드·삭제 실패)** | `gh` **활성 계정이 `imaginefutures`** — 이 repo(소유자 `SteveKim0513`)에 **쓰기 권한 없음**. git push는 SSH 키(stevekim)로 되지만 `gh` API는 활성 계정 토큰을 씀 | `gh auth switch --user SteveKim0513` 로 전환 후 업로드. 끝나면 `--user imaginefutures` 로 복구. (`GH_TOKEN=$(gh auth token)` 도 활성 계정 토큰이라 같은 함정) |
 | **`--publish always` 인데 아무것도 안 올라감 / "skipped, existing type not compatible"** | electron-builder는 **draft**로 publish하려는데 이미 **published 릴리즈**가 같은 버전으로 존재 → 전부 skip | **같은 버전 재배포**는 `gh release upload vX.Y.Z --clobber <자산들>` 로 직접 덮어쓰기(§4 재배포 레시피). 또는 새 버전으로 올림 |
 | **Spotlight에 MindMap 두 개** | 빌드 부산물 `release/mac-arm64/` 미삭제 | §4 step7 정리 |
-| **dev/dev-dist에서 업데이트가 뜸(원치 않게)** | 이름/패키지 분기 깨짐 | `isUpdateEnabled` = `isPackaged && name==='MindMap'`. `extraMetadata.productName` 박혔는지 |
+| **정식 설치본인데 "개발 빌드예요 / 자동 업데이트 꺼짐"** (한 번 업데이트 후 영구히) | **asar의 package.json에 `productName` 누락** → `app.getName()`이 lowercase `'mind-map'`으로 떨어짐 → 옛 `isUpdateEnabled`의 `=== 'MindMap'`가 false. 자기 자신을 못 고침 (v0.7.5–0.7.7 실제 발생) | 로그가 `~/Library/Logs/mind-map/`에 쌓이고 `[updater] disabled (packaged=true, name=mind-map)` 찍힘. **고침(v0.7.9)**: ① `build.extraMetadata.productName` 영구 박기 ② 가드를 `isPackaged && !getName().endsWith('Dev')`로 fail-open. **이미 막힌 설치본은 자동 업데이트 불가 → 0.7.9 dmg로 1회 수동 재설치 필요** |
+| **dev/dev-dist에서 업데이트가 뜸(원치 않게)** | 이름/패키지 분기 깨짐 | `isUpdateEnabled` = `isPackaged && !getName().endsWith('Dev')`. Dev는 `extraMetadata.productName='MindMap Dev'`로 구분 |
 
 ---
 
