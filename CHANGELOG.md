@@ -4,6 +4,17 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.7.15] - 2026-06-24
+
+### 버그 수정
+- **이미지 외부 저장 누락 (EditorToolbar)** — 툴바 파일선택이 `fileToDataUrl`만 호출하고 `imagesWrite` IPC를 건너뛰어 base64가 .md에 직렬화되던 문제. `NoteEditor.insertImages`를 `onInsertImages` prop으로 전달해 paste/drop과 동일 경로 사용.
+- **NotePopup 이미지 미표시** — `renderMarkdown`이 `data:image/` 접두사만 허용, 상대경로(`./note.assets/…`)는 텍스트로 처리. 팝업 마운트 시 IPC로 상대경로를 dataUrl로 치환 후 렌더링.
+- **이름 변경 시 .assets 미갱신** — `fs:rename`이 `.md` 파일만 이름변경, `.assets` 폴더를 그대로 두어 이미지 로드 실패. 이름변경 후 `oldStem.assets` → `newStem.assets` 이름변경 추가.
+- **파일 이동 시 .assets 미이동** — `fs:move`가 `.md`만 이동. 이동 후 `.assets` 폴더도 함께 이동.
+- **휴지통 이동/복원/삭제 시 .assets 미처리** — `trash:move/restore/deleteOne/empty` 모두 `.assets` 폴더를 누락. 각 핸들러에 동반 처리 추가.
+- **파일명 충돌 (동일 초 다중 삽입)** — 초 단위 타임스탬프로 이름 생성 시 같은 초에 여러 장 삽입하면 덮어씀. 밀리초(3자리) 추가.
+- **사이드바에 .assets 폴더 노출** — `walk()`가 `.assets` 접미사 폴더를 필터링하지 않아 빈 폴더로 노출. 접미사 필터 추가.
+
 ## [0.7.14] - 2026-06-24
 
 ### 개선

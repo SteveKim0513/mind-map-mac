@@ -3,10 +3,16 @@ import { useEditorState, type Editor } from '@tiptap/react';
 import { Icon } from '../ui/Icon';
 import { fileToDataUrl } from './imageInsert';
 
+export interface EditorToolbarProps {
+  editor: Editor;
+  /** When provided, toolbar image picks go through this (handles disk write + imagePathMap). */
+  onInsertImages?: (files: File[]) => void;
+}
+
 // Toolbar bound to the live TipTap editor. Buttons run editor commands and light
 // up when the cursor sits inside the matching formatting.
 
-export function EditorToolbar({ editor }: { editor: Editor }) {
+export function EditorToolbar({ editor, onInsertImages }: EditorToolbarProps) {
   const [linking, setLinking] = useState(false);
   const [url, setUrl] = useState('');
 
@@ -33,12 +39,17 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
 
   const fileRef = useRef<HTMLInputElement>(null);
   const onPickImages = async (files: FileList | null) => {
-    for (const file of Array.from(files ?? [])) {
-      try {
-        const src = await fileToDataUrl(file);
-        editor.chain().focus().setImage({ src }).run();
-      } catch {
-        /* skip */
+    const list = Array.from(files ?? []);
+    if (onInsertImages) {
+      onInsertImages(list);
+    } else {
+      for (const file of list) {
+        try {
+          const src = await fileToDataUrl(file);
+          editor.chain().focus().setImage({ src }).run();
+        } catch {
+          /* skip */
+        }
       }
     }
     if (fileRef.current) fileRef.current.value = '';

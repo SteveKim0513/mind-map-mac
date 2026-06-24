@@ -301,6 +301,7 @@ async function walk(dir: string): Promise<TreeNode[]> {
   const nodes: TreeNode[] = [];
   for (const ent of entries) {
     if (ent.name.startsWith('.')) continue;
+    if (ent.name.endsWith('.assets')) continue; // image asset dirs — hide from sidebar
     const full = path.join(dir, ent.name);
     if (ent.isDirectory()) {
       nodes.push({ name: ent.name, path: full, type: 'dir', children: await walk(full) });
@@ -435,6 +436,21 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
     }
   }
   await fs.rename(args.path, next);
+
+  // Keep the companion image-assets directory in sync with the renamed note.
+  if (path.extname(next) === '.md') {
+    const oldStem = path.basename(args.path, path.extname(args.path));
+    const newStem = path.basename(next, path.extname(next));
+    if (oldStem !== newStem) {
+      const oldAssets = path.join(path.dirname(args.path), `${oldStem}.assets`);
+      const newAssets = path.join(path.dirname(next), `${newStem}.assets`);
+      try {
+        await fs.access(oldAssets);
+        await fs.rename(oldAssets, newAssets);
+      } catch { /* no assets dir — ignore */ }
+    }
+  }
+
   return next;
 });
 
@@ -492,6 +508,17 @@ ipcMain.handle('trash:move', async (_e, target: string) => {
   const stem = ext ? baseName.slice(0, -ext.length) : baseName;
   const dest = await uniquePath(dir, stem, ext); // never clobber inside .trash
   await fs.rename(target, dest);
+
+  // Move the companion .assets directory into trash alongside the .md file.
+  if (ext === '.md') {
+    const srcAssets = path.join(path.dirname(target), `${stem}.assets`);
+    try {
+      await fs.access(srcAssets);
+      const trashedStem = path.basename(dest, ext);
+      await fs.rename(srcAssets, path.join(dir, `${trashedStem}.assets`));
+    } catch { /* no assets dir — ignore */ }
+  }
+
   const items = await readTrash(metaFile);
   items.push({
     name: path.basename(dest),
@@ -537,6 +564,19 @@ ipcMain.handle('trash:restore', async (_e, trashedPath: string) => {
     /* original path is free */
   }
   await fs.rename(it.trashedPath, dest);
+
+  // Restore the companion .assets directory if it was trashed alongside the note.
+  if (path.extname(it.trashedPath) === '.md') {
+    const trashedStem = path.basename(it.trashedPath, '.md');
+    const trashAssetsDir = path.join(path.dirname(it.trashedPath), `${trashedStem}.assets`);
+    try {
+      await fs.access(trashAssetsDir);
+      const destStem = path.basename(dest, path.extname(dest));
+      const destAssetsDir = path.join(path.dirname(dest), `${destStem}.assets`);
+      await fs.rename(trashAssetsDir, destAssetsDir);
+    } catch { /* no assets dir in trash — ignore */ }
+  }
+
   items.splice(idx, 1);
   await writeTrash(metaFile, items);
   return dest;
@@ -549,6 +589,19 @@ ipcMain.handle('trash:deleteOne', async (_e, trashedPath: string) => {
     await shell.trashItem(trashedPath);
   } catch {
     await fs.rm(trashedPath, { recursive: true, force: true });
+  }
+  // Also permanently delete the companion .assets directory if present.
+  if (path.extname(trashedPath) === '.md') {
+    const stem = path.basename(trashedPath, '.md');
+    const assetsDir = path.join(path.dirname(trashedPath), `${stem}.assets`);
+    try {
+      await fs.access(assetsDir);
+      try {
+        await shell.trashItem(assetsDir);
+      } catch {
+        await fs.rm(assetsDir, { recursive: true, force: true });
+      }
+    } catch { /* no assets dir — ignore */ }
   }
   await writeTrash(
     metaFile,
@@ -565,6 +618,19 @@ ipcMain.handle('trash:empty', async () => {
       await shell.trashItem(it.trashedPath);
     } catch {
       await fs.rm(it.trashedPath, { recursive: true, force: true });
+    }
+    // Also delete the companion .assets directory if present.
+    if (path.extname(it.trashedPath) === '.md') {
+      const stem = path.basename(it.trashedPath, '.md');
+      const assetsDir = path.join(path.dirname(it.trashedPath), `${stem}.assets`);
+      try {
+        await fs.access(assetsDir);
+        try {
+          await shell.trashItem(assetsDir);
+        } catch {
+          await fs.rm(assetsDir, { recursive: true, force: true });
+        }
+      } catch { /* no assets dir — ignore */ }
     }
   }
   await writeTrash(metaFile, []);
@@ -590,6 +656,18 @@ ipcMain.handle('fs:move', async (_e, args: { src: string; destDir: string }) => 
     /* target is free */
   }
   await fs.rename(src, target);
+
+  // Move the companion .assets directory when moving a .md note.
+  if (name.endsWith('.md')) {
+    const srcStem = name.slice(0, -'.md'.length);
+    const srcAssets = path.join(path.dirname(src), `${srcStem}.assets`);
+    try {
+      await fs.access(srcAssets);
+      const targetStem = path.basename(target, '.md');
+      await fs.rename(srcAssets, path.join(destDir, `${targetStem}.assets`));
+    } catch { /* no assets dir — ignore */ }
+  }
+
   return target;
 });
 

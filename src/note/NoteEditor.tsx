@@ -429,7 +429,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
 
   return (
     <div className="note-rich">
-      <EditorToolbar editor={editor} />
+      <EditorToolbar editor={editor} onInsertImages={insertImages} />
       <div className="note-rich-body" onClick={() => editor.chain().focus().run()}>
         <EditorContent editor={editor} />
       </div>

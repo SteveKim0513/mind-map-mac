@@ -15,6 +15,7 @@ export function NotePopup() {
   const close = useUi((s) => s.closeNotePopup);
   const [idx, setIdx] = useState(0);
   const [note, setNote] = useState<NoteDoc | null>(null);
+  const [displayBody, setDisplayBody] = useState<string | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [shown, setShown] = useState(false); // drives the grow/shrink morph
@@ -77,6 +78,7 @@ export function NotePopup() {
     if (!path) return;
     let alive = true;
     setNote(null);
+    setDisplayBody(null);
     void window.api
       .readFile(path)
       .then((c) => alive && setNote(parseNote(c, nameOf(path))))
@@ -85,6 +87,30 @@ export function NotePopup() {
       alive = false;
     };
   }, [path]);
+
+  // Resolve relative image paths (./note.assets/…) to data URLs so the
+  // read-only markdown renderer can display externally-stored images.
+  useEffect(() => {
+    if (!note || !path) { setDisplayBody(null); return; }
+    const relPaths = [...note.body.matchAll(/!\[[^\]]*\]\((\.\/[^)]+)\)/g)].map((m) => m[1]);
+    if (!relPaths.length) { setDisplayBody(note.body); return; }
+    let alive = true;
+    void Promise.all(
+      relPaths.map((fp) =>
+        window.api.imagesRead({ notePath: path, filepath: fp })
+          .then((dataUrl) => ({ fp, dataUrl }))
+          .catch(() => null),
+      ),
+    ).then((results) => {
+      if (!alive) return;
+      let processed = note.body;
+      for (const r of results) {
+        if (r) processed = processed.replaceAll(r.fp, r.dataUrl);
+      }
+      setDisplayBody(processed);
+    });
+    return () => { alive = false; };
+  }, [note, path]);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === 'Escape' && requestClose();
@@ -191,15 +217,15 @@ export function NotePopup() {
         )}
 
         <div className="note-popup-body note-preview">
-          {note === null ? (
+          {(note === null || displayBody === null) ? (
             <div className="note-popup-skeleton" aria-label="불러오는 중">
               <div className="np-skel np-skel--title" />
               <div className="np-skel np-skel--line" />
               <div className="np-skel np-skel--line np-skel--short" />
               <div className="np-skel np-skel--line" />
             </div>
-          ) : note.body.trim() ? (
-            renderMarkdown(note.body)
+          ) : displayBody.trim() ? (
+            renderMarkdown(displayBody)
           ) : (
             <p className="note-preview-empty">내용이 없습니다.</p>
           )}
