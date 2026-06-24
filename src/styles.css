@@ -3907,7 +3907,7 @@ textarea:focus-visible,
 .note-toc-count { font-size: 11px; color: var(--ink-faint); }
 .note-toc-list {
   display: flex; flex-direction: column; gap: 1px;
-  margin: 0 8px 6px; padding: 4px; max-height: 40vh; overflow-y: auto;
+  margin: 0 8px 6px; padding: 4px;
   background: var(--canvas-soft); border: 1px solid var(--hairline); border-radius: var(--r-md);
 }
 .note-toc-item {
@@ -4256,7 +4256,7 @@ textarea:focus-visible,
 }
 .note-link-btn .ic { width: 14px; height: 14px; }
 
-/* ── "정보" toggle + accordion (connections + backlinks) ─────────────────────
+/* ── "개요" toggle + accordion (목차 · 노드 연결 · 백링크) ──────────────────
    Collapsed by default; the count badge signals there's something to see. */
 .note-info-btn {
   flex: none;
@@ -4295,6 +4295,10 @@ textarea:focus-visible,
 }
 .note-info {
   flex: none;
+  /* Cap height so the editor always has room: scrolls internally rather than
+     pushing .note-rich to zero. Single scroll container — no nested scrolling. */
+  max-height: 50vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -4304,11 +4308,20 @@ textarea:focus-visible,
 }
 .note-info-sec { display: flex; flex-direction: column; gap: 7px; }
 .note-info-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--ink-faint);
   text-transform: none;
+}
+.note-info-label-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  opacity: 0.7;
 }
 .note-backlinks { display: flex; flex-wrap: wrap; gap: 6px; }
 .note-backlink {

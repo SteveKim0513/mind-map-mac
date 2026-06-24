@@ -198,15 +198,15 @@ function NotePaneBody() {
             사이드바에 보이기
           </button>
         )}
-        {/* "정보": 목차 + 연결 + 백링크 for this note (collapsed by default) */}
+        {/* 개요: 목차 + 연결 + 백링크 for this note (collapsed by default) */}
         {metaCount > 0 && (
           <button
             className={`note-info-btn${infoOpen ? ' open' : ''}`}
-            title="이 노트의 목차·연결·백링크"
+            title={`개요 — 목차${tocCount ? ` ${tocCount}개` : ''}${nodeLinkCount ? ` · 노드 ${nodeLinkCount}개` : ''}${backlinks.length ? ` · 백링크 ${backlinks.length}개` : ''}`}
             onClick={() => setInfoOpen((o) => !o)}
           >
             <Icon name={infoOpen ? 'chevronDown' : 'chevronRight'} />
-            정보
+            개요
             <span className="note-info-count">{metaCount}</span>
           </button>
         )}
@@ -223,7 +223,7 @@ function NotePaneBody() {
         <div className="note-info">
           {tocCount > 0 && (
             <div className="note-info-sec">
-              <div className="note-info-label">목차</div>
+              <div className="note-info-label">목차 <span className="note-info-label-count">{tocCount}</span></div>
               <div className="note-toc-list">
                 {headings.map((h, i) => (
                   <button
@@ -239,7 +239,7 @@ function NotePaneBody() {
           )}
           {nodeLinkCount > 0 && (
             <div className="note-info-sec">
-              <div className="note-info-label">연결된 노드</div>
+              <div className="note-info-label">노드 연결 <span className="note-info-label-count">{nodeLinkCount}</span></div>
               <div className="note-links">
                 {note.links.map((l) => (
                   <span key={`${l.mapId}:${l.nodeId}`} className="note-link-chip">
@@ -257,7 +257,7 @@ function NotePaneBody() {
           )}
           {backlinks.length > 0 && (
             <div className="note-info-sec">
-              <div className="note-info-label">백링크 · 이 노트를 참조하는 노트</div>
+              <div className="note-info-label">백링크 <span className="note-info-label-count">{backlinks.length}</span></div>
               <div className="note-backlinks">
                 {backlinks.map((m) => (
                   <button
