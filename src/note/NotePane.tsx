@@ -153,7 +153,10 @@ function NotePaneBody() {
     if (isSession || !filePath || renaming.current) return;
     const base = (filePath.split('/').pop() ?? '').replace(/\.md$/, '');
     const wanted = fileNameFromTitle(note.title);
-    if (!wanted || wanted === base) return;
+    // Skip if identical, OR if the current filename is just a longer version of
+    // the wanted name (e.g. a file imported with a >60-char name whose first 60
+    // chars already match — renaming would create a collision with the truncated copy).
+    if (!wanted || wanted === base || base.startsWith(wanted)) return;
     const t = setTimeout(() => {
       renaming.current = true;
       const oldTitle = prevTitle.current;

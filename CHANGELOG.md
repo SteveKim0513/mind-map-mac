@@ -4,6 +4,11 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.7.17] - 2026-06-24
+
+### 버그 수정
+- **긴 제목 노트 자동 이름변경 충돌** — `fileNameFromTitle` 60자 한도가 과거 50자에서 변경된 이후, 50자 이름으로 저장된 기존 파일을 열면 `base(50자) ≠ wanted(60자)`가 돼 auto-rename이 실행되고 60자 타겟 파일이 이미 존재할 경우 ` 2.md` 중복이 생성됨. NotePane rename guard에 `base.startsWith(wanted)` 조건 추가 — 현재 파일명이 wanted의 접두사 연장(긴 버전)이면 rename 생략.
+
 ## [0.7.16] - 2026-06-24
 
 ### 개선
