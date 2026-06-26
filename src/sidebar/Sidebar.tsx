@@ -171,12 +171,25 @@ export function Sidebar({
     const note: NoteDoc = { id: newId(), title: title || '링크 노트', body, links: [] };
     const fileName = fileNameFromTitle(title || '링크 노트') ?? '링크 노트';
     const dir = targetDir();
-    const path = await window.api.createFile(dir, fileName, serializeNote(note), '.md');
+
+    // 같은 이름 파일이 이미 있으면 기존 노트로 이동 (중복 생성 방지)
+    const existingPath = `${dir}/${fileName}.md`;
+    let notePath: string;
+    try {
+      await window.api.readFile(existingPath);
+      // 파일이 있으면 기존 노트로 이동
+      notePath = existingPath;
+      useUi.getState().toast(`"${fileName}" 노트가 이미 있습니다`);
+    } catch {
+      // 없으면 새로 생성
+      notePath = await window.api.createFile(dir, fileName, serializeNote(note), '.md');
+      window.api?.log?.('info', 'web', 'imported url → note');
+    }
+
     if (dir !== root) setExpanded(dir, true);
     await refresh();
-    setSelected({ path, type: 'file' });
-    onOpenFile(path);
-    window.api?.log?.('info', 'web', 'imported url → note');
+    setSelected({ path: notePath, type: 'file' });
+    onOpenFile(notePath);
     setUrlImport(null);
     } finally {
       importingRef.current = false;
@@ -220,6 +233,18 @@ export function Sidebar({
           await window.api.save(node.path, serializeNote({ ...note, title: trimmed }));
         } catch { /* ignore — fall through to a plain rename */ }
       }
+      // 충돌 감지: 같은 이름 파일이 있으면 에러 표시
+      const targetFileName = `${fileNameFromTitle(trimmed) ?? trimmed}.md`;
+      const dir = node.path.substring(0, node.path.lastIndexOf('/'));
+      const targetPath = `${dir}/${targetFileName}`;
+      if (targetPath.toLowerCase() !== node.path.toLowerCase()) {
+        try {
+          await window.api.readFile(targetPath);
+          // 파일이 이미 있음 → 에러
+          useUi.getState().toastError(`"${trimmed}" 이름의 파일이 이미 있습니다`);
+          return;
+        } catch { /* 없으면 진행 */ }
+      }
       const newPath = await window.api.rename(node.path, `${fileNameFromTitle(trimmed) ?? trimmed}.md`);
       await refresh();
       // keep note↔note links pointing here: [[oldTitle]] → [[trimmed]] everywhere
@@ -231,6 +256,16 @@ export function Sidebar({
 
     // maps + folders: rename the file/folder directly
     const newName = node.type === 'file' ? `${trimmed}.mind` : trimmed;
+    // 충돌 감지
+    const dirPath = node.path.substring(0, node.path.lastIndexOf('/'));
+    const targetPath = `${dirPath}/${newName}`;
+    if (targetPath.toLowerCase() !== node.path.toLowerCase()) {
+      try {
+        await window.api.readFile(targetPath);
+        useUi.getState().toastError(`"${trimmed}" 이름의 파일이 이미 있습니다`);
+        return;
+      } catch { /* 없으면 진행 */ }
+    }
     const newPath = await window.api.rename(node.path, newName);
     await refresh();
     onRenamed(node.path, newPath);

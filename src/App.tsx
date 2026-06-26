@@ -110,7 +110,7 @@ export default function App() {
     });
   }, []);
 
-  // ⌘P quick-open · ⌘K command palette (key code → layout-independent)
+  // ⌘P quick-open · ⌘K command palette · ⌘W close tab (key code → layout-independent)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -127,6 +127,10 @@ export default function App() {
       } else if (e.code === 'Comma') {
         e.preventDefault();
         useUi.getState().openSettings(); // ⌘, — settings
+      } else if (e.code === 'KeyW') {
+        e.preventDefault();
+        const active = useSession.getState().activeTab();
+        if (active) useSession.getState().closeTab(active.id);
       }
     };
     window.addEventListener('keydown', onKey);

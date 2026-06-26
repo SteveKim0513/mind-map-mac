@@ -4,6 +4,15 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.7.19] - 2026-06-26
+
+### 신규
+- **⌘W 탭 닫기 단축키** — App.tsx keydown 핸들러에 추가. `activeTab()` → `closeTab()`.
+
+### 개선
+- **URL import 중복 방지** — `createFile` 전 `readFile`로 존재 확인; 있으면 기존 노트로 이동 + toast.
+- **이름변경 충돌 감지** — 노트/맵/폴더 rename 전 대상 경로 존재 확인; 충돌 시 `toastError` + 조기 return (기존 silent uniquePath dedup 대체).
+
 ## [0.7.18] - 2026-06-26
 
 ### 버그 수정
