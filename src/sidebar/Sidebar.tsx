@@ -169,8 +169,7 @@ export function Sidebar({
       `\n---\n\n` +
       (markdown || '_본문을 가져오지 못했습니다. 원본 링크를 참고하세요._');
     const note: NoteDoc = { id: newId(), title: title || '링크 노트', body, links: [] };
-    const fileName =
-      (title || '링크 노트').replace(/[\\/:*?"<>|\n\r]+/g, ' ').trim().slice(0, 60) || '링크 노트';
+    const fileName = fileNameFromTitle(title || '링크 노트') ?? '링크 노트';
     const dir = targetDir();
     const path = await window.api.createFile(dir, fileName, serializeNote(note), '.md');
     if (dir !== root) setExpanded(dir, true);

@@ -7,7 +7,7 @@ interface Props {
   onClose: () => void;
 }
 
-/** Small modal: paste a URL → "URL → note" import. Prefills from the clipboard. */
+/** Small modal: paste a URL → "URL → note" import. Opens empty; user pastes the URL. */
 export function UrlImportModal({ busy, error, onSubmit, onClose }: Props) {
   const [url, setUrl] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
