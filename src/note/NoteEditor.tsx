@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
-import { Extension } from '@tiptap/core';
+import { sinkListItem, liftListItem } from 'prosemirror-schema-list';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -265,36 +265,6 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
       Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
       WikiLink,
       DragHandle,
-      Extension.create({
-        name: 'listTabKeymap',
-        priority: 200,
-        addKeyboardShortcuts() {
-          return {
-            Tab: () => {
-              const { $from } = this.editor.state.selection;
-              for (let d = $from.depth; d > 0; d--) {
-                const name = $from.node(d).type.name;
-                if (name === 'listItem' || name === 'taskItem') {
-                  this.editor.chain().sinkListItem(name).run();
-                  return true;
-                }
-              }
-              return false;
-            },
-            'Shift-Tab': () => {
-              const { $from } = this.editor.state.selection;
-              for (let d = $from.depth; d > 0; d--) {
-                const name = $from.node(d).type.name;
-                if (name === 'listItem' || name === 'taskItem') {
-                  this.editor.chain().liftListItem(name).run();
-                  return true;
-                }
-              }
-              return false;
-            },
-          };
-        },
-      }),
     ],
     content: body,
     editorProps: {
@@ -360,21 +330,27 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
           return false;
         }
         const s = m.current;
-        if (!s.open) return false;
-        if (event.key === 'ArrowDown') {
-          setActive((s.active + 1) % s.items.length);
-          return true;
+        if (s.open) {
+          if (event.key === 'ArrowDown') { setActive((s.active + 1) % s.items.length); return true; }
+          if (event.key === 'ArrowUp') { setActive((s.active - 1 + s.items.length) % s.items.length); return true; }
+          if (event.key === 'Enter' || event.key === 'Tab') { pick(s.active); return true; }
+          if (event.key === 'Escape') { close(); return true; }
+          return false;
         }
-        if (event.key === 'ArrowUp') {
-          setActive((s.active - 1 + s.items.length) % s.items.length);
-          return true;
-        }
-        if (event.key === 'Enter' || event.key === 'Tab') {
-          pick(s.active);
-          return true;
-        }
-        if (event.key === 'Escape') {
-          close();
+        // Tab/Shift-Tab: always consume to prevent browser focus navigation to toolbar.
+        // In a list item: indent/dedent. Elsewhere: swallow silently.
+        if (event.key === 'Tab') {
+          event.preventDefault();
+          const { state } = _view;
+          const { $from } = state.selection;
+          for (let d = $from.depth; d > 0; d--) {
+            const nodeType = $from.node(d).type;
+            if (nodeType.name === 'listItem' || nodeType.name === 'taskItem') {
+              const cmd = event.shiftKey ? liftListItem(nodeType) : sinkListItem(nodeType);
+              cmd(state, _view.dispatch);
+              break;
+            }
+          }
           return true;
         }
         return false;
