@@ -79,6 +79,39 @@ export function Sidebar({
     setMarked(new Set());
   };
 
+  const moveMarkedInto = async (destDir: string) => {
+    const paths = [...marked].filter((p) => !isLocked(p));
+    if (!paths.length) return;
+    const sess = useSession.getState();
+    for (const p of paths) {
+      sess.beginDelete(p);
+      await sess.flushSaves(p);
+    }
+    const moved: string[] = [];
+    const failed: string[] = [];
+    for (const p of paths) {
+      try {
+        const newPath = await window.api.move(p, destDir);
+        if (newPath) {
+          onRenamed(p, newPath);
+          moved.push(p);
+        }
+      } catch {
+        failed.push(p);
+      } finally {
+        sess.endDelete(p);
+      }
+    }
+    setMarked(new Set());
+    if (destDir !== root) setExpanded(destDir, true);
+    await refresh();
+    if (failed.length) {
+      useUi.getState().toastError(`${failed.length}개 파일을 이동할 수 없습니다.`);
+    } else {
+      useUi.getState().toast(`${moved.length}개 항목을 이동했습니다.`);
+    }
+  };
+
   const deleteMarked = async () => {
     const paths = [...marked];
     setMarked(new Set());
@@ -391,7 +424,11 @@ export function Sidebar({
             draggable={!renaming && !isLocked(node.path)}
             onDragStart={(e) => {
               e.dataTransfer.effectAllowed = 'move';
-              e.dataTransfer.setData('text/plain', node.path);
+              const dragPaths = marked.size > 1 && marked.has(node.path)
+                ? [...marked]
+                : [node.path];
+              e.dataTransfer.setData('text/plain', dragPaths[0]);
+              e.dataTransfer.setData('text/x-mindmap-paths', JSON.stringify(dragPaths));
               setDragging(node.path);
             }}
             onDragEnd={() => {
@@ -413,6 +450,14 @@ export function Sidebar({
                 ? (e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    const raw = e.dataTransfer.getData('text/x-mindmap-paths');
+                    if (raw) {
+                      const paths = JSON.parse(raw) as string[];
+                      if (paths.length > 1) {
+                        void moveMarkedInto(node.path);
+                        return;
+                      }
+                    }
                     const src = e.dataTransfer.getData('text/plain');
                     if (src) void moveInto(src, node.path);
                   }
@@ -548,6 +593,14 @@ export function Sidebar({
         }}
         onDrop={(e) => {
           e.preventDefault();
+          const raw = e.dataTransfer.getData('text/x-mindmap-paths');
+          if (raw) {
+            const paths = JSON.parse(raw) as string[];
+            if (paths.length > 1) {
+              void moveMarkedInto(root);
+              return;
+            }
+          }
           const src = e.dataTransfer.getData('text/plain');
           if (src) void moveInto(src, root);
         }}

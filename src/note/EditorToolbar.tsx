@@ -154,9 +154,18 @@ export function EditorToolbar({ editor, onInsertImages }: EditorToolbarProps) {
   return (
     <div className="md-toolbar">
       <div className="md-tb-group">
-        <Btn on={active.h1} title="큰 제목" cls="md-tb-type" onClick={() => chain().toggleHeading({ level: 1 }).run()}>{H(1)}</Btn>
-        <Btn on={active.h2} title="중간 제목" cls="md-tb-type" onClick={() => chain().toggleHeading({ level: 2 }).run()}>{H(2)}</Btn>
-        <Btn on={active.h3} title="작은 제목" cls="md-tb-type" onClick={() => chain().toggleHeading({ level: 3 }).run()}>{H(3)}</Btn>
+        <Btn on={active.h1} title="큰 제목" cls="md-tb-type" onClick={() => {
+          if (active.h1) { chain().toggleHeading({ level: 1 }).run(); }
+          else { chain().clearNodes().toggleHeading({ level: 1 }).run(); }
+        }}>{H(1)}</Btn>
+        <Btn on={active.h2} title="중간 제목" cls="md-tb-type" onClick={() => {
+          if (active.h2) { chain().toggleHeading({ level: 2 }).run(); }
+          else { chain().clearNodes().toggleHeading({ level: 2 }).run(); }
+        }}>{H(2)}</Btn>
+        <Btn on={active.h3} title="작은 제목" cls="md-tb-type" onClick={() => {
+          if (active.h3) { chain().toggleHeading({ level: 3 }).run(); }
+          else { chain().clearNodes().toggleHeading({ level: 3 }).run(); }
+        }}>{H(3)}</Btn>
       </div>
       <span className="md-tb-sep" aria-hidden="true" />
       <div className="md-tb-group">
@@ -166,11 +175,26 @@ export function EditorToolbar({ editor, onInsertImages }: EditorToolbarProps) {
       </div>
       <span className="md-tb-sep" aria-hidden="true" />
       <div className="md-tb-group">
-        <Btn on={active.bullet} title="글머리 목록" onClick={() => chain().toggleBulletList().run()}><Icon name="listBullet" /></Btn>
-        <Btn on={active.ordered} title="번호 목록" onClick={() => chain().toggleOrderedList().run()}><Icon name="listOrdered" /></Btn>
-        <Btn on={active.task} title="체크리스트" onClick={() => chain().toggleTaskList().run()}><Icon name="checklist" /></Btn>
-        <Btn on={active.quote} title="인용" onClick={() => chain().toggleBlockquote().run()}><Icon name="quote" /></Btn>
-        <Btn on={active.codeBlock} title="코드블록" cls="md-tb-type mdb-code" onClick={() => chain().toggleCodeBlock().run()}>{'{ }'}</Btn>
+        <Btn on={active.bullet} title="글머리 목록" onClick={() => {
+          if (active.bullet) { chain().toggleBulletList().run(); }
+          else { chain().clearNodes().toggleBulletList().run(); }
+        }}><Icon name="listBullet" /></Btn>
+        <Btn on={active.ordered} title="번호 목록" onClick={() => {
+          if (active.ordered) { chain().toggleOrderedList().run(); }
+          else { chain().clearNodes().toggleOrderedList().run(); }
+        }}><Icon name="listOrdered" /></Btn>
+        <Btn on={active.task} title="체크리스트" onClick={() => {
+          if (active.task) { chain().toggleTaskList().run(); }
+          else { chain().clearNodes().toggleTaskList().run(); }
+        }}><Icon name="checklist" /></Btn>
+        <Btn on={active.quote} title="인용" onClick={() => {
+          if (active.quote) { chain().toggleBlockquote().run(); }
+          else { chain().clearNodes().toggleBlockquote().run(); }
+        }}><Icon name="quote" /></Btn>
+        <Btn on={active.codeBlock} title="코드블록" cls="md-tb-type mdb-code" onClick={() => {
+          if (active.codeBlock) { chain().toggleCodeBlock().run(); }
+          else { chain().clearNodes().toggleCodeBlock().run(); }
+        }}>{'{ }'}</Btn>
       </div>
       <span className="md-tb-sep" aria-hidden="true" />
       <div className="md-tb-group">
