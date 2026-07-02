@@ -17,6 +17,7 @@ import { SlashMenu, type SlashItem } from './SlashMenu';
 import { fileToImageData, imageFilesFrom } from './imageInsert';
 import { SESSION_NOTE_PLACEHOLDER } from '../focus/sessionNote';
 import { WikiLink } from './wikiLink';
+import { DragHandle } from './DragHandle';
 import { Icon } from '../ui/Icon';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
@@ -263,6 +264,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
       TableCell,
       Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
       WikiLink,
+      DragHandle,
       Extension.create({
         name: 'listTabKeymap',
         priority: 200,

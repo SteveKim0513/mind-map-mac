@@ -5253,3 +5253,34 @@ textarea:focus-visible,
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
   cursor: default;
 }
+
+/* ── Note editor block drag handle ─────────────────────────────────────────── */
+.drag-handle {
+  position: absolute;
+  left: -24px;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: #aaa;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.1s;
+  user-select: none;
+}
+.drag-handle:hover { color: #555; }
+.ProseMirror-focused .drag-handle,
+.ProseMirror:hover .drag-handle { opacity: 1; }
+.drop-indicator {
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: #5b9cf6;
+  pointer-events: none;
+  margin-left: -24px;
+}
+/* Make sure .ProseMirror has position:relative for absolute children */
+.ProseMirror { position: relative; }
