@@ -35,6 +35,12 @@ jobs:
       - name: Gate (typecheck + unit test)
         run: npm run typecheck && npm test
 
+      # E2E: 빌드 후 Playwright로 핵심 사용자 여정 검증.
+      # UI가 깨진 채로 배포되는 상황을 차단한다.
+      - name: E2E tests
+        run: npm run test:e2e
+        timeout-minutes: 10
+
       # Build → sign → notarize → VERIFY. `npm run dist` ends with
       # scripts/verify-release.mjs, which fails the job if the artifact is broken
       # (productName missing, version drift, unsigned, feed sha mismatch).

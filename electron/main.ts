@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -733,4 +733,42 @@ ipcMain.handle('web:fetch', async (_e, rawUrl: string) => {
   } finally {
     clearTimeout(timer);
   }
+});
+
+// ─── AI API key (safeStorage — OS keychain encryption) ───────────────────────
+const AI_KEY_PATH = path.join(app.getPath('userData'), 'ai-key.bin');
+
+function maskKey(key: string): string {
+  const prefix = 'sk-ant-';
+  const tail = key.slice(-4);
+  const dots = '••••••••';
+  return key.startsWith(prefix) ? `${prefix}${dots}${tail}` : `••••${tail}`;
+}
+
+ipcMain.handle('ai:setKey', async (_e, key: string) => {
+  const buf = safeStorage.encryptString(key);
+  await fs.writeFile(AI_KEY_PATH, buf);
+});
+
+ipcMain.handle('ai:hasKey', async () => {
+  try { await fs.access(AI_KEY_PATH); return true; } catch { return false; }
+});
+
+ipcMain.handle('ai:getMasked', async () => {
+  try {
+    const buf = await fs.readFile(AI_KEY_PATH);
+    const key = safeStorage.decryptString(buf);
+    return maskKey(key);
+  } catch { return null; }
+});
+
+ipcMain.handle('ai:getKey', async () => {
+  try {
+    const buf = await fs.readFile(AI_KEY_PATH);
+    return safeStorage.decryptString(buf);
+  } catch { return null; }
+});
+
+ipcMain.handle('ai:clearKey', async () => {
+  try { await fs.unlink(AI_KEY_PATH); } catch { /* already gone */ }
 });

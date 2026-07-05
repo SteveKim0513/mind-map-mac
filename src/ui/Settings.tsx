@@ -1,10 +1,63 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { CURRENT_VERSION } from './changelog';
 import { Icon } from './Icon';
 
 const basename = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+
+function useAiKey() {
+  const [masked, setMasked] = useState<string | null>(null);
+  const [mode, setMode] = useState<'view' | 'edit'>('view');
+  const [input, setInput] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const toast = useUi((s) => s.toast);
+
+  useEffect(() => {
+    window.api.ai.getMasked().then((m) => {
+      setMasked(m);
+      setMode(m ? 'view' : 'edit');
+    });
+  }, []);
+
+  const save = async () => {
+    const key = input.trim();
+    if (!key.startsWith('sk-ant-') || key.length < 20) {
+      setError('sk-ant- 로 시작하는 유효한 키를 입력해주세요.');
+      return;
+    }
+    await window.api.ai.setKey(key);
+    const m = await window.api.ai.getMasked();
+    setMasked(m);
+    setMode('view');
+    setInput('');
+    setError(null);
+    toast('AI 기능이 활성화됐습니다.');
+  };
+
+  const clear = async () => {
+    await window.api.ai.clearKey();
+    setMasked(null);
+    setMode('edit');
+    setInput('');
+    setError(null);
+    toast('AI 기능을 비활성화했습니다.');
+  };
+
+  const startEdit = () => {
+    setInput('');
+    setError(null);
+    setMode('edit');
+  };
+
+  const cancelEdit = () => {
+    setError(null);
+    setInput('');
+    setMode('view');
+  };
+
+  return { masked, mode, input, setInput, error, save, clear, startEdit, cancelEdit };
+}
 
 /** Settings — real options only (theme, text size, workspace, version). Usage and
  *  shortcuts live behind "사용 안내" → the Manual. Opened from the sidebar gear / ⌘,. */
@@ -14,12 +67,23 @@ export function Settings() {
   const fontScale = useUi((s) => s.fontScale);
   const root = useWorkspace((s) => s.root);
   const choose = useWorkspace((s) => s.choose);
+  const ai = useAiKey();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (ai.mode === 'edit' && ai.masked) { ai.cancelEdit(); e.stopPropagation(); }
+        else close();
+      }
+    };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [close]);
+  }, [close, ai]);
+
+  useEffect(() => {
+    if (ai.mode === 'edit') inputRef.current?.focus();
+  }, [ai.mode]);
 
   return (
     <div className="wh-backdrop" onMouseDown={close}>
@@ -66,6 +130,55 @@ export function Settings() {
               <span className="set-folder-name">{root ? basename(root) : '폴더 선택'}</span>
               <span className="set-folder-act">변경</span>
             </button>
+          </div>
+
+          <div className="set-sep" />
+
+          {/* AI 기능 섹션 */}
+          <div className="set-ai-section">
+            <div className="set-ai-header">
+              <span className="set-label">AI 기능</span>
+              {ai.masked && (
+                <span className="set-ai-badge">
+                  <span className="set-ai-dot" />
+                  활성
+                </span>
+              )}
+            </div>
+
+            {ai.mode === 'view' && ai.masked ? (
+              <div className="set-ai-view">
+                <span className="set-ai-masked">{ai.masked}</span>
+                <div className="set-ai-actions">
+                  <button className="set-ai-btn-ghost" onClick={ai.startEdit}>수정</button>
+                  <button className="set-ai-btn-ghost danger" onClick={ai.clear}>삭제</button>
+                </div>
+              </div>
+            ) : (
+              <div className="set-ai-edit">
+                <div className="set-ai-input-row">
+                  <input
+                    ref={inputRef}
+                    className={`set-ai-input${ai.error ? ' error' : ''}`}
+                    type="password"
+                    placeholder="sk-ant-api03-…"
+                    value={ai.input}
+                    onChange={(e) => { ai.setInput(e.target.value); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void ai.save(); }}
+                  />
+                  <button className="set-ai-btn-primary" onClick={() => void ai.save()}>저장</button>
+                  {ai.masked && (
+                    <button className="set-ai-btn-ghost" onClick={ai.cancelEdit}>취소</button>
+                  )}
+                </div>
+                {ai.error && <p className="set-ai-error">{ai.error}</p>}
+                {!ai.masked && (
+                  <p className="set-ai-hint">
+                    키가 없으면 AI 기능이 비활성화됩니다. console.anthropic.com에서 발급하세요.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="set-sep" />

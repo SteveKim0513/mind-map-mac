@@ -137,6 +137,15 @@ const api = {
       ipcRenderer.off('update:status', handler);
     };
   },
+
+  // ── AI (Claude API key — stored in OS keychain via safeStorage) ──────────
+  ai: {
+    setKey: (key: string): Promise<void> => ipcRenderer.invoke('ai:setKey', key),
+    hasKey: (): Promise<boolean> => ipcRenderer.invoke('ai:hasKey'),
+    getMasked: (): Promise<string | null> => ipcRenderer.invoke('ai:getMasked'),
+    getKey: (): Promise<string | null> => ipcRenderer.invoke('ai:getKey'),
+    clearKey: (): Promise<void> => ipcRenderer.invoke('ai:clearKey'),
+  },
 };
 
 contextBridge.exposeInMainWorld('api', api);
