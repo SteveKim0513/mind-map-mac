@@ -12,5 +12,7 @@ node_modules/
 /test-results/
 /etc/
 
-# Local agent/editor config
-.claude/
+# Local Claude Code personal overrides (team config is tracked)
+.claude/settings.local.json
+.claude/session-state.md
+CLAUDE.local.md

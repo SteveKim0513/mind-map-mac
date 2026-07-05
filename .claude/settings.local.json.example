@@ -1,0 +1,8 @@
+{
+  "_comment": "이 파일을 .claude/settings.local.json으로 복사하고 개인 설정을 추가하세요. gitignore됩니다.",
+  "permissions": {
+    "allow": [
+      "Bash(make dev*)"
+    ]
+  }
+}
