@@ -7,18 +7,69 @@
 
 ## 절차
 
-1. **버전 결정** — `package.json`의 `version` 갱신 (semver: 기능 추가 = minor, 버그만 = patch)
-2. **QA 1회전** — [QA-CHECKLIST.md](QA-CHECKLIST.md)를 처음부터 끝까지. 실패 항목은 고치거나, 알려진 이슈로 릴리즈 노트에 명시
-3. **릴리즈 노트 작성** — `release/notes/vX.Y.Z.md` (아래 형식) **+ 두 changelog 최상단에 `## [X.Y.Z] - YYYY-MM-DD` 항목 추가**:
-   - **`CHANGELOG.user.md`** (앱에 노출) — **고객 언어로 간결하게**, 효용 중심. **앱의 "업데이트 내역" + "새로운 점" 카드**가 이 파일을 번들해 보여주므로, 최상단 버전이 빌드 버전과 일치해야 한다(`CURRENT_VERSION`이 여기서 나옴).
-   - **`CHANGELOG.md`** (개발용) — 기술적 상세(회귀·내부 변경 등). 저장소 기록용, 앱엔 안 보임.
-4. **태그** — `git tag vX.Y.Z && git push --tags`
-5. **패키징** — `APPLE_KEYCHAIN_PROFILE=mindmap-notary npm run dist` → dmg + zip + `latest-mac.yml` 산출 (서명·공증). 새 기기에서 설치 후 스모크 테스트
-6. **퍼블리시 (자동 업데이트 필수)** — dmg·zip·blockmap·`latest-mac.yml`을 GitHub Release(태그 vX.Y.Z)에 업로드. 구버전 앱이 이 피드를 보고 업데이트한다.
-   - electron-builder로 한 번에: `APPLE_KEYCHAIN_PROFILE=mindmap-notary GH_TOKEN=<토큰> npm run dist -- --publish always`
-   - 또는 수동: `gh release create vX.Y.Z release/MindMap-*.dmg release/MindMap-*-mac.zip release/MindMap-*.blockmap release/latest-mac.yml -t vX.Y.Z -F docs/release/notes/vX.Y.Z.md`
-   - **`latest-mac.yml`을 빼먹으면 자동 업데이트가 동작하지 않는다** (앱이 이 파일로 최신 버전을 판단)
-7. **정리** — 압축 전 부산물 삭제: `rm -rf release/mac-arm64 release-dev/mac-arm64`. 안 지우면 Spotlight 검색에 설치본과 똑같은 "MindMap"이 하나 더 잡힌다
+### 표준 경로 (CI 자동 배포)
+
+```bash
+# 1) 변경사항 커밋 확인 (워킹트리 깨끗해야 함)
+git status --short
+
+# 2) 두 changelog에 최상단 항목 추가 (버전 일치 필수)
+#    CHANGELOG.user.md  — 고객 언어, 앱 "업데이트 내역"·"새로운 점" 출처
+#    CHANGELOG.md       — 개발용 상세
+
+# 3) 버전 범프 + 태그 (QA 완료 후 실행)
+make bump version=X.Y.Z
+#    → package.json 수정, git commit, git tag vX.Y.Z
+#    → main 브랜치 + origin 동기화 + 워킹트리 상태 자동 검증
+
+# 4) CI 트리거 (빌드·서명·공증·퍼블리시 자동)
+git push origin main --tags
+```
+
+**CI가 하는 일** (`.github/workflows/release.yml`):
+1. Gate: `npm run typecheck && npm test`
+2. E2E: `npm run test:e2e`
+3. 서명 인증서 확인: `MAC_CSC_LINK` 시크릿이 비어있으면 **즉시 명확한 오류** + 해결 방법 안내
+4. 빌드·서명·공증·검증: `npm run dist`
+5. 퍼블리시: `gh release create/upload`
+
+---
+
+### CI 실패 시: 로컬 직접 배포
+
+CI에서 서명 시크릿 문제로 막혔을 때:
+
+```bash
+# 방법 A: CI 시크릿 갱신 후 재실행 (권장)
+node scripts/refresh-ci-secrets.mjs
+gh workflow run release.yml -R SteveKim0513/mind-map-mac
+
+# 방법 B: 이 Mac에서 직접 빌드·배포
+make release
+# → APPLE_KEYCHAIN_PROFILE=mindmap-notary npm run dist (로컬 키체인으로 서명·공증)
+# → node scripts/publish-release.mjs (SteveKim0513 계정으로 GitHub Release 업로드)
+```
+
+`make release` 전에 `make bump` + `git push origin main --tags`로 버전·태그를 먼저 올릴 것.
+
+---
+
+### QA
+
+[QA-CHECKLIST.md](QA-CHECKLIST.md) 처음부터 끝까지. 실패 항목은 고치거나, 알려진 이슈로 릴리즈 노트에 명시.
+
+### 릴리즈 노트
+
+- `docs/release/notes/vX.Y.Z.md` — `make bump` 실행 시 없으면 자동 생성 (템플릿 기반)
+- `CHANGELOG.user.md` 최상단 버전이 빌드 버전과 반드시 일치해야 한다 (`CURRENT_VERSION` 출처)
+- `CHANGELOG.md` — 개발용 상세
+
+### 정리
+
+배포 후 Spotlight 중복 방지:
+```bash
+rm -rf release/mac-arm64 release-dev/mac-arm64
+```
 
 ## 릴리즈 노트 형식 (`notes/vX.Y.Z.md`)
 

@@ -41,7 +41,8 @@ docs/                    → 아래 참조
 |---|---|
 | 새 기능 구현 | `ARCHITECTURE.md`, `docs/product/FEATURE-INVENTORY.md`, `docs/product/specs/` |
 | 버그 수정 | `ARCHITECTURE.md`, 관련 `src/` 모듈, `src/**/*.test.ts` |
-| 스타일·색상 변경 | `docs/design/COLOR-SYSTEM.md`, `src/theme/palette.ts` |
+| **UI·컴포넌트 변경** | **`docs/design/UI-DESIGN-PRINCIPLES.md` (필수)**, `docs/design/COLOR-SYSTEM.md`, `/design-ui` 스킬 사용 |
+| 스타일·색상 변경 | `docs/design/UI-DESIGN-PRINCIPLES.md`, `docs/design/COLOR-SYSTEM.md`, `src/theme/palette.ts` |
 | Reminders 동기화 | `docs/decisions/0002-reminder-osascript-serialization.md`, `src/sync/`, `electron/reminders.ts` |
 | 노트 시스템 | `docs/decisions/0003-notes-as-standalone-files.md`, `src/note/`, `src/io/noteFormat.ts` |
 | 릴리즈·배포 | `docs/release/DEPLOY-UPDATE-SPEC.md`, `docs/release/RELEASE-PROCESS.md` |

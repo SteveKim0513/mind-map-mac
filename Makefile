@@ -1,4 +1,4 @@
-.PHONY: setup dev build test typecheck verify verify-full dist harness-check e2e smoke bump
+.PHONY: setup dev build test typecheck verify verify-full dist harness-check e2e smoke bump release
 
 # Install dependencies
 setup:
@@ -28,9 +28,9 @@ verify:
 verify-full:
 	npm run typecheck && npm test && npm run build
 
-# Harness structure checks (architecture + doc integrity)
+# Harness structure checks (architecture + doc integrity + design)
 harness-check:
-	node scripts/harness/check-architecture.mjs && node scripts/harness/check-docs.mjs
+	node scripts/harness/check-architecture.mjs && node scripts/harness/check-docs.mjs && node scripts/harness/check-design.mjs
 
 # Full release build (build + sign + notarize + verify artifact)
 dist:
@@ -48,3 +48,10 @@ smoke:
 bump:
 	@[ "$(version)" ] || { echo "Usage: make bump version=X.Y.Z"; exit 1; }
 	node scripts/bump-version.mjs $(version)
+
+# 로컬 릴리즈: 빌드(서명·공증·검증) + GitHub Release 퍼블리시
+# CI가 서명 시크릿 문제로 실패할 때 이 Mac에서 직접 배포하는 경로.
+# gh CLI가 SteveKim0513 계정으로 활성화돼 있어야 한다.
+release:
+	APPLE_KEYCHAIN_PROFILE=mindmap-notary npm run dist
+	node scripts/publish-release.mjs

@@ -138,13 +138,26 @@ const api = {
     };
   },
 
-  // ── AI (Claude API key — stored in OS keychain via safeStorage) ──────────
+  // ── AI (API keys stored via safeStorage — OS keychain encryption) ─────────
   ai: {
-    setKey: (key: string): Promise<void> => ipcRenderer.invoke('ai:setKey', key),
-    hasKey: (): Promise<boolean> => ipcRenderer.invoke('ai:hasKey'),
-    getMasked: (): Promise<string | null> => ipcRenderer.invoke('ai:getMasked'),
-    getKey: (): Promise<string | null> => ipcRenderer.invoke('ai:getKey'),
-    clearKey: (): Promise<void> => ipcRenderer.invoke('ai:clearKey'),
+    // Claude (sk-ant-api03-…)
+    setKey:          (key: string): Promise<void>             => ipcRenderer.invoke('ai:setKey', key),
+    hasKey:          (): Promise<boolean>                     => ipcRenderer.invoke('ai:hasKey'),
+    getMasked:       (): Promise<string | null>               => ipcRenderer.invoke('ai:getMasked'),
+    getKey:          (): Promise<string | null>               => ipcRenderer.invoke('ai:getKey'),
+    clearKey:        (): Promise<void>                        => ipcRenderer.invoke('ai:clearKey'),
+    // OpenAI (sk-proj-… / sk-…)
+    setOpenAiKey:    (key: string): Promise<void>             => ipcRenderer.invoke('ai:openai:setKey', key),
+    getOpenAiMasked: (): Promise<string | null>               => ipcRenderer.invoke('ai:openai:getMasked'),
+    getOpenAiKey:    (): Promise<string | null>               => ipcRenderer.invoke('ai:openai:getKey'),
+    clearOpenAiKey:  (): Promise<void>                        => ipcRenderer.invoke('ai:openai:clearKey'),
+    // Active provider selection
+    getActive:       (): Promise<'claude' | 'openai' | null>  => ipcRenderer.invoke('ai:getActive'),
+    setActive:       (p: 'claude' | 'openai'): Promise<void>  => ipcRenderer.invoke('ai:setActive', p),
+  },
+  // ── Shell ──────────────────────────────────────────────────────────────────
+  shell: {
+    openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
   },
 };
 

@@ -772,3 +772,56 @@ ipcMain.handle('ai:getKey', async () => {
 ipcMain.handle('ai:clearKey', async () => {
   try { await fs.unlink(AI_KEY_PATH); } catch { /* already gone */ }
 });
+
+// ─── OpenAI API key ──────────────────────────────────────────────────────────
+const OPENAI_KEY_PATH = path.join(app.getPath('userData'), 'openai-key.bin');
+
+function maskOpenAiKey(key: string): string {
+  const tail = key.slice(-4);
+  if (key.startsWith('sk-proj-')) return `sk-proj-••••••••${tail}`;
+  return `sk-••••••••${tail}`;
+}
+
+ipcMain.handle('ai:openai:setKey', async (_e, key: string) => {
+  const buf = safeStorage.encryptString(key);
+  await fs.writeFile(OPENAI_KEY_PATH, buf);
+});
+
+ipcMain.handle('ai:openai:getMasked', async () => {
+  try {
+    const buf = await fs.readFile(OPENAI_KEY_PATH);
+    return maskOpenAiKey(safeStorage.decryptString(buf));
+  } catch { return null; }
+});
+
+ipcMain.handle('ai:openai:getKey', async () => {
+  try {
+    const buf = await fs.readFile(OPENAI_KEY_PATH);
+    return safeStorage.decryptString(buf);
+  } catch { return null; }
+});
+
+ipcMain.handle('ai:openai:clearKey', async () => {
+  try { await fs.unlink(OPENAI_KEY_PATH); } catch { /* already gone */ }
+});
+
+// ─── Active AI provider ────────────────────────────────────────────────────
+const ACTIVE_PROVIDER_PATH = path.join(app.getPath('userData'), 'ai-active.json');
+
+ipcMain.handle('ai:getActive', async () => {
+  try {
+    const data = JSON.parse(await fs.readFile(ACTIVE_PROVIDER_PATH, 'utf-8')) as { provider: string };
+    if (data.provider === 'claude' || data.provider === 'openai') return data.provider as 'claude' | 'openai';
+    return null;
+  } catch { return null; }
+});
+
+ipcMain.handle('ai:setActive', async (_e, provider: 'claude' | 'openai') => {
+  await fs.writeFile(ACTIVE_PROVIDER_PATH, JSON.stringify({ provider }));
+});
+
+// ─── Shell ────────────────────────────────────────────────────────────────
+ipcMain.handle('shell:openExternal', async (_e, url: string) => {
+  if (!url.startsWith('https://')) return;
+  await shell.openExternal(url);
+});

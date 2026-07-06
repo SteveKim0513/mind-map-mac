@@ -41,6 +41,21 @@ jobs:
         run: npm run test:e2e
         timeout-minutes: 10
 
+      # 서명 인증서 확인 — 없으면 즉시 명확한 에러 (electron-builder의 불명확한
+      # "not a file" 에러 대신 해결 방법을 안내).
+      # 인증서가 만료·갱신됐을 때: node scripts/refresh-ci-secrets.mjs 실행.
+      - name: Verify signing secrets
+        env:
+          CERT: ${{ secrets.MAC_CSC_LINK }}
+        run: |
+          if [ -z "$CERT" ]; then
+            echo "::error title=서명 인증서 없음::MAC_CSC_LINK GitHub Secret이 비어 있습니다."
+            echo "::error::해결: 이 Mac에서 'node scripts/refresh-ci-secrets.mjs' 를 실행해 시크릿을 갱신하세요."
+            echo "::error::또는 'make release' 로 로컬에서 직접 빌드·배포하세요."
+            exit 1
+          fi
+          echo "✓ 서명 인증서 확인 완료"
+
       # Build → sign → notarize → VERIFY. `npm run dist` ends with
       # scripts/verify-release.mjs, which fails the job if the artifact is broken
       # (productName missing, version drift, unsigned, feed sha mismatch).

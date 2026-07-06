@@ -43,7 +43,16 @@ electron/(main.ts) ← IPC → electron/preload.ts → window.api → src/
 - `.claude/rules/testing.md` — 테스트 작성 규칙
 - `.claude/rules/security.md` — 보안 경계 규칙
 - `.claude/rules/electron.md` — IPC·Electron 규칙
-- `.claude/rules/frontend.md` — React·Tiptap 규칙
+- `.claude/rules/frontend.md` — React·Tiptap 규칙 **(UI 작업 시 `/design-ui` 스킬 필수)**
+
+## Design
+
+UI·CSS 작업 시 **반드시** 먼저 읽는다:
+
+- `docs/design/UI-DESIGN-PRINCIPLES.md` — 핵심 디자인 원칙 (simple · powerful · intuitive)
+- `docs/design/COLOR-SYSTEM.md` — 색상 3계층 규칙
+
+**UI 변경 절차**: `/design-ui` 스킬 실행 → 원칙 확인 → 구현 → `make harness-check` → `make dev` 확인.
 
 ## Approval Boundaries
 

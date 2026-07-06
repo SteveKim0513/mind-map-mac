@@ -6,84 +6,132 @@ import { Icon } from './Icon';
 
 const basename = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 
-function useAiKey() {
-  const [masked, setMasked] = useState<string | null>(null);
-  const [mode, setMode] = useState<'view' | 'edit'>('view');
-  const [input, setInput] = useState('');
-  const [error, setError] = useState<string | null>(null);
+type Provider = 'claude' | 'openai';
+
+interface ProviderState {
+  masked: string | null;
+  mode: 'view' | 'edit';
+  input: string;
+  error: string | null;
+}
+
+const CLAUDE_KEY_URL = 'https://console.anthropic.com/settings/api-keys';
+const OPENAI_KEY_URL = 'https://platform.openai.com/api-keys';
+
+function useAiProviders() {
+  const [claude, setClaude] = useState<ProviderState>({ masked: null, mode: 'view', input: '', error: null });
+  const [openai, setOpenai] = useState<ProviderState>({ masked: null, mode: 'view', input: '', error: null });
+  const [active, setActiveState] = useState<Provider | null>(null);
   const toast = useUi((s) => s.toast);
 
   useEffect(() => {
-    window.api.ai.getMasked().then((m) => {
-      setMasked(m);
-      setMode(m ? 'view' : 'edit');
-    });
+    void (async () => {
+      const [cm, om, act] = await Promise.all([
+        window.api.ai.getMasked(),
+        window.api.ai.getOpenAiMasked(),
+        window.api.ai.getActive(),
+      ]);
+      setClaude((p) => ({ ...p, masked: cm }));
+      setOpenai((p) => ({ ...p, masked: om }));
+      if (act) setActiveState(act);
+      else if (cm && !om) setActiveState('claude');
+      else if (!cm && om) setActiveState('openai');
+    })();
   }, []);
 
-  const save = async () => {
-    const key = input.trim();
+  const saveClaude = async () => {
+    const key = claude.input.trim();
     if (!key.startsWith('sk-ant-') || key.length < 20) {
-      setError('sk-ant- 로 시작하는 유효한 키를 입력해주세요.');
+      setClaude((p) => ({ ...p, error: 'sk-ant- 로 시작하는 유효한 키를 입력해주세요.' }));
       return;
     }
     await window.api.ai.setKey(key);
-    const m = await window.api.ai.getMasked();
-    setMasked(m);
-    setMode('view');
-    setInput('');
-    setError(null);
-    toast('AI 기능이 활성화됐습니다.');
+    const masked = await window.api.ai.getMasked();
+    setClaude({ masked, mode: 'view', input: '', error: null });
+    if (!openai.masked) {
+      await window.api.ai.setActive('claude');
+      setActiveState('claude');
+    }
+    toast('Claude API 키가 저장됐습니다.');
   };
 
-  const clear = async () => {
+  const saveOpenai = async () => {
+    const key = openai.input.trim();
+    if (!key.startsWith('sk-') || key.length < 20) {
+      setOpenai((p) => ({ ...p, error: 'sk- 로 시작하는 유효한 키를 입력해주세요.' }));
+      return;
+    }
+    await window.api.ai.setOpenAiKey(key);
+    const masked = await window.api.ai.getOpenAiMasked();
+    setOpenai({ masked, mode: 'view', input: '', error: null });
+    if (!claude.masked) {
+      await window.api.ai.setActive('openai');
+      setActiveState('openai');
+    }
+    toast('OpenAI API 키가 저장됐습니다.');
+  };
+
+  const clearClaude = async () => {
     await window.api.ai.clearKey();
-    setMasked(null);
-    setMode('edit');
-    setInput('');
-    setError(null);
-    toast('AI 기능을 비활성화했습니다.');
+    const newActive = openai.masked ? 'openai' : null;
+    setClaude({ masked: null, mode: 'view', input: '', error: null });
+    setActiveState(newActive);
+    if (newActive) await window.api.ai.setActive(newActive);
+    toast('Claude API 키를 삭제했습니다.');
   };
 
-  const startEdit = () => {
-    setInput('');
-    setError(null);
-    setMode('edit');
+  const clearOpenai = async () => {
+    await window.api.ai.clearOpenAiKey();
+    const newActive = claude.masked ? 'claude' : null;
+    setOpenai({ masked: null, mode: 'view', input: '', error: null });
+    setActiveState(newActive);
+    if (newActive) await window.api.ai.setActive(newActive);
+    toast('OpenAI API 키를 삭제했습니다.');
   };
 
-  const cancelEdit = () => {
-    setError(null);
-    setInput('');
-    setMode('view');
+  const switchActive = async (provider: Provider) => {
+    await window.api.ai.setActive(provider);
+    setActiveState(provider);
   };
 
-  return { masked, mode, input, setInput, error, save, clear, startEdit, cancelEdit };
+  const editClaude = () => setClaude((p) => ({ ...p, mode: 'edit', input: '', error: null }));
+  const editOpenai = () => setOpenai((p) => ({ ...p, mode: 'edit', input: '', error: null }));
+  const cancelClaude = () => setClaude((p) => ({ ...p, mode: 'view', input: '', error: null }));
+  const cancelOpenai = () => setOpenai((p) => ({ ...p, mode: 'view', input: '', error: null }));
+
+  return {
+    claude, setClaude, saveClaude, clearClaude, editClaude, cancelClaude,
+    openai, setOpenai, saveOpenai, clearOpenai, editOpenai, cancelOpenai,
+    active, switchActive,
+  };
 }
 
-/** Settings — real options only (theme, text size, workspace, version). Usage and
- *  shortcuts live behind "사용 안내" → the Manual. Opened from the sidebar gear / ⌘,. */
 export function Settings() {
   const close = useUi((s) => s.closeSettings);
   const theme = useUi((s) => s.theme);
   const fontScale = useUi((s) => s.fontScale);
   const root = useWorkspace((s) => s.root);
   const choose = useWorkspace((s) => s.choose);
-  const ai = useAiKey();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const ai = useAiProviders();
+  const claudeRef = useRef<HTMLInputElement>(null);
+  const openaiRef = useRef<HTMLInputElement>(null);
+  const bothSet = !!(ai.claude.masked && ai.openai.masked);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (ai.mode === 'edit' && ai.masked) { ai.cancelEdit(); e.stopPropagation(); }
-        else close();
-      }
+      if (e.key !== 'Escape') return;
+      if (ai.claude.mode === 'edit' && ai.claude.masked) { ai.cancelClaude(); e.stopPropagation(); return; }
+      if (ai.openai.mode === 'edit' && ai.openai.masked) { ai.cancelOpenai(); e.stopPropagation(); return; }
+      close();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [close, ai]);
 
-  useEffect(() => {
-    if (ai.mode === 'edit') inputRef.current?.focus();
-  }, [ai.mode]);
+  useEffect(() => { if (ai.claude.mode === 'edit') claudeRef.current?.focus(); }, [ai.claude.mode]);
+  useEffect(() => { if (ai.openai.mode === 'edit') openaiRef.current?.focus(); }, [ai.openai.mode]);
+
+  const openUrl = (url: string) => void window.api.shell.openExternal(url);
 
   return (
     <div className="wh-backdrop" onMouseDown={close}>
@@ -96,20 +144,20 @@ export function Settings() {
         </div>
 
         <div className="settings-body">
+          {/* 테마 */}
           <div className="set-row">
             <span className="set-label">테마</span>
             <div className="seg">
               <button className={`seg-btn${theme === 'light' ? ' on' : ''}`} onClick={() => useUi.getState().setTheme('light')}>
-                <Icon name="sun" />
-                라이트
+                <Icon name="sun" /> 라이트
               </button>
               <button className={`seg-btn${theme === 'dark' ? ' on' : ''}`} onClick={() => useUi.getState().setTheme('dark')}>
-                <Icon name="moon" />
-                다크
+                <Icon name="moon" /> 다크
               </button>
             </div>
           </div>
 
+          {/* 글자 크기 */}
           <div className="set-row">
             <span className="set-label">글자 크기</span>
             <div className="fs-stepper">
@@ -123,6 +171,7 @@ export function Settings() {
             </div>
           </div>
 
+          {/* 워크스페이스 */}
           <div className="set-row">
             <span className="set-label">워크스페이스</span>
             <button className="set-folder" title="폴더 변경" onClick={() => void choose()}>
@@ -134,78 +183,145 @@ export function Settings() {
 
           <div className="set-sep" />
 
-          {/* AI 기능 섹션 */}
+          {/* AI 기능 */}
           <div className="set-ai-section">
             <div className="set-ai-header">
               <span className="set-label">AI 기능</span>
-              {ai.masked && (
+              {ai.active && (
                 <span className="set-ai-badge">
                   <span className="set-ai-dot" />
-                  활성
+                  {ai.active === 'claude' ? 'Claude' : 'GPT'} 활성
                 </span>
               )}
             </div>
 
-            {ai.mode === 'view' && ai.masked ? (
-              <div className="set-ai-view">
-                <span className="set-ai-masked">{ai.masked}</span>
-                <div className="set-ai-actions">
-                  <button className="set-ai-btn-ghost" onClick={ai.startEdit}>수정</button>
-                  <button className="set-ai-btn-ghost danger" onClick={ai.clear}>삭제</button>
-                </div>
-              </div>
-            ) : (
-              <div className="set-ai-edit">
-                <div className="set-ai-input-row">
-                  <input
-                    ref={inputRef}
-                    className={`set-ai-input${ai.error ? ' error' : ''}`}
-                    type="password"
-                    placeholder="sk-ant-api03-…"
-                    value={ai.input}
-                    onChange={(e) => { ai.setInput(e.target.value); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') void ai.save(); }}
-                  />
-                  <button className="set-ai-btn-primary" onClick={() => void ai.save()}>저장</button>
-                  {ai.masked && (
-                    <button className="set-ai-btn-ghost" onClick={ai.cancelEdit}>취소</button>
-                  )}
-                </div>
-                {ai.error && <p className="set-ai-error">{ai.error}</p>}
-                {!ai.masked && (
-                  <p className="set-ai-hint">
-                    키가 없으면 AI 기능이 비활성화됩니다. console.anthropic.com에서 발급하세요.
-                  </p>
+            <div className="set-ai-providers">
+              {/* Claude */}
+              <div className={`set-ai-provider${ai.active === 'claude' ? ' active' : ''}`}>
+                {ai.claude.mode === 'edit' ? (
+                  <div className="set-ai-edit">
+                    <div className="set-ai-input-row">
+                      <input
+                        ref={claudeRef}
+                        className={`set-ai-input${ai.claude.error ? ' error' : ''}`}
+                        type="password"
+                        placeholder="sk-ant-api03-…"
+                        value={ai.claude.input}
+                        onChange={(e) => ai.setClaude((p) => ({ ...p, input: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === 'Enter') void ai.saveClaude(); }}
+                      />
+                      <button className="set-ai-btn-primary" onClick={() => void ai.saveClaude()}>저장</button>
+                      {ai.claude.masked && <button className="set-ai-btn-ghost" onClick={ai.cancelClaude}>취소</button>}
+                    </div>
+                    {ai.claude.error && <p className="set-ai-error">{ai.claude.error}</p>}
+                    <button className="set-ai-link-btn" onClick={() => openUrl(CLAUDE_KEY_URL)}>
+                      console.anthropic.com에서 발급받기 →
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="set-ai-provider-row">
+                      <button
+                        className={`set-ai-radio${ai.active === 'claude' ? ' on' : ''}${bothSet ? ' switchable' : ''}`}
+                        title={bothSet ? 'Claude를 활성 모델로 선택' : undefined}
+                        onClick={bothSet ? () => void ai.switchActive('claude') : undefined}
+                      />
+                      <span className="set-ai-provider-name">Claude</span>
+                      {ai.claude.masked ? (
+                        <>
+                          <span className="set-ai-masked">{ai.claude.masked}</span>
+                          <div className="set-ai-actions">
+                            <button className="set-ai-btn-ghost sm" onClick={ai.editClaude}>수정</button>
+                            <button className="set-ai-btn-ghost sm danger" onClick={() => void ai.clearClaude()}>삭제</button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="set-ai-empty">미설정</span>
+                          <button className="set-ai-btn-ghost sm" onClick={ai.editClaude}>+ 추가</button>
+                        </>
+                      )}
+                    </div>
+                    {!ai.claude.masked && (
+                      <button className="set-ai-link-btn" onClick={() => openUrl(CLAUDE_KEY_URL)}>
+                        console.anthropic.com에서 발급받기 →
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
-            )}
+
+              {/* OpenAI */}
+              <div className={`set-ai-provider${ai.active === 'openai' ? ' active' : ''}`}>
+                {ai.openai.mode === 'edit' ? (
+                  <div className="set-ai-edit">
+                    <div className="set-ai-input-row">
+                      <input
+                        ref={openaiRef}
+                        className={`set-ai-input${ai.openai.error ? ' error' : ''}`}
+                        type="password"
+                        placeholder="sk-proj-…"
+                        value={ai.openai.input}
+                        onChange={(e) => ai.setOpenai((p) => ({ ...p, input: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === 'Enter') void ai.saveOpenai(); }}
+                      />
+                      <button className="set-ai-btn-primary" onClick={() => void ai.saveOpenai()}>저장</button>
+                      {ai.openai.masked && <button className="set-ai-btn-ghost" onClick={ai.cancelOpenai}>취소</button>}
+                    </div>
+                    {ai.openai.error && <p className="set-ai-error">{ai.openai.error}</p>}
+                    <button className="set-ai-link-btn" onClick={() => openUrl(OPENAI_KEY_URL)}>
+                      platform.openai.com에서 발급받기 →
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="set-ai-provider-row">
+                      <button
+                        className={`set-ai-radio${ai.active === 'openai' ? ' on' : ''}${bothSet ? ' switchable' : ''}`}
+                        title={bothSet ? 'GPT를 활성 모델로 선택' : undefined}
+                        onClick={bothSet ? () => void ai.switchActive('openai') : undefined}
+                      />
+                      <span className="set-ai-provider-name">GPT</span>
+                      {ai.openai.masked ? (
+                        <>
+                          <span className="set-ai-masked">{ai.openai.masked}</span>
+                          <div className="set-ai-actions">
+                            <button className="set-ai-btn-ghost sm" onClick={ai.editOpenai}>수정</button>
+                            <button className="set-ai-btn-ghost sm danger" onClick={() => void ai.clearOpenai()}>삭제</button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="set-ai-empty">미설정</span>
+                          <button className="set-ai-btn-ghost sm" onClick={ai.editOpenai}>+ 추가</button>
+                        </>
+                      )}
+                    </div>
+                    {!ai.openai.masked && (
+                      <button className="set-ai-link-btn" onClick={() => openUrl(OPENAI_KEY_URL)}>
+                        platform.openai.com에서 발급받기 →
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="set-sep" />
 
           <button className="set-link" onClick={() => useUi.getState().openManual()}>
-            <span className="set-link-main">
-              <Icon name="memo" />
-              사용 안내
-            </span>
+            <span className="set-link-main"><Icon name="memo" /> 사용 안내</span>
             <span className="set-link-sub">단축키 · 사용법</span>
             <Icon name="chevronRight" />
           </button>
-
           <button className="set-link" onClick={() => void window.api.checkForUpdates()}>
-            <span className="set-link-main">
-              <Icon name="download" />
-              업데이트 확인
-            </span>
+            <span className="set-link-main"><Icon name="download" /> 업데이트 확인</span>
             <span className="set-link-sub">v{CURRENT_VERSION}</span>
             <Icon name="chevronRight" />
           </button>
-
           <button className="set-link" onClick={() => useUi.getState().openUpdates()}>
-            <span className="set-link-main">
-              <Icon name="flag" />
-              업데이트 내역
-            </span>
+            <span className="set-link-main"><Icon name="flag" /> 업데이트 내역</span>
             <Icon name="chevronRight" />
           </button>
         </div>
