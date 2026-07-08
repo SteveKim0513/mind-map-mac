@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-safe build test typecheck verify verify-full dist harness-check e2e smoke bump release
+.PHONY: setup dev dev-safe build test typecheck verify verify-full dist harness-check e2e smoke bump tag release
 
 # Install dependencies
 setup:
@@ -48,10 +48,19 @@ e2e:
 smoke:
 	npm run build && node scripts/smoke.mjs
 
-# 버전 범프: make bump version=X.Y.Z
+# 버전 범프: make bump version=X.Y.Z  (태그 없음 — CHANGELOG 커밋 후 make tag)
 bump:
 	@[ "$(version)" ] || { echo "Usage: make bump version=X.Y.Z"; exit 1; }
 	node scripts/bump-version.mjs $(version)
+
+# 릴리즈 태그 생성 + 푸시: make tag version=X.Y.Z
+# CHANGELOG·릴리즈 노트 커밋을 모두 마친 뒤 실행한다 → CI 트리거
+tag:
+	@[ "$(version)" ] || { echo "Usage: make tag version=X.Y.Z"; exit 1; }
+	git tag v$(version)
+	git push origin main
+	git push origin v$(version)
+	@echo "✓ v$(version) 태그 푸시 완료 — CI가 시작됩니다"
 
 # 로컬 릴리즈: 빌드(서명·공증·검증) + GitHub Release 퍼블리시
 # CI가 서명 시크릿 문제로 실패할 때 이 Mac에서 직접 배포하는 경로.

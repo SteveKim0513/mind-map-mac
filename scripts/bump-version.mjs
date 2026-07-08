@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * bump-version.mjs — 버전 범프 원스텝
+ * bump-version.mjs — 버전 범프 (태그 없음)
  *
  * 사용법: node scripts/bump-version.mjs X.Y.Z
  *        make bump version=X.Y.Z
@@ -10,10 +10,11 @@
  *   2. 현재 버전보다 큰지 확인
  *   3. docs/release/notes/vX.Y.Z.md 없으면 템플릿 생성 + 경고
  *   4. package.json version 수정
- *   5. git add package.json (+ 릴리즈 노트 신규 생성 시)
- *   6. git commit "chore: bump to vX.Y.Z"
- *   7. git tag vX.Y.Z
- *   8. 완료 메시지 + push 명령 안내
+ *   5. git add + commit "chore: bump to vX.Y.Z"
+ *   6. 완료 메시지 안내 (태그는 make tag로 별도 생성)
+ *
+ * 태그는 CHANGELOG·릴리즈 노트 등 후속 커밋을 모두 마친 뒤
+ * `make tag version=X.Y.Z`로 찍어야 CI가 올바른 커밋을 빌드한다.
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -102,9 +103,7 @@ if (notesCreated) filesToAdd.push(`docs/release/notes/v${newVersion}.md`);
 
 run('git', ['add', ...filesToAdd]);
 run('git', ['commit', '-m', `chore: bump to v${newVersion}`]);
-run('git', ['tag', `v${newVersion}`]);
 
 console.log(`✓ git commit: chore: bump to v${newVersion}`);
-console.log(`✓ git tag:    v${newVersion}`);
-console.log(`\n배포 준비 완료. 다음 명령으로 CI를 시작하세요:`);
-console.log(`  git push origin main --tags`);
+console.log(`\nCHANGELOG·릴리즈 노트 커밋을 마친 뒤 태그를 찍어 CI를 시작하세요:`);
+console.log(`  make tag version=${newVersion}`);
