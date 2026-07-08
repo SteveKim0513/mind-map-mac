@@ -42,7 +42,7 @@ function useAiProviders() {
   const saveClaude = async () => {
     const key = claude.input.trim();
     if (!key.startsWith('sk-ant-') || key.length < 20) {
-      setClaude((p) => ({ ...p, error: 'sk-ant- 로 시작하는 유효한 키를 입력해주세요.' }));
+      setClaude((p) => ({ ...p, error: '올바른 Claude API 키를 입력해주세요.' }));
       return;
     }
     await window.api.ai.setKey(key);
@@ -58,7 +58,7 @@ function useAiProviders() {
   const saveOpenai = async () => {
     const key = openai.input.trim();
     if (!key.startsWith('sk-') || key.length < 20) {
-      setOpenai((p) => ({ ...p, error: 'sk- 로 시작하는 유효한 키를 입력해주세요.' }));
+      setOpenai((p) => ({ ...p, error: '올바른 OpenAI API 키를 입력해주세요.' }));
       return;
     }
     await window.api.ai.setOpenAiKey(key);
@@ -205,17 +205,17 @@ export function Settings() {
                         ref={claudeRef}
                         className={`set-ai-input${ai.claude.error ? ' error' : ''}`}
                         type="password"
-                        placeholder="sk-ant-api03-…"
+                        placeholder="Claude API 키 붙여넣기"
                         value={ai.claude.input}
                         onChange={(e) => ai.setClaude((p) => ({ ...p, input: e.target.value }))}
                         onKeyDown={(e) => { if (e.key === 'Enter') void ai.saveClaude(); }}
                       />
                       <button className="set-ai-btn-primary" onClick={() => void ai.saveClaude()}>저장</button>
-                      {ai.claude.masked && <button className="set-ai-btn-ghost" onClick={ai.cancelClaude}>취소</button>}
+                      <button className="set-ai-btn-ghost" onClick={ai.cancelClaude}>취소</button>
                     </div>
                     {ai.claude.error && <p className="set-ai-error">{ai.claude.error}</p>}
                     <button className="set-ai-link-btn" onClick={() => openUrl(CLAUDE_KEY_URL)}>
-                      console.anthropic.com에서 발급받기 →
+                      Anthropic 콘솔에서 발급받기 →
                     </button>
                   </div>
                 ) : (
@@ -237,14 +237,14 @@ export function Settings() {
                         </>
                       ) : (
                         <>
-                          <span className="set-ai-empty">미설정</span>
-                          <button className="set-ai-btn-ghost sm" onClick={ai.editClaude}>+ 추가</button>
+                          <span className="set-ai-empty">연결 안 됨</span>
+                          <button className="set-ai-btn-ghost sm" onClick={ai.editClaude}>연결</button>
                         </>
                       )}
                     </div>
                     {!ai.claude.masked && (
                       <button className="set-ai-link-btn" onClick={() => openUrl(CLAUDE_KEY_URL)}>
-                        console.anthropic.com에서 발급받기 →
+                        Anthropic 콘솔에서 발급받기 →
                       </button>
                     )}
                   </>
@@ -260,17 +260,17 @@ export function Settings() {
                         ref={openaiRef}
                         className={`set-ai-input${ai.openai.error ? ' error' : ''}`}
                         type="password"
-                        placeholder="sk-proj-…"
+                        placeholder="OpenAI API 키 붙여넣기"
                         value={ai.openai.input}
                         onChange={(e) => ai.setOpenai((p) => ({ ...p, input: e.target.value }))}
                         onKeyDown={(e) => { if (e.key === 'Enter') void ai.saveOpenai(); }}
                       />
                       <button className="set-ai-btn-primary" onClick={() => void ai.saveOpenai()}>저장</button>
-                      {ai.openai.masked && <button className="set-ai-btn-ghost" onClick={ai.cancelOpenai}>취소</button>}
+                      <button className="set-ai-btn-ghost" onClick={ai.cancelOpenai}>취소</button>
                     </div>
                     {ai.openai.error && <p className="set-ai-error">{ai.openai.error}</p>}
                     <button className="set-ai-link-btn" onClick={() => openUrl(OPENAI_KEY_URL)}>
-                      platform.openai.com에서 발급받기 →
+                      OpenAI 플랫폼에서 발급받기 →
                     </button>
                   </div>
                 ) : (
@@ -292,14 +292,14 @@ export function Settings() {
                         </>
                       ) : (
                         <>
-                          <span className="set-ai-empty">미설정</span>
-                          <button className="set-ai-btn-ghost sm" onClick={ai.editOpenai}>+ 추가</button>
+                          <span className="set-ai-empty">연결 안 됨</span>
+                          <button className="set-ai-btn-ghost sm" onClick={ai.editOpenai}>연결</button>
                         </>
                       )}
                     </div>
                     {!ai.openai.masked && (
                       <button className="set-ai-link-btn" onClick={() => openUrl(OPENAI_KEY_URL)}>
-                        platform.openai.com에서 발급받기 →
+                        OpenAI 플랫폼에서 발급받기 →
                       </button>
                     )}
                   </>

@@ -54,9 +54,9 @@ export function TrashPanel() {
   };
   const deleteOne = async (it: TrashItem) => {
     const r = await window.api.message({
-      message: `"${nameOf(it)}"을(를) 완전히 삭제할까요?`,
-      detail: '시스템 휴지통으로 이동하며, 앱에서는 더 이상 복원할 수 없습니다.',
-      buttons: ['완전 삭제', '취소'],
+      message: `"${nameOf(it)}"을(를) 영구 삭제할까요?`,
+      detail: '시스템 휴지통으로 이동되며 앱에서 복원할 수 없습니다.',
+      buttons: ['영구 삭제', '취소'],
       cancelId: 1,
     });
     if (r !== 0) return;
@@ -114,7 +114,7 @@ export function TrashPanel() {
                     <button
                       className="trash-act danger"
                       onClick={() => void deleteOne(it)}
-                      title="완전 삭제"
+                      title="영구 삭제"
                     >
                       <Icon name="trash" />
                     </button>

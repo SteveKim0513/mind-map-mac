@@ -127,7 +127,7 @@ export function GlobalSearch({ onOpen, onClose }: { onOpen: (path: string) => vo
         <input
           ref={inputRef}
           className="qo-input"
-          placeholder="전체 검색 (⌘F) — 노드, 노트 제목, 본문 · 파일 열기는 ⌘P"
+          placeholder="검색 — 노드, 노트"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {

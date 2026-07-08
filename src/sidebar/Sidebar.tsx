@@ -646,7 +646,7 @@ export function Sidebar({
                     <Icon name="note" /> 노트
                   </button>
                   <button onClick={() => { setCreateMenu(false); setUrlImport({ busy: false, error: null }); }}>
-                    <Icon name="link" /> 링크로 노트
+                    <Icon name="link" /> URL에서 가져오기
                   </button>
                   <button onClick={() => { setCreateMenu(false); void newFolder(); }}>
                     <Icon name="folder" /> 새 폴더

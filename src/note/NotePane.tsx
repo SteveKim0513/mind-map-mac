@@ -196,7 +196,7 @@ function NotePaneBody() {
           {dirty ? '저장 중…' : '저장됨'}
         </span>
         {isAttached && (
-          <button className="note-promote" title="이 노트를 사이드바 목록에 표시" onClick={() => void promote()}>
+          <button className="note-promote" title="사이드바에 표시" onClick={() => void promote()}>
             <Icon name="folder" />
             사이드바에 보이기
           </button>
@@ -250,7 +250,7 @@ function NotePaneBody() {
                       <Icon name="mindmap" />
                       <span className="nlc-text">{l.nodeText || '노드'}</span>
                     </button>
-                    <button className="nlc-x" title="연동 해제" onClick={() => unlink(l.mapId, l.nodeId)}>
+                    <button className="nlc-x" title="연결 끊기" onClick={() => unlink(l.mapId, l.nodeId)}>
                       <Icon name="close" />
                     </button>
                   </span>

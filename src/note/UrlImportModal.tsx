@@ -36,7 +36,7 @@ export function UrlImportModal({ busy, error, onSubmit, onClose }: Props) {
         <input
           ref={inputRef}
           className="qo-input"
-          placeholder="https://… 링크를 붙여넣으세요"
+          placeholder="웹 주소를 붙여넣으세요"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -44,14 +44,14 @@ export function UrlImportModal({ busy, error, onSubmit, onClose }: Props) {
         />
         <div className="url-import-foot">
           <span className="url-import-msg">
-            {busy ? '본문을 가져오는 중…' : error ? error : '제목과 본문을 가져와 노트로 만듭니다'}
+            {busy ? '페이지 읽는 중…' : error ? error : '웹 페이지를 노트로 가져옵니다'}
           </span>
           <div className="url-import-btns">
             <button className="btn" onClick={onClose} disabled={busy}>
               취소
             </button>
             <button className="btn primary" onClick={submit} disabled={busy || !url.trim()}>
-              {busy ? '가져오는 중…' : '노트 만들기'}
+              {busy ? '가져오는 중…' : '가져오기'}
             </button>
           </div>
         </div>
