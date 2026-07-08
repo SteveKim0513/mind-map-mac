@@ -648,13 +648,17 @@ export function Sidebar({
                   <button onClick={() => { setCreateMenu(false); setUrlImport({ busy: false, error: null }); }}>
                     <Icon name="link" /> URL에서 가져오기
                   </button>
-                  <button onClick={() => { setCreateMenu(false); void newFolder(); }}>
-                    <Icon name="folder" /> 새 폴더
-                  </button>
                 </div>
               </>
             )}
           </div>
+          <button
+            className="sb-foot-btn"
+            title="새 폴더"
+            onClick={() => void newFolder()}
+          >
+            <Icon name="folderPlus" />
+          </button>
           <span className="sb-foot-grow" />
           <button
             className={`sb-foot-btn${trashCount > 0 ? ' has-items' : ''}`}

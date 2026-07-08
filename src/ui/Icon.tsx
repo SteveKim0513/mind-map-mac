@@ -63,6 +63,12 @@ const PATHS: Record<string, ReactNode> = {
   folder: (
     <path d="M3 5.9c0-.7.6-1.3 1.3-1.3h3.1l1.4 1.6h6c.7 0 1.2.6 1.2 1.3V14c0 .7-.5 1.3-1.2 1.3H4.3C3.6 15.3 3 14.7 3 14z" />
   ),
+  folderPlus: (
+    <>
+      <path d="M3 5.9c0-.7.6-1.3 1.3-1.3h3.1l1.4 1.6h6c.7 0 1.2.6 1.2 1.3V14c0 .7-.5 1.3-1.2 1.3H4.3C3.6 15.3 3 14.7 3 14z" />
+      <path d="M10 8.5v4M8 10.5h4" strokeLinecap="round" />
+    </>
+  ),
   file: (
     <>
       <path d="M5.5 3.5h6L15 7v9.5h-9.5z" />
