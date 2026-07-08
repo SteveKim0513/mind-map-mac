@@ -3935,7 +3935,10 @@ textarea:focus-visible,
   border-bottom: 1px solid var(--hairline);
   background: var(--canvas);
   animation: md-toolbar-in 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.md-toolbar::-webkit-scrollbar { display: none; }
 @keyframes md-toolbar-in {
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: none; }
@@ -3944,6 +3947,7 @@ textarea:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 1px;
+  flex-shrink: 0;
 }
 .md-tb-sep {
   width: 1px;

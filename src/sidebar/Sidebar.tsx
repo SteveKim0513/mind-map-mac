@@ -558,7 +558,7 @@ export function Sidebar({
         </button>
         <button className="sb-nav-item" onClick={() => useUi.getState().openHistory()}>
           <Icon name="clock" />
-          <span>돌아보기</span>
+          <span>집중 기록</span>
         </button>
       </div>
 

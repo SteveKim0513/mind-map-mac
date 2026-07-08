@@ -154,7 +154,7 @@ export function WorkHistory() {
     <div className="wh-backdrop" onMouseDown={close}>
       <div className="wh" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wh-head">
-          <span className="wh-title">돌아보기</span>
+          <span className="wh-title">집중 기록</span>
           <div className="seg wh-seg">
             <button className={`seg-btn${scope === 'day' ? ' on' : ''}`} onClick={toDay}>오늘</button>
             <button className={`seg-btn${scope === 'week' ? ' on' : ''}`} onClick={toWeek}>이번 주</button>
