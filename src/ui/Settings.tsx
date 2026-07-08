@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
+import { useMetaStore } from '../store/metaStore';
 import { CURRENT_VERSION } from './changelog';
 import { Icon } from './Icon';
+import type { MetaTemplate, MetaFieldDef, MetaFieldType } from '../types';
 
 const basename = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 
@@ -324,7 +326,143 @@ export function Settings() {
             <span className="set-link-main"><Icon name="flag" /> 업데이트 내역</span>
             <Icon name="chevronRight" />
           </button>
+
+          <div className="set-sep" />
+          <MetaTemplatesSection />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MetaTemplatesSection() {
+  const { templates, loaded, load, addTemplate, updateTemplate, removeTemplate } = useMetaStore();
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<MetaTemplate | null>(null);
+
+  useEffect(() => { if (!loaded) void load(); }, [loaded, load]);
+
+  const newId = () => Math.random().toString(36).slice(2, 10);
+
+  if (editing) {
+    return (
+      <TemplateEditor
+        template={editing}
+        onSave={async (t) => { await updateTemplate(t); setEditing(null); }}
+        onCancel={() => setEditing(null)}
+      />
+    );
+  }
+  if (creating) {
+    const blank: MetaTemplate = { id: newId(), name: '', fields: [] };
+    return (
+      <TemplateEditor
+        template={blank}
+        onSave={async (t) => { await addTemplate(t); setCreating(false); }}
+        onCancel={() => setCreating(false)}
+      />
+    );
+  }
+
+  return (
+    <div className="set-section">
+      <div className="set-section-head">
+        <span className="set-section-label">메타 템플릿</span>
+        <button className="set-mini-btn" onClick={() => setCreating(true)}>+ 새 템플릿</button>
+      </div>
+      {templates.length === 0 ? (
+        <p className="set-empty">템플릿이 없습니다. 노트 속성을 구조화하려면 새 템플릿을 만드세요.</p>
+      ) : (
+        <div className="set-meta-list">
+          {templates.map((t) => (
+            <div key={t.id} className="set-meta-item">
+              <span className="set-meta-name">{t.name}</span>
+              <span className="set-meta-count">{t.fields.length}개 필드</span>
+              <button className="set-meta-edit" onClick={() => setEditing(t)}>편집</button>
+              <button className="set-meta-del" onClick={() => void removeTemplate(t.id)}>삭제</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TemplateEditor({
+  template,
+  onSave,
+  onCancel,
+}: {
+  template: MetaTemplate;
+  onSave: (t: MetaTemplate) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(template.name);
+  const [fields, setFields] = useState(template.fields);
+  const newId = () => Math.random().toString(36).slice(2, 10);
+
+  const addField = () =>
+    setFields((f) => [...f, { key: newId(), label: '', type: 'text' as MetaFieldType }]);
+
+  const updateField = (idx: number, patch: Partial<MetaFieldDef>) =>
+    setFields((f) => f.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
+
+  const removeField = (idx: number) =>
+    setFields((f) => f.filter((_, i) => i !== idx));
+
+  return (
+    <div className="tmpl-editor">
+      <div className="tmpl-name-row">
+        <span className="tmpl-name-label">템플릿 이름</span>
+        <input
+          className="tmpl-name-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="예: 책 리뷰, 회의록…"
+          autoFocus
+        />
+      </div>
+      <div className="tmpl-fields-label">필드</div>
+      {fields.map((f, i) => (
+        <div key={f.key} className="tmpl-field-row">
+          <input
+            className="tmpl-field-label"
+            value={f.label}
+            onChange={(e) => updateField(i, { label: e.target.value })}
+            placeholder="필드 이름"
+          />
+          <select
+            className="tmpl-field-type"
+            value={f.type}
+            onChange={(e) => updateField(i, { type: e.target.value as MetaFieldType })}
+          >
+            <option value="text">텍스트</option>
+            <option value="date">날짜</option>
+            <option value="number">숫자</option>
+            <option value="url">URL</option>
+            <option value="select">선택</option>
+          </select>
+          <button className="tmpl-field-del" onClick={() => removeField(i)}>×</button>
+          {f.type === 'select' && (
+            <div className="tmpl-field-opts" style={{ gridColumn: '1/-1', width: '100%' }}>
+              <span>옵션 (쉼표로 구분)</span>
+              <input
+                value={(f.options ?? []).join(', ')}
+                onChange={(e) =>
+                  updateField(i, {
+                    options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                  })
+                }
+                placeholder="예: 읽는 중, 완료, 보류"
+              />
+            </div>
+          )}
+        </div>
+      ))}
+      <button className="tmpl-add-field" onClick={addField}>+ 필드 추가</button>
+      <div className="tmpl-actions">
+        <button className="tmpl-cancel" onClick={onCancel}>취소</button>
+        <button className="tmpl-save" onClick={() => void onSave({ ...template, name, fields })}>저장</button>
       </div>
     </div>
   );

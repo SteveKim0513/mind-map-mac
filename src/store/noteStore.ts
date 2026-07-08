@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import { createStore, useStore, type StoreApi } from 'zustand';
-import type { FocusSession, NoteDoc, NoteLink } from '../types';
+import type { FocusSession, NoteDoc, NoteLink, NoteMetaBlock } from '../types';
 import { emptyNote } from '../io/noteFormat';
 
 interface NoteState {
@@ -17,6 +17,7 @@ interface NoteState {
   applySession: (session: FocusSession) => void; // system write (focus end) — never user-editable
   addLink: (link: NoteLink) => void;
   removeLink: (mapId: string, nodeId: string) => void;
+  setMetaBlocks: (blocks: NoteMetaBlock[]) => void;
 }
 
 export type NoteStore = StoreApi<NoteState>;
@@ -49,6 +50,8 @@ export function createNoteStore(): NoteStore {
         dirty: true,
       });
     },
+    setMetaBlocks: (metaBlocks) =>
+      set({ note: { ...get().note, metaBlocks }, dirty: true }),
   }));
 }
 

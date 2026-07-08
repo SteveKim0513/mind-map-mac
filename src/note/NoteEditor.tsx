@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+import type { MetaTemplate } from '../types';
 import { sinkListItem, liftListItem } from 'prosemirror-schema-list';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
@@ -37,6 +38,8 @@ interface Props {
   /** Hand the live editor up to the pane (for the 정보 panel's 목차 section). */
   onReady?: (editor: Editor | null) => void;
   notePath?: string;
+  templates?: MetaTemplate[];
+  onAddMeta?: (templateId: string) => void;
 }
 
 const PLACEHOLDER = '메모를 시작하세요…  (“/” 를 눌러 블록 추가)';
@@ -64,7 +67,7 @@ interface MenuState {
 
 /** Notion-style rich editor: Markdown is applied live as you type, no edit/preview
  *  toggle. Stored on disk as Markdown via tiptap-markdown. A "/" opens a block menu. */
-export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, notePath }: Props) {
+export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, notePath, templates, onAddMeta }: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   // mirror used by the (creation-time) keydown handler so it sees fresh values
   const m = useRef<{ open: boolean; items: SlashItem[]; active: number; query: string }>({
@@ -438,7 +441,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
 
   return (
     <div className="note-rich">
-      <EditorToolbar editor={editor} onInsertImages={insertImages} />
+      <EditorToolbar editor={editor} onInsertImages={insertImages} templates={templates} onAddMeta={onAddMeta} />
       <div className="note-rich-body" onClick={() => editor.chain().focus().run()}>
         <EditorContent editor={editor} />
       </div>

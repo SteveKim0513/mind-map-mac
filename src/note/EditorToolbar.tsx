@@ -1,18 +1,21 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useEditorState, type Editor } from '@tiptap/react';
 import { Icon } from '../ui/Icon';
 import { fileToDataUrl } from './imageInsert';
+import type { MetaTemplate } from '../types';
 
 export interface EditorToolbarProps {
   editor: Editor;
   /** When provided, toolbar image picks go through this (handles disk write + imagePathMap). */
   onInsertImages?: (files: File[]) => void;
+  templates?: MetaTemplate[];
+  onAddMeta?: (templateId: string) => void;
 }
 
 // Toolbar bound to the live TipTap editor. Buttons run editor commands and light
 // up when the cursor sits inside the matching formatting.
 
-export function EditorToolbar({ editor, onInsertImages }: EditorToolbarProps) {
+export function EditorToolbar({ editor, onInsertImages, templates, onAddMeta }: EditorToolbarProps) {
   const [linking, setLinking] = useState(false);
   const [url, setUrl] = useState('');
 
@@ -224,6 +227,52 @@ export function EditorToolbar({ editor, onInsertImages }: EditorToolbarProps) {
             <Btn title="표 삭제" onClick={() => chain().deleteTable().run()}><Icon name="trash" /></Btn>
           </div>
         </>
+      )}
+      {templates && templates.length > 0 && onAddMeta && (
+        <>
+          <span className="md-tb-sep" aria-hidden="true" />
+          <MetaAddButton templates={templates} onAdd={onAddMeta} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  return (
+    <div className="meta-add-wrap" ref={ref}>
+      <button
+        className="md-tb-btn md-tb-type"
+        title="메타 추가"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen((o) => !o)}
+      >
+        메타+
+      </button>
+      {open && (
+        <div className="meta-add-menu">
+          {templates.map((t) => (
+            <button
+              key={t.id}
+              className="meta-add-item"
+              onClick={() => { onAdd(t.id); setOpen(false); }}
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

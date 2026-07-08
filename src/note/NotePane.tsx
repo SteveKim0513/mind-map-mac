@@ -6,10 +6,12 @@ import { fileNameFromTitle } from '../io/autoName';
 import { NoteEditor } from './NoteEditor';
 import { ImageLightbox } from './ImageLightbox';
 import { NodePicker } from './NodePicker';
+import { NoteMetaBlocks } from './NoteMetaBlock';
 import { addLinkToNoteFile, reindexFromNote, renameWikiLinks, revealNode } from './noteLinks';
 import { useSession } from '../store/sessionStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
+import { useMetaStore } from '../store/metaStore';
 import { Icon } from '../ui/Icon';
 import { fmtDuration } from '../focus/aggregate';
 import { endFocusSession } from '../focus/controller';
@@ -41,6 +43,14 @@ function NotePaneBody() {
   const setBody = useNote((s) => s.setBody);
   const markSaved = useNote((s) => s.markSaved);
   const removeLink = useNote((s) => s.removeLink);
+  const setMetaBlocks = useNote((s) => s.setMetaBlocks);
+
+  const templates = useMetaStore((s) => s.templates);
+  const metaLoaded = useMetaStore((s) => s.loaded);
+
+  useEffect(() => {
+    if (!metaLoaded) void useMetaStore.getState().load();
+  }, [metaLoaded]);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -184,6 +194,11 @@ function NotePaneBody() {
   return (
     <div className="note-doc">
       {note.session && <SessionMetaBanner session={note.session} />}
+      <NoteMetaBlocks
+        blocks={note.metaBlocks ?? []}
+        templates={templates}
+        onChange={setMetaBlocks}
+      />
       <div className="note-head">
         <input
           className="note-title"
@@ -298,6 +313,15 @@ function NotePaneBody() {
         onCreateNote={isSession ? undefined : createSiblingNote}
         onReady={setEditor}
         notePath={filePath ?? undefined}
+        templates={templates}
+        onAddMeta={(templateId) => {
+          const existing = note.metaBlocks ?? [];
+          if (existing.some((b) => b.templateId === templateId)) {
+            useUi.getState().toast('이미 추가된 템플릿입니다.');
+            return;
+          }
+          setMetaBlocks([...existing, { templateId, values: {} }]);
+        }}
       />
       {/* invisible: keeps the 목차 heading list / count live off the editor */}
       {editor && <NoteHeadingsProbe editor={editor} onChange={setHeadings} />}

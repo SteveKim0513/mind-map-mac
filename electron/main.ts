@@ -256,6 +256,10 @@ function settingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');
 }
 
+function metaTemplatesPath() {
+  return path.join(app.getPath('userData'), 'meta-templates.json');
+}
+
 async function readSettings(): Promise<{ workspace?: string }> {
   try {
     return JSON.parse(await fs.readFile(settingsPath(), 'utf-8'));
@@ -824,4 +828,17 @@ ipcMain.handle('ai:setActive', async (_e, provider: 'claude' | 'openai') => {
 ipcMain.handle('shell:openExternal', async (_e, url: string) => {
   if (!url.startsWith('https://')) return;
   await shell.openExternal(url);
+});
+
+// ─── Meta templates ───────────────────────────────────────────────────────
+ipcMain.handle('meta:getTemplates', async () => {
+  try {
+    return JSON.parse(await fs.readFile(metaTemplatesPath(), 'utf-8'));
+  } catch {
+    return [];
+  }
+});
+
+ipcMain.handle('meta:saveTemplates', async (_e, templates: unknown) => {
+  await fs.writeFile(metaTemplatesPath(), JSON.stringify(templates, null, 2), 'utf-8');
 });

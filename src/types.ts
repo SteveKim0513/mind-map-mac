@@ -89,6 +89,7 @@ export interface NoteDoc {
   body: string; // Markdown body
   links: NoteLink[]; // nodes this note is linked to
   session?: FocusSession; // present iff this is a focus-session note (read-only meta)
+  metaBlocks?: NoteMetaBlock[];
 }
 
 /** Lightweight note record for the workspace link index (frontmatter only). */
@@ -113,6 +114,26 @@ export interface PositionedNode {
   hiddenCount: number; // descendants hidden under this node when collapsed (else 0)
   childDone: number; // direct children marked done
   childTotal: number; // direct children count
+}
+
+export type MetaFieldType = 'text' | 'date' | 'select' | 'url' | 'number';
+
+export interface MetaFieldDef {
+  key: string;
+  label: string;
+  type: MetaFieldType;
+  options?: string[];
+}
+
+export interface MetaTemplate {
+  id: string;
+  name: string;
+  fields: MetaFieldDef[];
+}
+
+export interface NoteMetaBlock {
+  templateId: string;
+  values: Record<string, string>;
 }
 
 /** A computed edge between two node centers. */

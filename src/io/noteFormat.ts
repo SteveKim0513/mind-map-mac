@@ -1,4 +1,4 @@
-import type { NoteDoc, NoteLink } from '../types';
+import type { NoteDoc, NoteLink, NoteMetaBlock } from '../types';
 import { newId } from './formats';
 
 // ── Note files: Markdown body + a small JSON-valued frontmatter block ─────────
@@ -27,6 +27,8 @@ export function serializeNote(note: NoteDoc): string {
   // only session notes carry a session line — never pollute ordinary notes.
   // JSON.stringify keeps it on ONE line (the parser splits on the first colon).
   if (note.session) lines.push(`session: ${JSON.stringify(note.session)}`);
+  if (note.metaBlocks && note.metaBlocks.length > 0)
+    lines.push(`_meta: ${JSON.stringify(note.metaBlocks)}`);
   lines.push('---', '');
   return lines.join('\n') + note.body;
 }
@@ -57,11 +59,15 @@ export function parseNote(text: string, fallbackTitle = '제목 없음'): NoteDo
     fields.session && typeof fields.session === 'object' && !Array.isArray(fields.session)
       ? (fields.session as NoteDoc['session'])
       : undefined;
+  const metaBlocks = Array.isArray(fields._meta)
+    ? (fields._meta as NoteMetaBlock[])
+    : undefined;
   return {
     id: typeof fields.id === 'string' ? (fields.id as string) : newId(),
     title: typeof fields.title === 'string' ? (fields.title as string) : fallbackTitle,
     body,
     links: Array.isArray(fields.links) ? (fields.links as NoteLink[]) : [],
     ...(session ? { session } : {}),
+    ...(metaBlocks ? { metaBlocks } : {}),
   };
 }

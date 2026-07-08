@@ -2,6 +2,18 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 type FileResult = { path: string; content: string } | null;
 
+export interface MetaFieldDef {
+  key: string;
+  label: string;
+  type: 'text' | 'date' | 'select' | 'url' | 'number';
+  options?: string[];
+}
+export interface MetaTemplate {
+  id: string;
+  name: string;
+  fields: MetaFieldDef[];
+}
+
 export interface TreeNode {
   name: string;
   path: string;
@@ -158,6 +170,12 @@ const api = {
   // ── Shell ──────────────────────────────────────────────────────────────────
   shell: {
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
+  },
+  // ── Meta templates ─────────────────────────────────────────────────────────
+  meta: {
+    getTemplates: (): Promise<MetaTemplate[]> => ipcRenderer.invoke('meta:getTemplates'),
+    saveTemplates: (templates: MetaTemplate[]): Promise<void> =>
+      ipcRenderer.invoke('meta:saveTemplates', templates),
   },
 };
 

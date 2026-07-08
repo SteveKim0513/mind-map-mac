@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { serializeNote, parseNote, emptyNote } from './noteFormat';
-import type { FocusSession } from '../types';
+import type { FocusSession, NoteDoc } from '../types';
 
 const session: FocusSession = {
   sessionId: 's1',
@@ -45,5 +45,31 @@ describe('note frontmatter session round-trip', () => {
     const back = parseNote(serializeNote(note));
     expect(back.session).toBeUndefined();
     expect(back.links).toEqual([{ mapId: 'a', nodeId: 'b' }]);
+  });
+});
+
+describe('noteFormat _meta roundtrip', () => {
+  it('serializes and parses metaBlocks', () => {
+    const note: NoteDoc = {
+      id: 'test-1',
+      title: '테스트',
+      body: '본문',
+      links: [],
+      metaBlocks: [
+        { templateId: 'tmpl-abc', values: { field1: '김지호', date1: '2026-07-08' } },
+      ],
+    };
+    const serialized = serializeNote(note);
+    expect(serialized).toContain('_meta:');
+    const parsed = parseNote(serialized, '테스트');
+    expect(parsed.metaBlocks).toHaveLength(1);
+    expect(parsed.metaBlocks![0].templateId).toBe('tmpl-abc');
+    expect(parsed.metaBlocks![0].values.field1).toBe('김지호');
+  });
+
+  it('handles notes without _meta gracefully', () => {
+    const raw = '---\nid: "x"\ntitle: "hello"\nlinks: []\n---\nbody';
+    const parsed = parseNote(raw);
+    expect(parsed.metaBlocks).toBeUndefined();
   });
 });
