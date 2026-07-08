@@ -1,12 +1,16 @@
-.PHONY: setup dev build test typecheck verify verify-full dist harness-check e2e smoke bump release
+.PHONY: setup dev dev-safe build test typecheck verify verify-full dist harness-check e2e smoke bump release
 
 # Install dependencies
 setup:
 	npm ci
 
-# Start development server (Electron + Vite hot-reload)
+# Start development server (Electron + Vite hot-reload) — uses real workspace + userData
 dev:
 	npm run dev
+
+# Isolated dev server — temporary userData + workspace, real data untouched
+dev-safe:
+	MINDMAP_USER_DATA="$$(mktemp -d)" MINDMAP_WORKSPACE="$$(mktemp -d)" npm run dev
 
 # TypeScript type check (no emit)
 typecheck:
