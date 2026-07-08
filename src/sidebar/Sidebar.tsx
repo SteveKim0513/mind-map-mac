@@ -64,7 +64,6 @@ export function Sidebar({
   const [renaming, setRenaming] = useState<{ path: string; isFile: boolean } | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null); // folder path, or '' = root
-  const [createMenu, setCreateMenu] = useState(false);
   const [marked, setMarked] = useState<Set<string>>(new Set());
 
   const toggleMark = (path: string) =>
@@ -551,16 +550,35 @@ export function Sidebar({
         <span>검색</span>
       </button>
 
-      {/* smart items: plan (오늘) ↔ reflect (돌아보기), pinned above the library */}
-      <div className="sb-smart">
-        <button className="sb-smart-item" title="예정된 일정 보기" onClick={() => useUi.getState().openToday()}>
+      {/* smart nav: full-width rows to navigate to views */}
+      <div className="sb-nav">
+        <button className="sb-nav-item" onClick={() => useUi.getState().openToday()}>
           <Icon name="calendar" />
           <span>오늘</span>
         </button>
-        <button className="sb-smart-item" title="집중 세션 기록 보기" onClick={() => useUi.getState().openHistory()}>
+        <button className="sb-nav-item" onClick={() => useUi.getState().openHistory()}>
           <Icon name="clock" />
           <span>돌아보기</span>
         </button>
+      </div>
+
+      {/* library section header with all create actions */}
+      <div className="sb-section-head">
+        <span className="sb-section-label">라이브러리</span>
+        <div className="sb-section-acts">
+          <button className="sb-section-btn" title="새 마인드맵" onClick={() => void newMindmap()}>
+            <Icon name="mindmap" />
+          </button>
+          <button className="sb-section-btn" title="새 노트" onClick={() => void newNote()}>
+            <Icon name="note" />
+          </button>
+          <button className="sb-section-btn" title="URL에서 가져오기" onClick={() => setUrlImport({ busy: false, error: null })}>
+            <Icon name="link" />
+          </button>
+          <button className="sb-section-btn" title="새 폴더" onClick={() => void newFolder()}>
+            <Icon name="folderPlus" />
+          </button>
+        </div>
       </div>
 
       {marked.size > 0 && (
@@ -627,38 +645,6 @@ export function Sidebar({
       <div className="sb-foot">
         <FocusPill docked />
         <div className="sb-foot-bar">
-          <div className="sb-create-wrap">
-            <button
-              className={`sb-foot-btn${createMenu ? ' on' : ''}`}
-              title="새로 만들기"
-              onClick={() => setCreateMenu((v) => !v)}
-            >
-              <Icon name="plus" />
-            </button>
-            {createMenu && (
-              <>
-                <div className="ctx-backdrop" onMouseDown={() => setCreateMenu(false)} />
-                <div className="sb-create-menu">
-                  <button onClick={() => { setCreateMenu(false); void newMindmap(); }}>
-                    <Icon name="mindmap" /> 마인드맵
-                  </button>
-                  <button onClick={() => { setCreateMenu(false); void newNote(); }}>
-                    <Icon name="note" /> 노트
-                  </button>
-                  <button onClick={() => { setCreateMenu(false); setUrlImport({ busy: false, error: null }); }}>
-                    <Icon name="link" /> URL에서 가져오기
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-          <button
-            className="sb-foot-btn"
-            title="새 폴더"
-            onClick={() => void newFolder()}
-          >
-            <Icon name="folderPlus" />
-          </button>
           <span className="sb-foot-grow" />
           <button
             className={`sb-foot-btn${trashCount > 0 ? ' has-items' : ''}`}
