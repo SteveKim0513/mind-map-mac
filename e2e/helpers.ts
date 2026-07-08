@@ -43,22 +43,14 @@ export async function launchApp(): Promise<AppHandle> {
   return { app, page, workspace, cleanup };
 }
 
-/** Click the ＋ (create) button in the sidebar footer. */
-export async function openCreateMenu(page: Page) {
-  await page.click('.sb-foot-btn:first-of-type');
-  await page.waitForSelector('.sb-create-menu', { state: 'visible' });
-}
-
 /**
- * Create a new note via the sidebar ＋ menu.
+ * Create a new note via the sidebar library header button.
  * Notes use the in-editor title input as the rename entry point, so the
  * sidebar never enters inline rename mode on note creation. We just wait
  * for the tab and the sidebar label to be stable before returning.
  */
 export async function createNoteFromMenu(page: Page): Promise<void> {
-  await openCreateMenu(page);
-  // Click "노트" option in the create menu (exact match to avoid '링크로 노트')
-  await page.getByRole('button', { name: '노트', exact: true }).click();
+  await page.click('.sb-section-btn[title="새 노트"]');
   // Tab appears immediately when the note is opened
   await page.waitForSelector('.tab', { timeout: 5_000 });
   // Sidebar shows the note as a stable .label (no inline rename for notes)
