@@ -32,9 +32,19 @@ description: "테스트 작성 규칙 — Vitest(단위) + Playwright(E2E)"
 
 ## E2E 규칙
 
+- **새 기능·UI 변경 시 E2E 추가 의무**: 기능이 배포될 때 `e2e/*.spec.ts`에 해당 기능의 핵심 시나리오가 반드시 있어야 한다. E2E 없이 배포하면 다음 릴리즈에서 회귀를 잡을 그물망이 없다.
 - E2E는 핵심 사용자 여정(노드 생성, 저장, 노트 연결)을 커버한다.
-- `MINDMAP_USER_DATA`와 `MINDMAP_WORKSPACE` 환경변수로 실제 데이터와 격리한다.
+- `MINDMAP_USER_DATA`와 `MINDMAP_WORKSPACE` 환경변수로 실제 데이터와 격리한다 (`e2e/helpers.ts`의 `launchApp()` 사용).
 - 시간 기반 `sleep` 대기 대신 명시적인 준비 상태 확인(`waitForSelector` 등)을 사용한다.
+- VSCode 환경에서는 `ELECTRON_RUN_AS_NODE`를 반드시 제거한다 (`e2e/helpers.ts` 참조).
+
+## 배포 전 게이트
+
+```bash
+make pre-release  # = verify-full + E2E
+```
+
+`make bump` 전에 반드시 통과해야 한다. E2E가 없는 기능은 커버리지가 없는 것으로 간주한다.
 
 ## 테스트 금지 패턴
 

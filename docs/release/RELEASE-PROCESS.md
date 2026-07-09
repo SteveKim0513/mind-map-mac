@@ -13,17 +13,27 @@
 # 1) 변경사항 커밋 확인 (워킹트리 깨끗해야 함)
 git status --short
 
-# 2) 두 changelog에 최상단 항목 추가 (버전 일치 필수)
+# 2) 배포 전 게이트 — 반드시 통과 후 bump
+#    새 기능·UI 변경이 없는 경우도 동일하게 실행한다
+make pre-release
+#    = typecheck + unit test + build + E2E 전체
+#    실패 시 원인 수정 후 재실행. E2E가 없는 신규 기능은 이 단계에서 추가한다.
+
+# 3) 두 changelog에 최상단 항목 추가 (버전 일치 필수)
 #    CHANGELOG.user.md  — 고객 언어, 앱 "업데이트 내역"·"새로운 점" 출처
 #    CHANGELOG.md       — 개발용 상세
 
-# 3) 버전 범프 + 태그 (QA 완료 후 실행)
+# 4) 버전 범프 + 태그 (make pre-release 통과 후 실행)
 make bump version=X.Y.Z
-#    → package.json 수정, git commit, git tag vX.Y.Z
-#    → main 브랜치 + origin 동기화 + 워킹트리 상태 자동 검증
+#    → package.json 수정, git commit
+#    → 릴리즈 노트 템플릿 생성 (없는 경우)
 
-# 4) CI 트리거 (빌드·서명·공증·퍼블리시 자동)
-git push origin main --tags
+# 5) 릴리즈 노트 작성 후 커밋
+#    docs/release/notes/vX.Y.Z.md 작성
+
+# 6) CI 트리거
+make tag version=X.Y.Z
+#    → git tag + push origin main + push origin vX.Y.Z
 ```
 
 **CI가 하는 일** (`.github/workflows/release.yml`):

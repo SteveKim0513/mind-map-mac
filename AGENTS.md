@@ -56,6 +56,7 @@ make setup       # npm ci (최초 또는 package.json 변경 후)
 make dev-safe    # Electron + Vite 개발 서버 (격리된 임시 환경)
 make verify      # typecheck + unit test (완료 전 필수)
 make verify-full # typecheck + unit test + build (PR 전 필수)
+make pre-release # verify-full + E2E (배포 전 필수 — make bump 전에 실행)
 make test        # 단위 테스트만
 make typecheck   # 타입 검사만
 make harness-check # 아키텍처 + 문서 무결성 검사
@@ -64,9 +65,10 @@ make harness-check # 아키텍처 + 문서 무결성 검사
 ## 변경 전후 검증 절차
 
 1. `make verify` 실행 → 종료 코드 0 확인
-2. UI 변경 → 앱을 실제로 실행해 동작 확인 (`make dev-safe`)
-3. Reminders 관련 → macOS 리마인더 앱에서 직접 확인
-4. 릴리즈 관련 → `make verify-full` 후 `docs/release/QA-CHECKLIST.md` 체크
+2. UI·기능 변경 → `make dev-safe`로 실제 앱에서 직접 시나리오 검증
+3. 새 기능·UI 변경 → `e2e/*.spec.ts`에 핵심 시나리오 E2E 추가
+4. Reminders 관련 → macOS 리마인더 앱에서 직접 확인
+5. 배포 전 → `make pre-release` (verify-full + E2E) 통과 확인 후 `make bump`
 
 ## 금지된 작업 (명시적 승인 없이)
 

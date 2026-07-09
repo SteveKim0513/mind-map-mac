@@ -16,12 +16,15 @@ make setup        # npm ci
 make dev-safe     # Electron + Vite 개발 서버 (격리된 임시 환경)
 make verify       # typecheck + unit test  ← 완료 주장 전 반드시 실행
 make verify-full  # typecheck + unit test + build  ← PR 전 반드시 실행
+make pre-release  # verify-full + E2E  ← 배포(make bump) 전 반드시 실행
 make harness-check # 아키텍처·문서 구조 검사
 ```
 
 - `make verify` 없이 완료를 주장하지 않는다.
 - 버그 수정은 가능한 경우 실패를 재현하는 테스트를 먼저 추가한다.
 - UI·Electron 변경은 테스트만으로 끝내지 않고 `make dev-safe`로 실제 동작을 확인한다.
+- **새 기능·UI 변경을 포함한 배포**: `make pre-release` 통과 후 `make bump`.
+- **새 기능·UI 변경 시 E2E 추가 의무**: `e2e/*.spec.ts`에 해당 기능의 핵심 시나리오를 작성한다.
 - 패키지 관리자는 `npm`만 사용한다. `yarn`·`pnpm`·`bun` 금지.
 
 ## Architecture
@@ -70,9 +73,10 @@ UI·CSS 작업 시 **반드시** 먼저 읽는다:
 
 1. 변경한 파일 목록
 2. `make verify` 실행 결과 (종료 코드 포함)
-3. UI/Electron 변경 시 런타임 검증 증거
-4. 남아 있는 위험·미검증 항목
-5. 인간 판단이 필요한 사항
+3. UI/Electron 변경 시 `make dev-safe` 런타임 검증 증거
+4. 새 기능·UI 변경 시 E2E 추가 여부 (없으면 이유 명시)
+5. 남아 있는 위험·미검증 항목
+6. 인간 판단이 필요한 사항
 
 검증하지 않은 내용을 검증했다고 주장하지 않는다.
 

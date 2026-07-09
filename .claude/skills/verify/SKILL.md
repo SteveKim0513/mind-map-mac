@@ -44,7 +44,16 @@ make harness-check
 make dev-safe
 ```
 
-격리된 임시 환경에서 앱을 실행하고 변경된 기능을 실제로 동작시켜 스크린샷 또는 로그로 증거를 남긴다.
+격리된 임시 환경에서 앱을 실행하고 변경된 기능을 실제로 동작시킨다. **E2E 시나리오도 함께 작성한다** (`e2e/*.spec.ts`).
+
+### Step 5: 배포 전 게이트 (make bump 전 필수)
+
+```bash
+make pre-release
+# = verify-full + E2E 전체
+```
+
+새 기능·UI 변경이 포함된 릴리즈는 이 타겟이 통과한 뒤 `make bump`를 실행한다.
 
 ## 실패 처리
 

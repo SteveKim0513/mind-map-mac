@@ -1,4 +1,4 @@
-.PHONY: setup dev-safe build test typecheck verify verify-full dist harness-check e2e smoke bump tag release
+.PHONY: setup dev-safe build test typecheck verify verify-full pre-release dist harness-check e2e smoke bump tag release
 
 # Install dependencies
 setup:
@@ -27,6 +27,11 @@ verify:
 # Full verify: typecheck + unit tests + production build
 verify-full:
 	npm run typecheck && npm test && npm run build
+
+# Pre-release gate: verify-full + E2E — must pass before make bump
+# 새 기능·UI 변경이 포함된 릴리즈는 반드시 이 타겟을 통과한 뒤 bump한다.
+pre-release:
+	npm run typecheck && npm test && npm run build && npm run test:e2e
 
 # Harness structure checks (architecture + doc integrity + design)
 harness-check:
