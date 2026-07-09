@@ -4,6 +4,14 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.7.26] - 2026-07-09
+
+### 신규
+- **노트 메타 블록** — 설정 → 메타 템플릿에서 text·date·select·url·number 5종 필드 CRUD. 노트 툴바 "메타+" → 드롭다운으로 템플릿 선택 → 노트 최상단 삽입. YAML frontmatter `_meta` 키로 저장·로드 라운드트립. 스키마-값 분리 아키텍처로 템플릿 변경 시 해당 노트 자동 반영.
+
+### 버그 수정
+- **개발 서버 기동 불가** — `"type": "module"` + VS Code 환경에서 `ELECTRON_RUN_AS_NODE=1`이 설정돼 ESM 링크 단계에서 `cjsPreparseModuleExports` 크래시 발생. `"type": "module"` 제거(CJS 출력)·프리로드 경로 수정·`onstart`에서 환경변수 제거로 해결.
+
 ## [0.7.19] - 2026-06-26
 
 ### 신규
