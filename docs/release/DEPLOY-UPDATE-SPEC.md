@@ -74,6 +74,7 @@ package.json version ↑  →  CHANGELOG.user.md 항목 ↑  →  git tag vX.Y.Z
 
 # 3) 게이트
 npm run typecheck && npm test
+make harness-check   # 문서 정합성(exec-plan 상태·인벤토리) — CI(release.yml)에서도 자동 실행
 
 # 4) 태그
 git tag vX.Y.Z && git push --tags
@@ -267,6 +268,7 @@ make release   # APPLE_KEYCHAIN_PROFILE=mindmap-notary npm run dist + gh release
 
 - [x] **CI 릴리즈 워크플로** — `.github/workflows/release.yml`(§9). 빌드+검증 후 분리 publish. 시크릿 등록 후 동작.
 - [x] **릴리즈 검증 게이트** — `scripts/verify-release.mjs`(§11) + `updateGate` 단위 테스트.
+- [x] **문서 정합성 게이트** — `make harness-check`를 `release.yml`의 typecheck+test 뒤에 추가(2026-07-09). completed exec-plan이 active/에 방치되는 것을 배포 전에 차단.
 - [ ] **universal/2-arch** 빌드로 Intel 커버(외부 배포 전).
 - [ ] `docs/release/notes/` 과거분 메우기(현재 v0.7.9·v0.2~0.7.4; v0.7.5–0.7.8 사후 기록 누락).
 - [ ] 업데이트 채널(beta/stable) 분리 — 지금은 단일.

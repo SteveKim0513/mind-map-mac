@@ -1,6 +1,6 @@
 # 노트 메타 블록 기능
 날짜: 2026-07-08
-상태: active
+상태: completed
 
 ## 목표
 
@@ -213,14 +213,14 @@ _meta:
 
 ## 구현 단계
 
-- [ ] 1. `electron/main.ts` — `meta:getTemplates` / `meta:saveTemplates` IPC
-- [ ] 2. `src/store/metaStore.ts` — 템플릿 CRUD + subscribe (변경 시 노트에 알림)
-- [ ] 3. `src/io/noteFormat.ts` — YAML frontmatter `_meta` 파싱/직렬화
-- [ ] 4. `src/note/MetaBlock.ts` — Tiptap 커스텀 노드 (attrs: templateId, values)
-- [ ] 5. `src/note/MetaBlockView.tsx` — React NodeView (타입별 편집 UI)
-- [ ] 6. `src/note/EditorToolbar.tsx` — "메타 +" 버튼 + 드롭다운
-- [ ] 7. `src/ui/Settings.tsx` — 메타 템플릿 관리 탭 (select 옵션 편집 포함)
-- [ ] 8. `src/io/noteFormat.test.ts` — frontmatter 왕복 테스트
+- [x] 1. `electron/main.ts` — `meta:getTemplates` / `meta:saveTemplates` IPC
+- [x] 2. `src/store/metaStore.ts` — 템플릿 CRUD + subscribe (변경 시 노트에 알림)
+- [x] 3. `src/io/noteFormat.ts` — YAML frontmatter `_meta` 파싱/직렬화
+- [x] 4. Tiptap 커스텀 노드 (attrs: templateId, values) — 계획은 `MetaBlock.ts`/`MetaBlockView.tsx` 분리였으나 실제로는 `src/note/NoteMetaBlock.tsx` 단일 파일로 노드+React NodeView 통합 구현
+- [x] 5. React NodeView (타입별 편집 UI) — 위 `NoteMetaBlock.tsx`에 포함
+- [x] 6. "메타 +" 버튼 + 드롭다운 — 계획은 별도 `EditorToolbar.tsx` 대상이었으나 실제로는 `src/note/NoteEditor.tsx`에 직접 통합
+- [x] 7. `src/ui/Settings.tsx` — 메타 템플릿 관리 탭 (`MetaTemplatesSection`, select 옵션 편집 포함)
+- [x] 8. `src/io/noteFormat.test.ts` — frontmatter 왕복 테스트 (`describe('noteFormat _meta roundtrip')`)
 
 ---
 
@@ -238,8 +238,10 @@ _meta:
 ---
 
 ## 발견한 사실
-(작업 중 갱신)
+- 실제 구현은 계획의 파일 분리(`MetaBlock.ts` + `MetaBlockView.tsx`, `EditorToolbar.tsx`)를 따르지 않고 `src/note/NoteMetaBlock.tsx`(노드+뷰 통합) 및 `NoteEditor.tsx`(툴바 버튼 통합)로 단순화됨 — 기능 범위는 계획과 동일.
+- 커밋 `a3fc7bd feat: 노트 메타 블록 기능 (v1)`로 v1 범위 전체 구현·병합 완료.
 
 ## 결정 변경 이력
 - 2026-07-08: 초안 작성
 - 2026-07-08: 스키마-값 분리 원칙 확정 (자동 반영), 타입 5종 확정, select 드롭다운 추가
+- 2026-07-09: v1 구현 완료 확인, completed/로 이동 (커밋 a3fc7bd)

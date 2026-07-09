@@ -1,4 +1,6 @@
 # 노트 코드블록 + 문법 강조 (v0.7.12)
+날짜: 2026-06-23
+상태: completed
 
 > TipTap 확장 추가 기록 (frontend 규칙: 새 확장은 exec-plan에 기록).
 

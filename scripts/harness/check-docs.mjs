@@ -93,6 +93,7 @@ if (fs.existsSync(claudeMd) && fs.existsSync(agentsMd)) {
 // ── 검사 4: exec-plans/active 에 오래된 계획이 있는지 ──
 console.log('\n[4] 실행 계획 상태 확인');
 const activePlansDir = path.join(ROOT, 'docs/exec-plans/active');
+const completedPlansDir = path.join(ROOT, 'docs/exec-plans/completed');
 if (fs.existsSync(activePlansDir)) {
   const plans = fs.readdirSync(activePlansDir).filter(f => f.endsWith('.md') && f !== '.gitkeep');
   if (plans.length > 5) {
@@ -100,6 +101,35 @@ if (fs.existsSync(activePlansDir)) {
   } else {
     console.log(`  ✓ 활성 계획: ${plans.length}개`);
   }
+
+  // 상태-위치 정합성: active/에 있는 계획인데 상태가 completed/abandoned면 이동 누락
+  let staleActive = 0;
+  for (const plan of plans) {
+    const content = fs.readFileSync(path.join(activePlansDir, plan), 'utf8');
+    const m = content.match(/상태[:：]\s*(\S+)/);
+    if (m && /^(completed|abandoned)$/i.test(m[1])) {
+      fail(`docs/exec-plans/active/${plan}은 상태가 '${m[1]}'인데 completed/로 이동되지 않았습니다.`);
+      staleActive++;
+    }
+  }
+  if (staleActive === 0) console.log('  ✓ active/ 상태-위치 정합성 확인 완료');
+
+  // 필수 필드: active/와 completed/의 모든 계획에 '날짜:'와 '상태:'가 있는지
+  let missingFields = 0;
+  for (const [label, dir] of [['active', activePlansDir], ['completed', completedPlansDir]]) {
+    if (!fs.existsSync(dir)) continue;
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.md') && f !== '.gitkeep');
+    for (const f of files) {
+      const content = fs.readFileSync(path.join(dir, f), 'utf8');
+      const hasDate = /날짜[:：]/.test(content);
+      const hasStatus = /상태[:：]/.test(content);
+      if (!hasDate || !hasStatus) {
+        warn(`docs/exec-plans/${label}/${f}에 '날짜:' 또는 '상태:' 필드가 없습니다.`);
+        missingFields++;
+      }
+    }
+  }
+  if (missingFields === 0) console.log('  ✓ 필수 필드(날짜·상태) 확인 완료');
 }
 
 // ── 검사 5: decisions/ 번호 중복 ──

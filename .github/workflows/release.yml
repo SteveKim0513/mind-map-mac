@@ -35,6 +35,12 @@ jobs:
       - name: Gate (typecheck + unit test)
         run: npm run typecheck && npm test
 
+      # 문서 정합성 검사 — completed로 안 옮겨진 exec-plan, 방치된
+      # FEATURE-INVENTORY.md 등을 배포 전에 차단한다 (docs/exec-plans/
+      # active/2026-07-09-ci-doc-harness-gate.md).
+      - name: Gate (docs harness)
+        run: make harness-check
+
       # E2E: 빌드 후 Playwright로 핵심 사용자 여정 검증.
       # UI가 깨진 채로 배포되는 상황을 차단한다.
       - name: E2E tests

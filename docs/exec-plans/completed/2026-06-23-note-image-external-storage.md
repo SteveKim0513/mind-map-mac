@@ -57,15 +57,15 @@
 - NoteEditor의 handleClick + markdown.tsx에서 호출
 
 ## 구현 단계
-- [ ] `src/note/imageInsert.ts` 수정 (화질 + fileToImageData)
-- [ ] `electron/main.ts` — images:write, images:read 핸들러 추가
-- [ ] `electron/preload.ts` — imagesWrite, imagesRead 추가
-- [ ] `src/note/ImageLightbox.tsx` — 새 컴포넌트 작성
-- [ ] `src/note/NoteEditor.tsx` — insertImages 변경, 로드 로직, lightbox 연결
-- [ ] `src/note/NotePane.tsx` — notePath prop 전달, ImageLightbox 마운트
-- [ ] `src/note/markdown.tsx` — 이미지 클릭 lightbox 연결
-- [ ] `src/styles.css` — lightbox 스타일 추가
-- [ ] `make verify` 실행
+- [x] `src/note/imageInsert.ts` 수정 (화질 + fileToImageData)
+- [x] `electron/main.ts` — images:write, images:read 핸들러 추가
+- [x] `electron/preload.ts` — imagesWrite, imagesRead 추가
+- [x] `src/note/ImageLightbox.tsx` — 새 컴포넌트 작성
+- [x] `src/note/NoteEditor.tsx` — insertImages 변경, 로드 로직, lightbox 연결
+- [x] `src/note/NotePane.tsx` — notePath prop 전달, ImageLightbox 마운트
+- [x] `src/note/markdown.tsx` — 이미지 클릭 lightbox 연결
+- [x] `src/styles.css` — lightbox 스타일 추가
+- [x] `make verify` 실행 (커밋 820b5f4로 배포, v0.7.15에서 후속 버그 수정 96ad92b)
 
 ## 위험
 - onUpdate 매번 data URL 정규식 교체 → imagePathMap.size > 0 일 때만 실행으로 최적화
