@@ -52,6 +52,20 @@ function NotePaneBody() {
     if (!metaLoaded) void useMetaStore.getState().load();
   }, [metaLoaded]);
 
+  // When a template is deleted, remove its orphaned blocks from the open note.
+  // Guard: only run after templates are fully loaded — an empty list before load
+  // would incorrectly treat every block as orphaned and wipe them all out.
+  const templateIdKey = templates.map((t) => t.id).join(',');
+  useEffect(() => {
+    if (!metaLoaded) return;
+    const { note: current, setMetaBlocks: set } = store.getState();
+    if (!current.metaBlocks?.length) return;
+    const ids = new Set(templateIdKey.split(',').filter(Boolean));
+    const filtered = current.metaBlocks.filter((b) => ids.has(b.templateId));
+    if (filtered.length !== current.metaBlocks.length) set(filtered);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateIdKey, metaLoaded, store]);
+
   const [pickerOpen, setPickerOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   // live editor (handed up from NoteEditor) + its headings, for the 목차 section

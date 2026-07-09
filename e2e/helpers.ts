@@ -21,13 +21,14 @@ export async function launchApp(): Promise<AppHandle> {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
 
+  const env = { ...process.env, MINDMAP_USER_DATA: userData, MINDMAP_WORKSPACE: workspace };
+  // VSCode sets ELECTRON_RUN_AS_NODE=1 which makes Electron behave as plain Node.
+  // Remove it so the child process starts as a real Electron browser process.
+  delete env.ELECTRON_RUN_AS_NODE;
+
   const app = await electron.launch({
     args: [join(__dirname, '../dist-electron/main.js')],
-    env: {
-      ...process.env,
-      MINDMAP_USER_DATA: userData,
-      MINDMAP_WORKSPACE: workspace,
-    },
+    env,
   });
 
   const page = await app.firstWindow();
