@@ -102,7 +102,7 @@ export function CommandPalette({
                           <Icon name={it.icon} />
                         </span>
                       )}
-                      {it.label}
+                      <span className="qo-name-txt">{it.label}</span>
                     </span>
                     {it.hint && <span className="qo-folder">{it.hint}</span>}
                   </button>

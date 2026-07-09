@@ -819,7 +819,10 @@ button {
 }
 
 /* 미설정 텍스트 */
-.set-ai-empty { flex: 1; font-size: 12px; color: var(--ink-faint); }
+.set-ai-empty {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12px; color: var(--ink-faint);
+}
 
 /* 액션 버튼 묶음 */
 .set-ai-actions { display: flex; gap: 4px; flex: none; }
@@ -2928,6 +2931,14 @@ button {
 .qo-item.active .qo-folder {
   color: rgba(255, 255, 255, 0.75);
 }
+.qo-name { min-width: 0; }
+.qo-name-txt {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* global search: kind icon (node vs note) + a snippet that can't overflow */
 .gs-ic {
@@ -3965,6 +3976,7 @@ textarea:focus-visible,
   border-radius: 1px;
 }
 .md-tb-btn {
+  flex-shrink: 0;
   min-width: 30px;
   height: 30px;
   padding: 0 7px;
@@ -3981,6 +3993,7 @@ textarea:focus-visible,
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.01em;
+  white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease, transform 0.08s ease;
 }
 .md-tb-btn:hover { background: var(--canvas-soft); color: var(--ink); }
@@ -5440,6 +5453,10 @@ textarea:focus-visible,
 }
 .meta-block-title {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
   color: var(--ink-muted);
@@ -5498,7 +5515,7 @@ textarea:focus-visible,
   background: transparent; cursor: pointer; padding: 0 2px;
 }
 /* Toolbar meta add */
-.meta-add-wrap { position: relative; }
+.meta-add-wrap { position: relative; flex-shrink: 0; }
 .meta-add-menu {
   background: var(--canvas);
   border: 1px solid var(--hairline);
@@ -5540,7 +5557,14 @@ textarea:focus-visible,
   border-radius: var(--r-sm);
   font-size: 13px;
 }
-.set-meta-name { flex: 1; color: var(--ink); }
+.set-meta-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
 .set-meta-count { font-size: 11px; color: var(--ink-faint); }
 .set-meta-edit, .set-meta-del {
   font-family: var(--font); font-size: 12px;

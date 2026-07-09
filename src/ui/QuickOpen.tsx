@@ -82,7 +82,7 @@ export function QuickOpen({ onOpen, onClose }: { onOpen: (path: string) => void;
               >
                 <span className="qo-name">
                   <Icon name={f.path.endsWith('.md') ? 'note' : 'mindmap'} />
-                  {f.name}
+                  <span className="qo-name-txt">{f.name}</span>
                 </span>
                 {f.folder && <span className="qo-folder">{f.folder}</span>}
               </button>

@@ -168,7 +168,7 @@ export function GlobalSearch({ onOpen, onClose }: { onOpen: (path: string) => vo
                   <span className={`gs-ic gs-ic--${h.kind}`}>
                     <Icon name={h.kind === 'note' ? 'note' : 'mindmap'} />
                   </span>
-                  {h.label || '제목 없음'}
+                  <span className="qo-name-txt">{h.label || '제목 없음'}</span>
                 </span>
                 <span className="qo-folder">
                   {h.kind === 'node' ? h.sub : h.snippet || '노트'}
