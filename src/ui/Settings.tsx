@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, Fragment } from 'react';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { useMetaStore } from '../store/metaStore';
@@ -388,6 +388,29 @@ function MetaTemplatesSection() {
   );
 }
 
+function OptionsInput({ options, onChange }: { options: string[]; onChange: (opts: string[]) => void }) {
+  const [text, setText] = useState(() => options.join(', '));
+
+  const commit = () => {
+    const parsed = text.split(',').map((s) => s.trim()).filter(Boolean);
+    onChange(parsed);
+    setText(parsed.join(', '));
+  };
+
+  return (
+    <div className="tmpl-field-opts">
+      <span className="tmpl-opts-label">옵션 (쉼표로 구분)</span>
+      <input
+        className="tmpl-opts-input"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        placeholder="예: 읽는 중, 완료, 보류"
+      />
+    </div>
+  );
+}
+
 function TemplateEditor({
   template,
   onSave,
@@ -405,7 +428,13 @@ function TemplateEditor({
     setFields((f) => [...f, { key: newId(), label: '', type: 'text' as MetaFieldType }]);
 
   const updateField = (idx: number, patch: Partial<MetaFieldDef>) =>
-    setFields((f) => f.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
+    setFields((f) => f.map((x, i) => {
+      if (i !== idx) return x;
+      const updated = { ...x, ...patch };
+      if (patch.type !== undefined && patch.type !== 'select') delete updated.options;
+      if (patch.type === 'select' && updated.options === undefined) updated.options = [];
+      return updated;
+    }));
 
   const removeField = (idx: number) =>
     setFields((f) => f.filter((_, i) => i !== idx));
@@ -424,45 +453,44 @@ function TemplateEditor({
       </div>
       <div className="tmpl-fields-label">필드</div>
       {fields.map((f, i) => (
-        <div key={f.key} className="tmpl-field-row">
-          <input
-            className="tmpl-field-label"
-            value={f.label}
-            onChange={(e) => updateField(i, { label: e.target.value })}
-            placeholder="필드 이름"
-          />
-          <select
-            className="tmpl-field-type"
-            value={f.type}
-            onChange={(e) => updateField(i, { type: e.target.value as MetaFieldType })}
-          >
-            <option value="text">텍스트</option>
-            <option value="date">날짜</option>
-            <option value="number">숫자</option>
-            <option value="url">URL</option>
-            <option value="select">선택</option>
-          </select>
-          <button className="tmpl-field-del" onClick={() => removeField(i)}>×</button>
+        <Fragment key={f.key}>
+          <div className="tmpl-field-row">
+            <input
+              className="tmpl-field-label"
+              value={f.label}
+              onChange={(e) => updateField(i, { label: e.target.value })}
+              placeholder="필드 이름"
+            />
+            <select
+              className="tmpl-field-type"
+              value={f.type}
+              onChange={(e) => updateField(i, { type: e.target.value as MetaFieldType })}
+            >
+              <option value="text">텍스트</option>
+              <option value="date">날짜</option>
+              <option value="number">숫자</option>
+              <option value="url">URL</option>
+              <option value="select">선택</option>
+            </select>
+            <button className="tmpl-field-del" onClick={() => removeField(i)}>×</button>
+          </div>
           {f.type === 'select' && (
-            <div className="tmpl-field-opts" style={{ gridColumn: '1/-1', width: '100%' }}>
-              <span>옵션 (쉼표로 구분)</span>
-              <input
-                value={(f.options ?? []).join(', ')}
-                onChange={(e) =>
-                  updateField(i, {
-                    options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                  })
-                }
-                placeholder="예: 읽는 중, 완료, 보류"
-              />
-            </div>
+            <OptionsInput
+              options={f.options ?? []}
+              onChange={(opts) => updateField(i, { options: opts })}
+            />
           )}
-        </div>
+        </Fragment>
       ))}
       <button className="tmpl-add-field" onClick={addField}>+ 필드 추가</button>
       <div className="tmpl-actions">
         <button className="tmpl-cancel" onClick={onCancel}>취소</button>
-        <button className="tmpl-save" onClick={() => void onSave({ ...template, name, fields })}>저장</button>
+        <button
+          className="tmpl-save"
+          disabled={!name.trim()}
+          title={!name.trim() ? '템플릿 이름을 입력하세요' : undefined}
+          onClick={() => void onSave({ ...template, name: name.trim(), fields: fields.filter(f => f.label.trim()) })}
+        >저장</button>
       </div>
     </div>
   );

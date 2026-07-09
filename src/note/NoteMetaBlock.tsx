@@ -42,7 +42,7 @@ function MetaBlockItem({
 
   const startEdit = (field: MetaFieldDef) => {
     setEditingKey(field.key);
-    setDraft(block.values[field.key] ?? '');
+    setDraft((block.values ?? {})[field.key] ?? '');
   };
 
   const commitEdit = (key: string) => {
@@ -74,7 +74,7 @@ function MetaBlockItem({
       <table className="meta-table">
         <tbody>
           {template.fields.map((field) => {
-            const value = block.values[field.key] ?? '';
+            const value = (block.values ?? {})[field.key] ?? '';
             const isEditing = editingKey === field.key;
 
             return (
@@ -123,7 +123,7 @@ function FieldDisplay({ field, value, onClick }: { field: MetaFieldDef; value: s
           onClick={(e) => { e.preventDefault(); void window.api.shell.openExternal(value); }}
           title={value}
         >
-          {value.replace(/^https?:\/\//, '').slice(0, 40)}
+          {(() => { const s = value.replace(/^https?:\/\//, ''); return s.length > 40 ? s.slice(0, 40) + '…' : s; })()}
         </a>
         <button className="meta-edit-btn" onClick={onClick} title="편집">✎</button>
       </span>

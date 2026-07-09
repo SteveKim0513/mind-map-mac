@@ -5560,13 +5560,14 @@ textarea:focus-visible,
 }
 .tmpl-field-label:focus, .tmpl-field-type:focus { border-color: var(--primary); }
 .tmpl-field-label { flex: 1; }
-.tmpl-field-opts { font-size: 12px; color: var(--ink-muted); margin-top: 4px; }
-.tmpl-field-opts input {
+.tmpl-field-opts { display: flex; flex-direction: column; gap: 3px; padding-left: 4px; }
+.tmpl-opts-label { font-size: 11px; color: var(--ink-faint); }
+.tmpl-opts-input {
   font-family: var(--font); font-size: 12px; width: 100%;
   border: 1px solid var(--hairline); border-radius: var(--r-sm);
   padding: 3px 6px; background: var(--canvas); color: var(--ink); outline: none;
-  margin-top: 3px;
 }
+.tmpl-opts-input:focus { border-color: var(--primary); }
 .tmpl-field-del {
   font-size: 12px; border: none; background: transparent;
   color: var(--ink-faint); cursor: pointer; padding: 4px;
@@ -5585,6 +5586,7 @@ textarea:focus-visible,
   background: var(--primary); color: #fff;
   border: none; border-radius: var(--r-sm); padding: 6px 14px; cursor: pointer;
 }
+.tmpl-save:disabled { opacity: 0.45; cursor: not-allowed; }
 .tmpl-cancel {
   font-family: var(--font); font-size: 13px;
   background: transparent; color: var(--ink-muted);
