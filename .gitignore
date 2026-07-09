@@ -16,3 +16,8 @@ node_modules/
 .claude/settings.local.json
 .claude/session-state.md
 CLAUDE.local.md
+
+# Secrets (see .claude/rules/security.md)
+.env
+.env.*
+!.env.example
