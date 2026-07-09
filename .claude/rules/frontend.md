@@ -27,7 +27,7 @@ description: "React, Tiptap, Zustand, 색상 시스템 규칙"
 1. `/design-ui` 스킬 실행 — `docs/design/UI-DESIGN-PRINCIPLES.md` + `docs/design/COLOR-SYSTEM.md` 로드
 2. 설계 의도 확인 후 구현
 3. `make harness-check`로 디자인 하네스 통과 확인 (`scripts/harness/check-design.mjs`)
-4. `make dev`로 다크/라이트 모드 시각 확인
+4. `make dev-safe`로 다크/라이트 모드 시각 확인
 
 ## 색상 시스템
 

@@ -5500,15 +5500,12 @@ textarea:focus-visible,
 /* Toolbar meta add */
 .meta-add-wrap { position: relative; }
 .meta-add-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
   background: var(--canvas);
   border: 1px solid var(--hairline);
   border-radius: var(--r-md);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
   min-width: 140px;
-  z-index: 100;
+  z-index: 9999;
   overflow: hidden;
 }
 .meta-add-item {

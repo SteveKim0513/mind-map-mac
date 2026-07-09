@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useEditorState, type Editor } from '@tiptap/react';
 import { Icon } from '../ui/Icon';
 import { fileToDataUrl } from './imageInsert';
@@ -240,29 +241,49 @@ export function EditorToolbar({ editor, onInsertImages, templates, onAddMeta }: 
 
 function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (
+        !btnRef.current?.contains(e.target as Node) &&
+        !menuRef.current?.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [open]);
 
+  const handleClick = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setOpen((o) => !o);
+  };
+
   return (
-    <div className="meta-add-wrap" ref={ref}>
+    <div className="meta-add-wrap">
       <button
+        ref={btnRef}
         className="md-tb-btn md-tb-type"
         title="메타 추가"
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleClick}
       >
         메타+
       </button>
-      {open && (
-        <div className="meta-add-menu">
+      {open && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          className="meta-add-menu"
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+        >
           {templates.map((t) => (
             <button
               key={t.id}
@@ -272,7 +293,8 @@ function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd:
               {t.name}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

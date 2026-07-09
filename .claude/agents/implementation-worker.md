@@ -34,7 +34,7 @@ git status --short  # 현재 상태 확인
 ### Step 4: 검증
 ```bash
 make verify
-# UI 관련이면: make dev 후 동작 확인 불가 — 대신 정적 분석으로 충분성 판단
+# UI 관련이면: make dev-safe 후 동작 확인 불가 — 대신 정적 분석으로 충분성 판단
 ```
 
 ### Step 5: 결과 요약 작성

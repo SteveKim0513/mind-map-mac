@@ -40,7 +40,7 @@ make verify  # 새 테스트 통과 + 기존 테스트 회귀 없음 확인
 
 Electron/UI 관련 버그:
 ```bash
-make dev  # 실제 앱에서 동작 확인
+make dev-safe  # 격리된 환경에서 동작 확인
 ```
 
 ### Step 5: 문서 갱신 (해당 시)

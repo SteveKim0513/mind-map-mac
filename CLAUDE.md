@@ -13,7 +13,7 @@
 
 ```bash
 make setup        # npm ci
-make dev          # Electron + Vite 개발 서버
+make dev-safe     # Electron + Vite 개발 서버 (격리된 임시 환경)
 make verify       # typecheck + unit test  ← 완료 주장 전 반드시 실행
 make verify-full  # typecheck + unit test + build  ← PR 전 반드시 실행
 make harness-check # 아키텍처·문서 구조 검사
@@ -21,7 +21,7 @@ make harness-check # 아키텍처·문서 구조 검사
 
 - `make verify` 없이 완료를 주장하지 않는다.
 - 버그 수정은 가능한 경우 실패를 재현하는 테스트를 먼저 추가한다.
-- UI·Electron 변경은 테스트만으로 끝내지 않고 `make dev`로 실제 동작을 확인한다.
+- UI·Electron 변경은 테스트만으로 끝내지 않고 `make dev-safe`로 실제 동작을 확인한다.
 - 패키지 관리자는 `npm`만 사용한다. `yarn`·`pnpm`·`bun` 금지.
 
 ## Architecture
@@ -52,7 +52,7 @@ UI·CSS 작업 시 **반드시** 먼저 읽는다:
 - `docs/design/UI-DESIGN-PRINCIPLES.md` — 핵심 디자인 원칙 (simple · powerful · intuitive)
 - `docs/design/COLOR-SYSTEM.md` — 색상 3계층 규칙
 
-**UI 변경 절차**: `/design-ui` 스킬 실행 → 원칙 확인 → 구현 → `make harness-check` → `make dev` 확인.
+**UI 변경 절차**: `/design-ui` 스킬 실행 → 원칙 확인 → 구현 → `make harness-check` → `make dev-safe` 확인.
 
 ## Approval Boundaries
 

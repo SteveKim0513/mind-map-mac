@@ -10,7 +10,7 @@ const nameOf = (p: string) => (p.split('/').pop() ?? p).replace(/\.(mind|md)$/, 
 
 type Hit =
   | { kind: 'node'; label: string; sub: string; mapPath: string; mapId: string; nodeId: string }
-  | { kind: 'note'; label: string; path: string; body: string; snippet?: string };
+  | { kind: 'note'; label: string; path: string; body: string; metaText?: string; snippet?: string };
 
 function collectPaths(tree: TreeNode[], mind: string[], md: string[]) {
   for (const n of tree) {
@@ -72,7 +72,8 @@ export function GlobalSearch({ onOpen, onClose }: { onOpen: (path: string) => vo
           try {
             const note = parseNote(await window.api.readFile(path), nameOf(path));
             if (note.session) return; // focus work-logs are noise here
-            out.push({ kind: 'note', label: note.title, path, body: note.body });
+            const metaText = note.metaBlocks?.flatMap((b) => Object.values(b.values ?? {})).join(' ') ?? '';
+            out.push({ kind: 'note', label: note.title, path, body: note.body, metaText });
           } catch {
             /* skip */
           }
@@ -101,7 +102,11 @@ export function GlobalSearch({ onOpen, onClose }: { onOpen: (path: string) => vo
       } else {
         const inTitle = e.label.toLowerCase().includes(s);
         const b = e.body.toLowerCase().indexOf(s);
-        if (inTitle || b >= 0) out.push({ ...e, snippet: b >= 0 ? snippetAround(e.body, b, s.length) : '' });
+        const inMeta = !!e.metaText && e.metaText.toLowerCase().includes(s);
+        if (inTitle || b >= 0 || inMeta) {
+          const snippet = b >= 0 ? snippetAround(e.body, b, s.length) : inMeta ? `메타: ${e.metaText}` : '';
+          out.push({ ...e, snippet });
+        }
       }
       if (out.length >= 80) break;
     }

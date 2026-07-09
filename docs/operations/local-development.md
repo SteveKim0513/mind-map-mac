@@ -18,19 +18,13 @@ make setup          # npm ci
 ## 개발 서버 실행
 
 ```bash
-make dev            # npm run dev
+make dev-safe       # 격리된 임시 userData + workspace로 실행
 ```
 
 Electron 창이 열리고 Vite HMR이 활성화된다. 렌더러 변경은 즉시 반영된다.
 `electron/` 변경은 앱 재시작이 필요하다.
 
-## E2E 격리 실행
-
-실제 사용자 데이터와 격리해 테스트하려면:
-
-```bash
-MINDMAP_USER_DATA=/tmp/mindmap-test-data MINDMAP_WORKSPACE=/tmp/mindmap-test-workspace make dev
-```
+실제 사용자 데이터(`~/.config/mind-map`, 기본 워크스페이스)는 건드리지 않는다.
 
 ## 환경 변수
 

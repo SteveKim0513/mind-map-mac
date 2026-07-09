@@ -40,7 +40,7 @@ npm test -- --reporter=verbose 2>&1
 ### 앱 실행 안 됨
 
 ```bash
-make dev  # 로그에서 오류 확인
+make dev-safe  # 로그에서 오류 확인 (격리 환경)
 ```
 
 - 포트 충돌: `lsof -i :5173` 확인
