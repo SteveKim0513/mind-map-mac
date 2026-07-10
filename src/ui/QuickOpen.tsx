@@ -13,7 +13,16 @@ function flatten(nodes: TreeNode[], folder: string, out: { path: string; name: s
   }
 }
 
-export function QuickOpen({ onOpen, onClose }: { onOpen: (path: string) => void; onClose: () => void }) {
+export function QuickOpen({
+  onOpen,
+  onClose,
+  onSearchEverywhere,
+}: {
+  onOpen: (path: string) => void;
+  onClose: () => void;
+  /** 파일명으로 못 찾았을 때 "전체에서 찾기"로 넘어가는 탈출구 (IA-STRATEGY §5-1). */
+  onSearchEverywhere?: (query: string) => void;
+}) {
   const tree = useWorkspace((s) => s.tree);
   const [q, setQ] = useState('');
   const [idx, setIdx] = useState(0);
@@ -71,7 +80,20 @@ export function QuickOpen({ onOpen, onClose }: { onOpen: (path: string) => void;
         />
         <div className="qo-list">
           {results.length === 0 ? (
-            <div className="qo-empty">일치하는 파일이 없습니다</div>
+            <div className="qo-empty">
+              일치하는 파일이 없습니다
+              {q.trim() && onSearchEverywhere && (
+                <button
+                  className="qo-empty-more"
+                  onClick={() => {
+                    onSearchEverywhere(q);
+                    onClose();
+                  }}
+                >
+                  노트·노드 내용에서 "{q.trim()}" 찾기 (⌘⇧F)
+                </button>
+              )}
+            </div>
           ) : (
             results.map((f, i) => (
               <button

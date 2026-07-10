@@ -65,6 +65,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
         onPointerDown={(e) => e.stopPropagation()}
       >
         <div className="ctx-head">{sel.length}개 선택됨</div>
+        <div className="ctx-group-label">구조</div>
         {sel.length === 2 && (
           <button className="ctx-item" onClick={run(() => map.addConnection(sel[0], sel[1]))}>
             <span>두 노드 연결</span>
@@ -75,6 +76,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
         </button>
         <div className="ctx-sep" />
 
+        <div className="ctx-group-label">속성</div>
         {/* 색상 — 선택 전체에 한 번에 적용 */}
         <div className="ctx-colors">
           {TAG_KEYS.map((c) => (

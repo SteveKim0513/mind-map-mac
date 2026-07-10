@@ -650,24 +650,28 @@ export function Sidebar({
         <FocusPill docked />
         <div className="sb-foot-bar">
           <span className="sb-foot-grow" />
-          <button
-            className={`sb-foot-btn${trashCount > 0 ? ' has-items' : ''}`}
-            title={trashCount > 0 ? `휴지통 (${trashCount})` : '휴지통'}
-            onClick={() => useUi.getState().openTrash()}
-          >
-            <Icon name="trash" />
-            {trashCount > 0 && <span className="sb-trash-badge">{trashCount}</span>}
-          </button>
-          {templatesEnabled && (
+          {/* "관리형" 화면(가끔 열어보는 목록·복구 UI) 묶음 — 새 관리 화면이 추가돼도
+              여기 편입시키는 게 기본, 푸터에 아이콘을 또 늘리지 않는다 (IA-STRATEGY §5-2). */}
+          <div className="sb-foot-group">
             <button
-              className={`sb-foot-btn${templateCount > 0 ? ' has-items' : ''}`}
-              title={templateCount > 0 ? `Note Template (${templateCount})` : 'Note Template'}
-              onClick={() => useUi.getState().openTemplates()}
+              className={`sb-foot-btn${trashCount > 0 ? ' has-items' : ''}`}
+              title={trashCount > 0 ? `휴지통 (${trashCount})` : '휴지통'}
+              onClick={() => useUi.getState().openTrash()}
             >
-              <Icon name="template" />
-              {templateCount > 0 && <span className="sb-trash-badge">{templateCount}</span>}
+              <Icon name="trash" />
+              {trashCount > 0 && <span className="sb-trash-badge">{trashCount}</span>}
             </button>
-          )}
+            {templatesEnabled && (
+              <button
+                className={`sb-foot-btn${templateCount > 0 ? ' has-items' : ''}`}
+                title={templateCount > 0 ? `Note Template (${templateCount})` : 'Note Template'}
+                onClick={() => useUi.getState().openTemplates()}
+              >
+                <Icon name="template" />
+                {templateCount > 0 && <span className="sb-trash-badge">{templateCount}</span>}
+              </button>
+            )}
+          </div>
           <button className="sb-foot-btn" title="설정 (⌘,)" onClick={() => useUi.getState().openSettings()}>
             <Icon name="settings" />
           </button>

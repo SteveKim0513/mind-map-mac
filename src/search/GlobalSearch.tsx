@@ -34,10 +34,19 @@ function snippetAround(body: string, at: number, len: number): string {
  * Reads the files once on open (a personal workspace is small); filtering is
  * in-memory. Picking a result opens the note, or opens the map and centers the node.
  */
-export function GlobalSearch({ onOpen, onClose }: { onOpen: (path: string) => void; onClose: () => void }) {
+export function GlobalSearch({
+  onOpen,
+  onClose,
+  initialQuery,
+}: {
+  onOpen: (path: string) => void;
+  onClose: () => void;
+  /** ⌘K에서 "전체에서 찾기"로 넘어올 때, 이미 입력한 쿼리를 이어받는다 (IA-STRATEGY §5-1). */
+  initialQuery?: string;
+}) {
   const tree = useWorkspace((s) => s.tree);
   const [entries, setEntries] = useState<Hit[] | null>(null);
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initialQuery ?? '');
   const [idx, setIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);

@@ -10,16 +10,28 @@ export interface Command {
 }
 
 interface Item extends Command {
-  group: '명령' | '파일';
+  group: '명령' | '노드' | '파일';
+}
+
+export interface NodeHit {
+  id: string;
+  text: string;
+  run: () => void;
 }
 
 export function CommandPalette({
   commands,
   files,
+  nodes,
+  onSearchEverywhere,
   onClose,
 }: {
   commands: Command[];
   files: { path: string; name: string; folder: string; run: () => void }[];
+  /** 현재 열린 맵의 노드 — 있을 때만 "노드" 그룹으로 함께 검색된다 (IA-STRATEGY §5-1). */
+  nodes?: NodeHit[];
+  /** "전체에서 찾기" 힌트 클릭 시 호출 — 팔레트를 닫고 전체 검색(⌘⇧F)을 연다. */
+  onSearchEverywhere?: (query: string) => void;
   onClose: () => void;
 }) {
   const [q, setQ] = useState('');
@@ -39,10 +51,17 @@ export function CommandPalette({
     const s = q.trim().toLowerCase();
     // Empty query: show only commands (files are reachable via ⌘P)
     if (!s) return cmds.slice(0, 60);
-    return [...cmds, ...fileItems]
+    const nodeItems: Item[] = (nodes ?? []).map((n) => ({
+      id: `node:${n.id}`,
+      label: n.text || '제목 없음',
+      icon: 'mindmap' as const,
+      run: n.run,
+      group: '노드' as const,
+    }));
+    return [...cmds, ...nodeItems, ...fileItems]
       .filter((i) => `${i.label} ${i.hint ?? ''}`.toLowerCase().includes(s))
       .slice(0, 60);
-  }, [q, commands, files]);
+  }, [q, commands, files, nodes]);
 
   useEffect(() => inputRef.current?.focus(), []);
   useEffect(() => setIdx(0), [q]);
@@ -63,7 +82,7 @@ export function CommandPalette({
         <input
           ref={inputRef}
           className="qo-input"
-          placeholder="명령 실행… (파일 열기는 ⌘P)"
+          placeholder={nodes?.length ? '명령 실행 · 노드 검색… (파일 열기는 ⌘P)' : '명령 실행… (파일 열기는 ⌘P)'}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -111,6 +130,19 @@ export function CommandPalette({
             })
           )}
         </div>
+        {q.trim() && onSearchEverywhere && (
+          <button
+            className="qo-more"
+            onClick={() => {
+              onSearchEverywhere(q);
+              onClose();
+            }}
+          >
+            <Icon name="search" />
+            전체에서 찾기 (노트·다른 맵 포함)
+            <kbd>⌘⇧F</kbd>
+          </button>
+        )}
       </div>
     </div>
   );

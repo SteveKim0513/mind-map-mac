@@ -316,12 +316,12 @@ function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd:
     <div className="meta-add-wrap">
       <button
         ref={btnRef}
-        className="md-tb-btn md-tb-type"
+        className="md-tb-btn md-tb-type md-tb-meta"
         title="메타 추가"
         onMouseDown={(e) => e.preventDefault()}
         onClick={handleClick}
       >
-        메타+
+        <Icon name="table" />메타+
       </button>
       {open && menuPos && createPortal(
         <div
@@ -398,12 +398,12 @@ function TemplateAddButton({
     <div className="tpl-add-wrap">
       <button
         ref={btnRef}
-        className="md-tb-btn md-tb-type"
+        className="md-tb-btn md-tb-type md-tb-template"
         title="템플릿 추가"
         onMouseDown={(e) => e.preventDefault()}
         onClick={handleClick}
       >
-        템플릿+
+        <Icon name="template" />템플릿+
       </button>
       {open && menuPos && createPortal(
         <div

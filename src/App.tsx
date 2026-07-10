@@ -19,6 +19,7 @@ import { Settings } from './ui/Settings';
 import { Manual } from './ui/Manual';
 import { UpdateStatus } from './ui/UpdateStatus';
 import { Toasts } from './ui/Toasts';
+import { GrowthNudges } from './ui/GrowthNudges';
 import { QuickOpen } from './ui/QuickOpen';
 import { CommandPalette, type Command } from './ui/CommandPalette';
 import type { TreeNode } from '../electron/preload';
@@ -53,6 +54,8 @@ export default function App() {
   const recent = useSession((s) => s.recent);
 
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  // ⌘K "전체에서 찾기" → ⌘⇧F로 넘어갈 때 이미 입력한 쿼리를 이어받기 위한 중계 상태.
+  const [gsInitialQuery, setGsInitialQuery] = useState('');
   const searchOpen = useUi((s) => s.searchOpen);
   const globalSearchOpen = useUi((s) => s.globalSearchOpen);
   const settingsOpen = useUi((s) => s.settingsOpen);
@@ -408,12 +411,17 @@ export default function App() {
         <QuickOpen
           onOpen={(p) => void openByPath(p)}
           onClose={() => useUi.getState().setQuickOpen(false)}
+          onSearchEverywhere={(query) => {
+            setGsInitialQuery(query);
+            useUi.getState().setGlobalSearch(true);
+          }}
         />
       )}
       {globalSearchOpen && (
         <GlobalSearch
           onOpen={(p) => void openByPath(p)}
           onClose={() => useUi.getState().setGlobalSearch(false)}
+          initialQuery={gsInitialQuery}
         />
       )}
       {cmdkOpen && (
@@ -426,10 +434,27 @@ export default function App() {
             toggleSidebar: () => setSidebarVisible((v) => !v),
           })}
           files={flattenFiles(wsTree, (p) => void openByPath(p))}
+          nodes={
+            activeStore
+              ? Object.values(activeStore.getState().doc.nodes).map((n) => ({
+                  id: n.id,
+                  text: n.text,
+                  run: () => {
+                    activeStore.getState().select(n.id);
+                    useUi.getState().focusNode(n.id);
+                  },
+                }))
+              : undefined
+          }
+          onSearchEverywhere={(query) => {
+            setGsInitialQuery(query);
+            useUi.getState().setGlobalSearch(true);
+          }}
           onClose={() => useUi.getState().setCmdkOpen(false)}
         />
       )}
       <Toasts />
+      <GrowthNudges />
       <NotePopup />
       <NoteLinkPicker />
       <FocusOverlay sidebarVisible={sidebarVisible} />

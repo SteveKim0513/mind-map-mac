@@ -677,6 +677,17 @@ button {
   padding: 6px 8px;
 }
 .sb-foot-grow { flex: 1; }
+/* "관리형" 화면(휴지통·Note Template 등) 묶음 — 설정과 시각적으로 분리하되
+   레이블 없이 배경만으로 그룹핑 (IA-STRATEGY §5-2, 새 관리 화면은 여기 편입). */
+.sb-foot-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: var(--canvas-soft);
+  border-radius: var(--r-md);
+  padding: 2px;
+  margin-right: 6px;
+}
 .sb-foot-btn {
   flex: none;
   display: inline-flex;
@@ -2906,6 +2917,17 @@ button {
   padding: 18px;
   text-align: center;
 }
+.qo-empty-more {
+  display: block;
+  margin: 10px auto 0;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-family: var(--font);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.qo-empty-more:hover { text-decoration: underline; }
 .qo-item {
   width: 100%;
   display: flex;
@@ -3454,6 +3476,34 @@ textarea:focus-visible,
   text-transform: uppercase;
   letter-spacing: 0.4px;
   padding: 8px 12px 4px;
+}
+/* "전체에서 찾기" 힌트 — 검색 3종 통합의 탈출구(IA-STRATEGY §5-1). 결과 목록과
+   구분되게 상단 hairline + 살짝 어두운 배경으로 "다음 단계"임을 표시. */
+.qo-more {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  background: var(--canvas-soft);
+  color: var(--ink-secondary);
+  font-family: var(--font);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.qo-more:hover { color: var(--primary); }
+.qo-more .ic { width: 14px; height: 14px; color: var(--ink-faint); flex-shrink: 0; }
+.qo-more kbd {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-faint);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 1px 5px;
 }
 
 /* ── Semantic zoom (B): hide accessories when zoomed out ────────────────────── */
@@ -4028,6 +4078,11 @@ textarea:focus-visible,
 
 /* typographic controls (headings + marks) — kept as crisp text, Notion-style */
 .md-tb-type { font-feature-settings: 'tnum' 1; }
+/* 메타+/템플릿+ 는 이름이 비슷해 혼동되기 쉬웠다 — 아이콘 모양으로 1차 구분,
+   각 기능이 이미 쓰고 있는 정체성 색을 재사용 (새 hue 추가 없음). IA-STRATEGY §5-3. */
+.md-tb-meta, .md-tb-template { gap: 5px; }
+.md-tb-meta .ic { color: var(--primary); width: 15px; height: 15px; }
+.md-tb-template .ic { color: var(--state-note); width: 15px; height: 15px; }
 .md-h { display: inline-flex; align-items: baseline; }
 .md-h-n { font-size: 0.66em; font-weight: 700; margin-left: 0.5px; vertical-align: baseline; }
 .mdb-bold { font-weight: 800; }
