@@ -211,11 +211,16 @@ function NotePaneBody() {
   return (
     <div className="note-doc">
       {note.session && <SessionMetaBanner session={note.session} />}
-      <NoteMetaBlocks
-        blocks={note.metaBlocks ?? []}
-        templates={templates}
-        onChange={setMetaBlocks}
-      />
+      {/* 메타 블록은 노트 자체에 붙는 구조화 데이터라 템플릿엔 의미가 없다 — 템플릿+로
+          삽입되는 건 본문 텍스트뿐이라 메타 블록은 절대 옮겨지지 않고, 삽입 대상 노트가
+          이미 같은 템플릿의 메타 블록을 갖고 있으면 혼란만 준다. */}
+      {!isTemplate && (
+        <NoteMetaBlocks
+          blocks={note.metaBlocks ?? []}
+          templates={templates}
+          onChange={setMetaBlocks}
+        />
+      )}
       <div className="note-head">
         <input
           className="note-title"
@@ -337,15 +342,19 @@ function NotePaneBody() {
         onCreateNote={isSession ? undefined : createSiblingNote}
         onReady={setEditor}
         notePath={filePath ?? undefined}
-        templates={templates}
-        onAddMeta={(templateId) => {
-          const existing = note.metaBlocks ?? [];
-          if (existing.some((b) => b.templateId === templateId)) {
-            useUi.getState().toast('이미 추가된 템플릿입니다.');
-            return;
-          }
-          setMetaBlocks([...existing, { templateId, values: {} }]);
-        }}
+        templates={isTemplate ? undefined : templates}
+        onAddMeta={
+          isTemplate
+            ? undefined
+            : (templateId) => {
+                const existing = note.metaBlocks ?? [];
+                if (existing.some((b) => b.templateId === templateId)) {
+                  useUi.getState().toast('이미 추가된 템플릿입니다.');
+                  return;
+                }
+                setMetaBlocks([...existing, { templateId, values: {} }]);
+              }
+        }
       />
       {/* invisible: keeps the 목차 heading list / count live off the editor */}
       {editor && <NoteHeadingsProbe editor={editor} onChange={setHeadings} />}
