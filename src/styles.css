@@ -268,6 +268,7 @@ button {
 .tab-ic .ic { width: 13px; height: 13px; }
 .tab-ic--map { color: var(--state-map); }
 .tab-ic--note { color: var(--state-note); }
+.tab-ic--template { color: var(--state-note); }
 .tab-title {
   white-space: nowrap;
   overflow: hidden;
@@ -3871,6 +3872,21 @@ textarea:focus-visible,
   background: var(--ink-muted);
   animation: savePulse 1s ease-in-out infinite;
 }
+/* Note Template identity badge — the only always-visible (no-hover) signal that
+   this note lives in .templates/, since the tab bar can be scrolled/unglanced. */
+.note-template-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--state-note);
+  background: color-mix(in srgb, var(--state-note) 13%, transparent);
+  border-radius: var(--r-md);
+  padding: 4px 9px;
+}
+.note-template-badge .ic { width: 13px; height: 13px; }
 @keyframes savePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* map save dot in the toolbar */

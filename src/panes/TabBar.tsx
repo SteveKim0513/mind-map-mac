@@ -169,10 +169,10 @@ export function TabBar(p: Props) {
             }}
           >
             <span
-              className={`tab-ic tab-ic--${t.kind === 'note' ? 'note' : 'map'}`}
-              title={t.kind === 'note' ? '노트' : '마인드맵'}
+              className={`tab-ic tab-ic--${t.isTemplate ? 'template' : t.kind === 'note' ? 'note' : 'map'}`}
+              title={t.isTemplate ? '노트 템플릿' : t.kind === 'note' ? '노트' : '마인드맵'}
             >
-              <Icon name={t.kind === 'note' ? 'note' : 'mindmap'} />
+              <Icon name={t.isTemplate ? 'template' : t.kind === 'note' ? 'note' : 'mindmap'} />
             </span>
             <span className="tab-title">{t.title || '제목 없음'}</span>
             <TabDirty store={t.store} />

@@ -45,6 +45,7 @@ interface Props {
 }
 
 const PLACEHOLDER = '메모를 시작하세요…  (“/” 를 눌러 블록 추가)';
+const TEMPLATE_PLACEHOLDER = '템플릿 내용을 작성하세요…  (“/” 를 눌러 블록 추가)';
 
 // Slash-command block menu (power-user path on top of the toolbar).
 const SLASH: SlashItem[] = [
@@ -70,6 +71,7 @@ interface MenuState {
 /** Notion-style rich editor: Markdown is applied live as you type, no edit/preview
  *  toggle. Stored on disk as Markdown via tiptap-markdown. A "/" opens a block menu. */
 export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, notePath, templates, onAddMeta }: Props) {
+  const isTemplate = !!notePath && notePath.includes('/.templates/');
   const [menu, setMenu] = useState<MenuState | null>(null);
   // mirror used by the (creation-time) keydown handler so it sees fresh values
   const m = useRef<{ open: boolean; items: SlashItem[]; active: number; query: string }>({
@@ -95,8 +97,13 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
     }
   };
   const createTemplate = async () => {
-    await useTemplates.getState().create('제목 없음');
-    useUi.getState().toast('새 템플릿을 만들었어요 · 사이드바의 Note Template에서 편집하세요');
+    try {
+      const path = await useTemplates.getState().create('새 템플릿');
+      const content = await window.api.readFile(path);
+      useSession.getState().openPath(path, content);
+    } catch {
+      useUi.getState().toast('템플릿을 만들지 못했습니다.');
+    }
   };
 
   // ── "[[" note-link autocomplete ──────────────────────────────────────────
@@ -278,7 +285,9 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
       CodeBlock,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: scaffold ? SESSION_NOTE_PLACEHOLDER : PLACEHOLDER }),
+      Placeholder.configure({
+        placeholder: scaffold ? SESSION_NOTE_PLACEHOLDER : isTemplate ? TEMPLATE_PLACEHOLDER : PLACEHOLDER,
+      }),
       Image.configure({ inline: false, allowBase64: true }),
       Table.configure({ resizable: false }),
       TableRow,

@@ -12,12 +12,18 @@ export interface Tab {
   path: string;
   title: string;
   kind: TabKind;
+  isTemplate: boolean;
   store: MapStore | NoteStore;
 }
 
 /** true when this path should open as a Markdown note (vs a .mind map). */
 export function isNotePath(path: string): boolean {
   return path.endsWith('.md');
+}
+
+/** true when this path lives in the hidden Note Template folder (.templates/). */
+export function isTemplatePath(path: string): boolean {
+  return path.includes('/.templates/');
 }
 
 export interface RecentFile {
@@ -76,14 +82,15 @@ function base(path: string): string {
 }
 
 function makeTab(path: string, content: string): Tab {
+  const isTemplate = isTemplatePath(path);
   if (isNotePath(path)) {
     const store = createNoteStore();
     store.getState().loadNote(parseNote(content, base(path)), path);
-    return { id: newId(), path, title: base(path), kind: 'note', store };
+    return { id: newId(), path, title: base(path), kind: 'note', isTemplate, store };
   }
   const store = createMapStore();
   store.getState().loadDoc(deserialize(content), path);
-  return { id: newId(), path, title: base(path), kind: 'map', store };
+  return { id: newId(), path, title: base(path), kind: 'map', isTemplate, store };
 }
 
 /** makeTab that returns null (instead of throwing) when the file is corrupt. */

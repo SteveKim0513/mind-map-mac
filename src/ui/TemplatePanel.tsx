@@ -41,7 +41,7 @@ export function TemplatePanel({ onOpen }: { onOpen: (path: string) => void }) {
   const filtered = items.filter((it) => it.title.toLowerCase().includes(query.trim().toLowerCase()));
 
   const newTemplate = async () => {
-    const path = await create('제목 없음');
+    const path = await create('새 템플릿');
     close();
     onOpen(path);
   };

@@ -124,6 +124,9 @@ function NotePaneBody() {
 
   // attached notes live in the hidden .notes/ folder; offer to promote into the tree
   const isAttached = !!filePath && filePath.includes('/.notes/');
+  // templates live in the hidden .templates/ folder — not part of the mind map
+  // graph, so node-linking makes no sense here (Note Templates spec §0/§4).
+  const isTemplate = !!filePath && filePath.includes('/.templates/');
   const promote = async () => {
     if (!filePath) return;
     const sess = useSession.getState();
@@ -221,6 +224,12 @@ function NotePaneBody() {
           readOnly={isSession}
           onChange={(e) => setTitle(e.target.value)}
         />
+        {isTemplate && (
+          <span className="note-template-badge" title="이 노트는 템플릿입니다 — 템플릿+ 로 다른 노트에 삽입할 수 있어요">
+            <Icon name="template" />
+            템플릿
+          </span>
+        )}
         <span className={`note-save${dirty ? ' saving' : ''}`} title={dirty ? '저장 중' : '저장됨'}>
           {dirty ? '저장 중…' : '저장됨'}
         </span>
@@ -242,8 +251,9 @@ function NotePaneBody() {
             <span className="note-info-count">{metaCount}</span>
           </button>
         )}
-        {/* session notes have an immutable node attribution — no link editing */}
-        {!isSession && (
+        {/* session notes have an immutable node attribution — no link editing;
+            templates aren't part of the mind map graph, so linking is meaningless */}
+        {!isSession && !isTemplate && (
           <button className="note-link-btn" title="이 노트를 마인드맵 노드에 연결" onClick={() => setPickerOpen(true)}>
             <Icon name="link" />
             노드에 연동
