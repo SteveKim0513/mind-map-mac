@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditorState, type Editor } from '@tiptap/react';
 import { Icon } from '../ui/Icon';
 import { fileToDataUrl } from './imageInsert';
 import type { MetaTemplate } from '../types';
+import type { TemplateSummary } from '../../electron/preload';
 
 export interface EditorToolbarProps {
   editor: Editor;
@@ -11,12 +12,26 @@ export interface EditorToolbarProps {
   onInsertImages?: (files: File[]) => void;
   templates?: MetaTemplate[];
   onAddMeta?: (templateId: string) => void;
+  /** Note Template feature — undefined/false hides the 템플릿+ button entirely. */
+  templatesEnabled?: boolean;
+  templateItems?: TemplateSummary[];
+  onInsertTemplate?: (name: string) => void;
+  onCreateTemplate?: () => void;
 }
 
 // Toolbar bound to the live TipTap editor. Buttons run editor commands and light
 // up when the cursor sits inside the matching formatting.
 
-export function EditorToolbar({ editor, onInsertImages, templates, onAddMeta }: EditorToolbarProps) {
+export function EditorToolbar({
+  editor,
+  onInsertImages,
+  templates,
+  onAddMeta,
+  templatesEnabled,
+  templateItems,
+  onInsertTemplate,
+  onCreateTemplate,
+}: EditorToolbarProps) {
   const [linking, setLinking] = useState(false);
   const [url, setUrl] = useState('');
 
@@ -235,15 +250,27 @@ export function EditorToolbar({ editor, onInsertImages, templates, onAddMeta }: 
           <MetaAddButton templates={templates} onAdd={onAddMeta} />
         </>
       )}
+      {templatesEnabled && onInsertTemplate && onCreateTemplate && (
+        <>
+          <span className="md-tb-sep" aria-hidden="true" />
+          <TemplateAddButton
+            items={templateItems ?? []}
+            onInsert={onInsertTemplate}
+            onCreateNew={onCreateTemplate}
+          />
+        </>
+      )}
     </div>
   );
 }
 
-function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd: (id: string) => void }) {
+/** Fixed-position dropdown anchored under a toolbar button, with a search box up top.
+ *  Shared shell for both the meta-field menu and the note-template menu. */
+function useAddMenu(btnRef: RefObject<HTMLButtonElement | null>) {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -257,6 +284,10 @@ function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd:
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
+  }, [open, btnRef]);
+
+  useEffect(() => {
+    if (open) setTimeout(() => searchRef.current?.focus(), 0);
   }, [open]);
 
   const handleClick = () => {
@@ -266,6 +297,20 @@ function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd:
     }
     setOpen((o) => !o);
   };
+
+  return { open, menuPos, menuRef, searchRef, handleClick, close: () => setOpen(false) };
+}
+
+function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd: (id: string) => void }) {
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const { open, menuPos, menuRef, searchRef, handleClick, close } = useAddMenu(btnRef);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
+  const filtered = templates.filter((t) => t.name.toLowerCase().includes(query.trim().toLowerCase()));
 
   return (
     <div className="meta-add-wrap">
@@ -284,15 +329,139 @@ function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd:
           className="meta-add-menu"
           style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
         >
-          {templates.map((t) => (
-            <button
-              key={t.id}
-              className="meta-add-item"
-              onClick={() => { onAdd(t.id); setOpen(false); }}
-            >
-              {t.name}
-            </button>
-          ))}
+          <div className="qsearch-row">
+            <Icon name="search" />
+            <input
+              ref={searchRef}
+              placeholder="메타 필드 검색..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          {filtered.length === 0 ? (
+            <div className="meta-add-empty">일치하는 필드가 없어요</div>
+          ) : (
+            <div className="meta-add-list">
+              {filtered.map((t) => (
+                <button
+                  key={t.id}
+                  className="meta-add-item"
+                  onClick={() => { onAdd(t.id); close(); }}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function TemplateAddButton({
+  items,
+  onInsert,
+  onCreateNew,
+}: {
+  items: TemplateSummary[];
+  onInsert: (name: string) => void;
+  onCreateNew: () => void;
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const { open, menuPos, menuRef, searchRef, handleClick, close } = useAddMenu(btnRef);
+  const [query, setQuery] = useState('');
+  const [hover, setHover] = useState(0);
+
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
+  const filtered = items.filter((it) => it.title.toLowerCase().includes(query.trim().toLowerCase()));
+
+  useEffect(() => {
+    setHover(0);
+  }, [query, open]);
+
+  const select = (name: string) => {
+    onInsert(name);
+    close();
+  };
+
+  return (
+    <div className="tpl-add-wrap">
+      <button
+        ref={btnRef}
+        className="md-tb-btn md-tb-type"
+        title="템플릿 추가"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={handleClick}
+      >
+        템플릿+
+      </button>
+      {open && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          className="meta-add-menu"
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+        >
+          <div className="qsearch-row">
+            <Icon name="search" />
+            <input
+              ref={searchRef}
+              placeholder="템플릿 검색... (↑↓ 이동, Enter 삽입)"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setHover((h) => Math.min(h + 1, filtered.length - 1));
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setHover((h) => Math.max(h - 1, 0));
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const item = filtered[hover];
+                  if (item) select(item.name);
+                  else onCreateNew();
+                } else if (e.key === 'Escape') {
+                  close();
+                }
+              }}
+            />
+          </div>
+          {items.length === 0 ? (
+            <div className="meta-add-empty">아직 템플릿이 없어요</div>
+          ) : filtered.length === 0 ? (
+            <div className="meta-add-empty">일치하는 템플릿이 없어요</div>
+          ) : (
+            <div className="meta-add-list">
+              {filtered.map((it, i) => (
+                <button
+                  key={it.name}
+                  className={`meta-add-item tpl${i === hover ? ' on' : ''}`}
+                  onMouseEnter={() => setHover(i)}
+                  onClick={() => select(it.name)}
+                >
+                  <Icon name="template" />
+                  {it.title}
+                  <span className="meta-add-date">{fmtDate(it.updatedAt)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            className="meta-add-item add"
+            onClick={() => { onCreateNew(); close(); }}
+          >
+            <Icon name="plus" /> 새 템플릿 만들기
+          </button>
         </div>,
         document.body
       )}

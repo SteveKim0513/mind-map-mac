@@ -260,7 +260,12 @@ function metaTemplatesPath() {
   return path.join(app.getPath('userData'), 'meta-templates.json');
 }
 
-async function readSettings(): Promise<{ workspace?: string }> {
+interface AppSettings {
+  workspace?: string;
+  templatesEnabled?: boolean;
+}
+
+async function readSettings(): Promise<AppSettings> {
   try {
     return JSON.parse(await fs.readFile(settingsPath(), 'utf-8'));
   } catch {
@@ -268,14 +273,24 @@ async function readSettings(): Promise<{ workspace?: string }> {
   }
 }
 
-async function writeSettings(s: { workspace?: string }) {
+async function writeSettings(s: AppSettings) {
   await fs.writeFile(settingsPath(), JSON.stringify(s, null, 2), 'utf-8');
+}
+
+const TEMPLATES_DIR = '.templates';
+
+/** Note Template folder is a permanent system folder — recreate it whenever the feature is on. */
+async function ensureTemplatesDir(ws: string): Promise<void> {
+  const s = await readSettings();
+  if (s.templatesEnabled === false) return; // explicitly turned off — don't recreate
+  await fs.mkdir(path.join(ws, TEMPLATES_DIR), { recursive: true });
 }
 
 /** Resolve the workspace dir, creating a default one under ~/Documents on first run. */
 async function getWorkspace(): Promise<string> {
   if (E2E_WORKSPACE) {
     await fs.mkdir(E2E_WORKSPACE, { recursive: true });
+    await ensureTemplatesDir(E2E_WORKSPACE);
     return E2E_WORKSPACE;
   }
   const s = await readSettings();
@@ -289,6 +304,7 @@ async function getWorkspace(): Promise<string> {
     await writeSettings({ ...s, workspace: ws });
   }
   await fs.mkdir(ws, { recursive: true });
+  await ensureTemplatesDir(ws);
   return ws;
 }
 
@@ -340,6 +356,19 @@ async function uniquePath(dir: string, base: string, ext: string): Promise<strin
   }
 }
 
+/** Resolve `p` and reject it if it escapes the current workspace — path-traversal
+ *  guard for every IPC handler that writes, renames, moves, or deletes on disk.
+ *  Note: a bare `resolved.startsWith(ws)` is NOT enough — "/ws-evil" would pass
+ *  a check against "/ws" without the separator. */
+async function assertInsideWorkspace(p: string): Promise<string> {
+  const ws = await getWorkspace();
+  const resolved = path.resolve(p);
+  if (resolved !== ws && !resolved.startsWith(ws + path.sep)) {
+    throw new Error('Path outside workspace');
+  }
+  return resolved;
+}
+
 ipcMain.handle('workspace:get', () => getWorkspace());
 
 ipcMain.handle('workspace:choose', async () => {
@@ -364,9 +393,7 @@ ipcMain.handle('fs:read', async (_e, filePath: string) => {
 ipcMain.handle(
   'images:write',
   async (_e, args: { notePath: string; filename: string; buffer: number[] }) => {
-    const ws = await getWorkspace();
-    const resolved = path.resolve(args.notePath);
-    if (!resolved.startsWith(ws)) throw new Error('Path outside workspace');
+    const resolved = await assertInsideWorkspace(args.notePath);
     const base = path.basename(resolved, path.extname(resolved));
     const assetsDir = path.join(path.dirname(resolved), `${base}.assets`);
     await fs.mkdir(assetsDir, { recursive: true });
@@ -378,9 +405,9 @@ ipcMain.handle(
 ipcMain.handle(
   'images:read',
   async (_e, args: { notePath: string; filepath: string }) => {
-    const ws = await getWorkspace();
-    const resolved = path.resolve(path.dirname(args.notePath), args.filepath);
-    if (!resolved.startsWith(ws)) throw new Error('Path outside workspace');
+    const resolved = await assertInsideWorkspace(
+      path.join(path.dirname(args.notePath), args.filepath),
+    );
     const buf = await fs.readFile(resolved);
     const ext = path.extname(args.filepath).toLowerCase().slice(1);
     const mime: Record<string, string> = {
@@ -394,8 +421,9 @@ ipcMain.handle(
 ipcMain.handle(
   'fs:createFile',
   async (_e, args: { dir: string; name: string; content: string; ext?: string }) => {
-    await fs.mkdir(args.dir, { recursive: true }); // auto-create dir (e.g. hidden .notes)
-    const full = await uniquePath(args.dir, args.name, args.ext ?? '.mind');
+    const dir = await assertInsideWorkspace(args.dir);
+    await fs.mkdir(dir, { recursive: true }); // auto-create dir (e.g. hidden .notes)
+    const full = await assertInsideWorkspace(await uniquePath(dir, args.name, args.ext ?? '.mind'));
     await fs.writeFile(full, args.content, 'utf-8');
     return full;
   },
@@ -414,17 +442,19 @@ ipcMain.handle('attached:list', async () => {
 });
 
 ipcMain.handle('fs:createFolder', async (_e, args: { dir: string; name: string }) => {
-  const full = await uniquePath(args.dir, args.name, '');
+  const dir = await assertInsideWorkspace(args.dir);
+  const full = await assertInsideWorkspace(await uniquePath(dir, args.name, ''));
   await fs.mkdir(full, { recursive: true });
   return full;
 });
 
 ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) => {
-  const dir = path.dirname(args.path);
-  let next = path.join(dir, args.newName);
+  const src = await assertInsideWorkspace(args.path);
+  const dir = path.dirname(src);
+  let next = await assertInsideWorkspace(path.join(dir, args.newName));
   // Guard against clobbering an existing different file (fs.rename overwrites silently).
   // Skip when it's the same file (e.g. a case-only rename on a case-insensitive FS).
-  if (next.toLowerCase() !== args.path.toLowerCase()) {
+  if (next.toLowerCase() !== src.toLowerCase()) {
     const ext = args.newName.endsWith('.mind')
       ? '.mind'
       : args.newName.endsWith('.md')
@@ -433,20 +463,20 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
     const base = ext ? args.newName.slice(0, -ext.length) : args.newName;
     try {
       await fs.access(next);
-      next = await uniquePath(dir, base, ext); // collision → de-dupe like create/move
+      next = await assertInsideWorkspace(await uniquePath(dir, base, ext)); // collision → de-dupe like create/move
       log.info(`[file] rename collision → de-duped to ${path.basename(next)}`);
     } catch {
       /* destination is free */
     }
   }
-  await fs.rename(args.path, next);
+  await fs.rename(src, next);
 
   // Keep the companion image-assets directory in sync with the renamed note.
   if (path.extname(next) === '.md') {
-    const oldStem = path.basename(args.path, path.extname(args.path));
+    const oldStem = path.basename(src, path.extname(src));
     const newStem = path.basename(next, path.extname(next));
     if (oldStem !== newStem) {
-      const oldAssets = path.join(path.dirname(args.path), `${oldStem}.assets`);
+      const oldAssets = path.join(path.dirname(src), `${oldStem}.assets`);
       const newAssets = path.join(path.dirname(next), `${newStem}.assets`);
       try {
         await fs.access(oldAssets);
@@ -459,15 +489,16 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
 });
 
 ipcMain.handle('fs:delete', async (_e, target: string) => {
+  const resolved = await assertInsideWorkspace(target);
   try {
-    await fs.access(target);
+    await fs.access(resolved);
   } catch {
     return true; // already gone — treat as success
   }
   try {
-    await shell.trashItem(target);
+    await shell.trashItem(resolved);
   } catch (err) {
-    log.error(`[file] trash failed (${path.basename(target)}): ${(err as Error).message}`);
+    log.error(`[file] trash failed (${path.basename(resolved)}): ${(err as Error).message}`);
     throw err;
   }
   return true;
@@ -644,7 +675,8 @@ ipcMain.handle('trash:empty', async () => {
 // Move a file/folder into destDir. Returns the new path (or null if it was a no-op
 // or an illegal move, e.g. a folder into its own descendant).
 ipcMain.handle('fs:move', async (_e, args: { src: string; destDir: string }) => {
-  const { src, destDir } = args;
+  const src = await assertInsideWorkspace(args.src);
+  const destDir = await assertInsideWorkspace(args.destDir);
   const name = path.basename(src);
   if (path.dirname(src) === destDir) return null; // already there
   if (destDir === src || destDir.startsWith(src + path.sep)) return null; // into itself
@@ -841,4 +873,41 @@ ipcMain.handle('meta:getTemplates', async () => {
 
 ipcMain.handle('meta:saveTemplates', async (_e, templates: unknown) => {
   await fs.writeFile(metaTemplatesPath(), JSON.stringify(templates, null, 2), 'utf-8');
+});
+
+// ─── Note templates ─────────────────────────────────────────────────────────
+// Templates live in the hidden <workspace>/.templates folder — a permanent system
+// folder (walk() already hides dot-folders from the sidebar tree; ensureTemplatesDir()
+// recreates it whenever the feature is on, including right after the user deletes it).
+
+ipcMain.handle('settings:getTemplatesEnabled', async () => {
+  const s = await readSettings();
+  return s.templatesEnabled !== false; // default on
+});
+
+ipcMain.handle('settings:setTemplatesEnabled', async (_e, enabled: boolean) => {
+  const s = await readSettings();
+  await writeSettings({ ...s, templatesEnabled: enabled });
+  if (enabled) await ensureTemplatesDir(await getWorkspace());
+});
+
+ipcMain.handle('templates:list', async () => {
+  const dir = path.join(await getWorkspace(), TEMPLATES_DIR);
+  try {
+    const ents = await fs.readdir(dir, { withFileTypes: true });
+    const files = ents.filter((e) => e.isFile() && e.name.endsWith('.md'));
+    return await Promise.all(
+      files.map(async (e) => {
+        const full = path.join(dir, e.name);
+        const stat = await fs.stat(full);
+        return {
+          name: e.name,
+          title: e.name.slice(0, -3),
+          updatedAt: stat.mtime.toISOString(),
+        };
+      }),
+    );
+  } catch {
+    return [];
+  }
 });

@@ -133,17 +133,21 @@ test('sidebar updates when a file is added externally and the window regains foc
       const win = BrowserWindow.getAllWindows()[0];
       win.blur();
     });
-    await page.waitForTimeout(200);
+    await expect
+      .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFocused()))
+      .toBe(false);
     await app.evaluate(({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows()[0];
       win.focus();
     });
 
-    // Give the refresh time to propagate
-    await page.waitForTimeout(500);
-
-    const labels = await getSidebarLabels(page);
-    expect(labels.some((l) => l.includes('외부파일'))).toBe(true);
+    // Poll for the refresh to propagate instead of a fixed sleep — the debounced
+    // tree rebuild can take longer than a flat timeout under system load.
+    await expect
+      .poll(async () => (await getSidebarLabels(page)).some((l) => l.includes('외부파일')), {
+        timeout: 5_000,
+      })
+      .toBe(true);
   } finally {
     await cleanup();
   }

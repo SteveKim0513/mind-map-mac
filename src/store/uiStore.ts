@@ -132,6 +132,10 @@ interface UiState {
   trashOpen: boolean;
   openTrash: () => void;
   closeTrash: () => void;
+  // note template library (overlay)
+  templatesOpen: boolean;
+  openTemplates: () => void;
+  closeTemplates: () => void;
   // release history (overlay) + post-update "what's new" card (a version string)
   updatesOpen: boolean;
   openUpdates: () => void;
@@ -312,6 +316,9 @@ export const useUi = create<UiState>((set, get) => ({
   trashOpen: false,
   openTrash: () => set({ trashOpen: true }),
   closeTrash: () => set({ trashOpen: false }),
+  templatesOpen: false,
+  openTemplates: () => set({ templatesOpen: true }),
+  closeTemplates: () => set({ templatesOpen: false }),
   updatesOpen: false,
   openUpdates: () => set({ updatesOpen: true }),
   closeUpdates: () => set({ updatesOpen: false }),

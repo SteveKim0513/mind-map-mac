@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, Fragment } from 'react';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { useMetaStore } from '../store/metaStore';
+import { useTemplates } from '../store/templateStore';
 import { CURRENT_VERSION, RELEASES } from './changelog';
 import { Icon } from './Icon';
 import { renderMarkdown } from '../note/markdown';
@@ -200,6 +201,8 @@ function MainView({
   navigate: (v: SettingsView) => void;
 }) {
   const { templates } = useMetaStore();
+  const templatesEnabled = useTemplates((s) => s.enabled);
+  const setTemplatesEnabled = useTemplates((s) => s.setEnabled);
 
   return (
     <>
@@ -235,6 +238,27 @@ function MainView({
           <span className="set-folder-name">{root ? basename(root) : '폴더 선택'}</span>
           <span className="set-folder-act">변경</span>
         </button>
+      </div>
+
+      <div className="set-row">
+        <div>
+          <span className="set-label">노트 템플릿</span>
+          <p className="set-desc">사이드바에 템플릿 폴더 표시, 편집기에 템플릿+ 버튼 표시</p>
+        </div>
+        <div className="seg">
+          <button
+            className={`seg-btn${templatesEnabled ? ' on' : ''}`}
+            onClick={() => void setTemplatesEnabled(true)}
+          >
+            켜짐
+          </button>
+          <button
+            className={`seg-btn${!templatesEnabled ? ' on' : ''}`}
+            onClick={() => void setTemplatesEnabled(false)}
+          >
+            꺼짐
+          </button>
+        </div>
       </div>
 
       <div className="set-sep" />

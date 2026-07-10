@@ -8,6 +8,7 @@ import { FocusOverlay } from './focus/FocusWidget';
 import { WorkHistory } from './focus/WorkHistory';
 import { TodayView } from './focus/TodayView';
 import { TrashPanel } from './ui/TrashPanel';
+import { TemplatePanel } from './ui/TemplatePanel';
 import { UpdatesOverlay, WhatsNewCard } from './ui/Updates';
 import { CURRENT_VERSION, isNewer } from './ui/changelog';
 import { NoteLinkPicker } from './note/NoteLinkPicker';
@@ -61,6 +62,7 @@ export default function App() {
   const historyOpen = useUi((s) => s.historyOpen);
   const todayOpen = useUi((s) => s.todayOpen);
   const trashOpen = useUi((s) => s.trashOpen);
+  const templatesOpen = useUi((s) => s.templatesOpen);
   const updatesOpen = useUi((s) => s.updatesOpen);
   const whatsNew = useUi((s) => s.whatsNew);
 
@@ -434,6 +436,7 @@ export default function App() {
       {historyOpen && <WorkHistory />}
       {todayOpen && <TodayView />}
       {trashOpen && <TrashPanel />}
+      {templatesOpen && <TemplatePanel onOpen={(p) => void openByPath(p)} />}
       {updatesOpen && <UpdatesOverlay />}
       {whatsNew && <WhatsNewCard />}
       {settingsOpen && <Settings />}

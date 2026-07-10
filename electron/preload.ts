@@ -29,6 +29,12 @@ export interface TrashItem {
   deletedAt: string; // ISO timestamp
 }
 
+export interface TemplateSummary {
+  name: string; // filename incl. .md, inside the .templates workspace folder
+  title: string; // filename without extension — displayed name
+  updatedAt: string; // ISO timestamp
+}
+
 export interface ReminderInfo {
   id: string;
   title: string;
@@ -176,6 +182,13 @@ const api = {
     getTemplates: (): Promise<MetaTemplate[]> => ipcRenderer.invoke('meta:getTemplates'),
     saveTemplates: (templates: MetaTemplate[]): Promise<void> =>
       ipcRenderer.invoke('meta:saveTemplates', templates),
+  },
+  // ── Note templates (.templates workspace folder) ────────────────────────────
+  templates: {
+    isEnabled: (): Promise<boolean> => ipcRenderer.invoke('settings:getTemplatesEnabled'),
+    setEnabled: (enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke('settings:setTemplatesEnabled', enabled),
+    list: (): Promise<TemplateSummary[]> => ipcRenderer.invoke('templates:list'),
   },
 };
 

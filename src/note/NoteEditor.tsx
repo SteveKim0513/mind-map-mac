@@ -23,6 +23,8 @@ import { Icon } from '../ui/Icon';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { useSession } from '../store/sessionStore';
+import { useTemplates } from '../store/templateStore';
+import { parseNote } from '../io/noteFormat';
 import { openLightbox } from './ImageLightbox';
 
 interface Props {
@@ -79,6 +81,23 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
   const editorRef = useRef<Editor | null>(null);
   const imagePathMap = useRef(new Map<string, string>());
   const pendingContent = useRef<string | null>(null);
+
+  // ── Note templates (템플릿+) ──────────────────────────────────────────────
+  const templatesEnabled = useTemplates((s) => s.enabled);
+  const templateItems = useTemplates((s) => s.items);
+  const insertTemplate = async (name: string) => {
+    const root = useWorkspace.getState().root;
+    try {
+      const text = await window.api.readFile(`${root}/.templates/${name}`);
+      editorRef.current?.chain().focus().insertContent(parseNote(text).body).run();
+    } catch {
+      useUi.getState().toast('템플릿을 불러오지 못했습니다.');
+    }
+  };
+  const createTemplate = async () => {
+    await useTemplates.getState().create('제목 없음');
+    useUi.getState().toast('새 템플릿을 만들었어요 · 사이드바의 Note Template에서 편집하세요');
+  };
 
   // ── "[[" note-link autocomplete ──────────────────────────────────────────
   type LinkItem = { title: string; path: string; create?: boolean };
@@ -441,7 +460,16 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
 
   return (
     <div className="note-rich">
-      <EditorToolbar editor={editor} onInsertImages={insertImages} templates={templates} onAddMeta={onAddMeta} />
+      <EditorToolbar
+        editor={editor}
+        onInsertImages={insertImages}
+        templates={templates}
+        onAddMeta={onAddMeta}
+        templatesEnabled={templatesEnabled}
+        templateItems={templateItems}
+        onInsertTemplate={(name) => void insertTemplate(name)}
+        onCreateTemplate={() => void createTemplate()}
+      />
       <div className="note-rich-body" onClick={() => editor.chain().focus().run()}>
         <EditorContent editor={editor} />
       </div>

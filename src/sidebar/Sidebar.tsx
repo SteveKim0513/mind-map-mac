@@ -4,6 +4,7 @@ import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
 import { useSession } from '../store/sessionStore';
 import { useTrash } from '../store/trashStore';
+import { useTemplates } from '../store/templateStore';
 import { emptyDoc, serialize, newId } from '../io/formats';
 import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
 import { fileNameFromTitle } from '../io/autoName';
@@ -56,6 +57,9 @@ export function Sidebar({
   const noteByPath = useWorkspace((s) => s.noteByPath);
   const trashCount = useTrash((s) => s.items.length);
   useEffect(() => void useTrash.getState().refresh(), []); // hydrate the trash badge on mount
+  const templatesEnabled = useTemplates((s) => s.enabled);
+  const templateCount = useTemplates((s) => s.items.length);
+  useEffect(() => void useTemplates.getState().refresh(), []); // hydrate templates on mount
   // work-log session notes have an immutable name (title = start time, fixed at
   // creation); they can't be renamed from the tree either.
   const isLocked = (path: string) => !!noteByPath(path)?.session || path.split('/').includes('work-log');
@@ -654,6 +658,16 @@ export function Sidebar({
             <Icon name="trash" />
             {trashCount > 0 && <span className="sb-trash-badge">{trashCount}</span>}
           </button>
+          {templatesEnabled && (
+            <button
+              className={`sb-foot-btn${templateCount > 0 ? ' has-items' : ''}`}
+              title={templateCount > 0 ? `Note Template (${templateCount})` : 'Note Template'}
+              onClick={() => useUi.getState().openTemplates()}
+            >
+              <Icon name="template" />
+              {templateCount > 0 && <span className="sb-trash-badge">{templateCount}</span>}
+            </button>
+          )}
           <button className="sb-foot-btn" title="설정 (⌘,)" onClick={() => useUi.getState().openSettings()}>
             <Icon name="settings" />
           </button>
