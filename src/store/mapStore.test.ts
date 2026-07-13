@@ -91,6 +91,29 @@ describe('schedule + reminder', () => {
     expect(s.getState().doc.nodes[c].scheduleAt).toBeUndefined();
   });
 
+  it('setScheduleAt(id, undefined) fully unschedules the node (not just the date)', () => {
+    // Regression: it used to only clear scheduleAt and leave `scheduled: true`,
+    // so scheduleInfo(undefined)'s "일정" fallback label kept the chip showing
+    // forever — SchedulePopover's "스케줄 지우기" button looked like a no-op.
+    const s = createMapStore();
+    const [, [c]] = rootWithChildren(s, 1);
+    s.getState().setScheduleAt(c, '2026-06-15T09:00:00');
+    expect(s.getState().doc.nodes[c].scheduled).toBe(true);
+    s.getState().setScheduleAt(c, undefined);
+    expect(s.getState().doc.nodes[c].scheduled).toBeFalsy();
+    expect(s.getState().doc.nodes[c].scheduleAt).toBeUndefined();
+  });
+
+  it('setScheduleAt(id, undefined) also detaches a synced reminder', () => {
+    const s = createMapStore();
+    const [, [c]] = rootWithChildren(s, 1);
+    s.getState().setScheduleAt(c, '2026-06-15T09:00:00');
+    s.getState().applyReminderPatch(c, { reminderOn: true, reminderId: 'rem-1', reminderSyncedAt: 5 });
+    s.getState().setScheduleAt(c, undefined);
+    expect(s.getState().doc.nodes[c].reminderOn).toBeFalsy();
+    expect(s.getState().doc.nodes[c].reminderId).toBeUndefined();
+  });
+
   it('duplicateNode does not copy the reminder id (Closes #6/#10)', () => {
     const s = createMapStore();
     const [, [c]] = rootWithChildren(s, 1);

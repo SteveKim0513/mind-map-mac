@@ -499,14 +499,29 @@ export function createMapStore(): MapStore {
         if (removedReminders.length && reminderDeleteHook) reminderDeleteHook(removedReminders);
       }),
 
-    setScheduleAt: (id, iso) =>
+    setScheduleAt: (id, iso) => {
+      const removedReminders: string[] = [];
       commit((d) => {
         const n = d.nodes[id];
         if (!n) return;
         n.scheduleAt = iso;
-        if (iso) n.scheduled = true;
         n.updatedAt = Date.now(); // mark for reminder push
-      }),
+        if (iso) {
+          n.scheduled = true;
+        } else {
+          // Clearing the date must fully unschedule this node — `scheduled`
+          // has no "set but dateless" rendering (scheduleInfo(undefined) falls
+          // back to a bare "일정" label), so leaving it true made the
+          // SchedulePopover's "스케줄 지우기" button look like it did nothing.
+          n.scheduled = undefined;
+          if (n.reminderId) removedReminders.push(n.reminderId);
+          n.reminderOn = undefined;
+          n.reminderId = undefined;
+          n.reminderSyncedAt = undefined;
+        }
+      });
+      if (removedReminders.length && reminderDeleteHook) reminderDeleteHook(removedReminders);
+    },
 
     setReminderOn: (id, on) =>
       commit((d) => {
