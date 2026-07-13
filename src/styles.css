@@ -66,6 +66,9 @@
   --shadow-1: rgba(0, 0, 0, 0.01) 0 0.175px 1.041px, rgba(0, 0, 0, 0.02) 0 0.8px 2.925px,
     rgba(0, 0, 0, 0.027) 0 2.025px 7.847px, rgba(0, 0, 0, 0.04) 0 4px 18px;
   --shadow-2: rgba(0, 0, 0, 0.04) 0 2px 8px, rgba(0, 0, 0, 0.05) 0 23px 52px;
+  /* full-screen modal panels (Settings/사용 안내/업데이트) — one level deeper than --shadow-2,
+     shared instead of the same raw value repeated per panel (§3-5, 통합 시트 토큰화) */
+  --shadow-panel: 0 24px 70px rgba(0, 0, 0, 0.3);
 
   /* Pretendard is bundled (see main.tsx); fallbacks keep text intact if it ever fails to load */
   --font: 'Pretendard Variable', Pretendard, -apple-system, system-ui, 'Apple SD Gothic Neo',
@@ -136,6 +139,9 @@ body {
   -webkit-font-smoothing: antialiased;
   font-feature-settings: 'lnum' 1;
 }
+/* global quick-capture window is transparent + frameless (electron/main.ts) —
+   its own rounded card supplies the visible surface (§3-1) */
+body.capture-mode { background: transparent; }
 
 button {
   font-family: var(--font);
@@ -706,11 +712,12 @@ button {
 .sb-foot-btn .ic { width: 17px; height: 17px; }
 .sb-foot-btn { position: relative; }
 .sb-foot-btn.has-items { color: var(--ink); }
-.sb-trash-badge {
-  position: absolute; top: 1px; right: 1px;
-  min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box;
-  border-radius: 7px; background: var(--state-danger); color: #fff;
-  font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
+/* quiet presence dot — for counts that only mean "there's something in
+   here", not counts a user acts on differently at 1 vs 9 (§3-8) */
+.sb-dot-badge {
+  position: absolute; top: 5px; right: 5px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--ink-faint);
 }
 
 /* ── Settings overlay (real options only) ───────────────────────────────────── */
@@ -720,7 +727,7 @@ button {
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: var(--r-xl);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-panel);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -911,13 +918,32 @@ button {
 .set-link-sub { font-size: 12px; color: var(--ink-faint); flex: none; }
 .set-link > .ic { width: 14px; height: 14px; color: var(--ink-faint); flex: none; }
 
+.set-advanced-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.set-advanced-toggle:hover { color: var(--primary); border-color: var(--primary); }
+.set-advanced-toggle .ic { width: 13px; height: 13px; }
+
 /* ── Update-check popup (instant feedback) ──────────────────────────────────── */
 .updchk {
   width: min(360px, 90vw);
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: var(--r-xl);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-panel);
   padding: 26px 24px 20px;
   display: flex;
   flex-direction: column;
@@ -990,7 +1016,7 @@ button {
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: var(--r-xl);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-panel);
   display: flex;
   overflow: hidden;
 }
@@ -1239,6 +1265,10 @@ button {
   opacity: 1;
   background: var(--hover);
 }
+/* pinned state reads by fill (outline → solid star), not a new hue — the
+   existing 7 --state-* colors are hard-reserved (docs/design/COLOR-SYSTEM.md) */
+.row-act.on { opacity: 1; color: var(--ink); }
+.row-act.on .ic { fill: currentColor; }
 .rename-input {
   flex: 1;
   border: 1px solid var(--primary);
@@ -2703,13 +2733,10 @@ button {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  animation: ctxIn 0.1s ease-out;
-}
-@keyframes ctxIn {
-  from {
-    opacity: 0;
-    transform: translateY(-3px) scale(0.99);
-  }
+  /* shared spring family with the other floating menus (§3-5) — a right-click
+     menu wants to feel instant, so it's the shortest duration in that family,
+     not a bespoke easing curve. */
+  animation: modalPop 0.12s var(--spring) both;
 }
 .ctx-item {
   display: flex;
@@ -2954,6 +2981,23 @@ button {
 }
 .qo-item.active .qo-folder {
   color: rgba(255, 255, 255, 0.75);
+}
+/* 자동 학습된 단축키(⌥1-9) — Spotlight Quick Keys 패턴 (§3-7) */
+.qo-quickkey {
+  flex: none;
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--ink-faint);
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 6px;
+}
+.qo-item.active .qo-quickkey {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 .qo-name { min-width: 0; }
 .qo-name-txt {
@@ -5025,6 +5069,44 @@ textarea:focus-visible,
 .gchip.focus .ic { width: 13px; height: 13px; }
 .gchip.focus:hover { color: var(--primary); }
 
+/* global quick-capture window (⌥Space) — a single floating pill, the whole
+   BrowserWindow is the surface (transparent + frameless, §3-1) */
+.capture-window {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  padding: 0 18px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-2);
+  -webkit-app-region: drag;
+}
+.capture-window .ic { width: 18px; height: 18px; color: var(--primary); flex: none; }
+.capture-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font);
+  font-size: 16px;
+  color: var(--ink);
+  -webkit-app-region: no-drag;
+}
+.capture-input::placeholder { color: var(--ink-faint); }
+.capture-input:disabled { opacity: 0.5; }
+.capture-hint {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
 /* running-session pill — same content, two presentations */
 .focus-pill {
   display: flex;
@@ -5078,6 +5160,23 @@ textarea:focus-visible,
 .focus-pill.long .focus-dot { background: var(--state-scheduled); animation-duration: 2.4s; }
 /* state read from the amber dot (rule: no meaning by text colour alone) — text stays neutral */
 .focus-nudge { font-size: 11px; color: var(--ink-muted); white-space: nowrap; flex: none; }
+.focus-collapse {
+  border: none; background: transparent; cursor: pointer; padding: 2px;
+  color: var(--ink-faint); flex: none; display: inline-flex; border-radius: var(--r-sm);
+}
+.focus-collapse:hover { color: var(--ink-muted); background: var(--hover); }
+.focus-collapse .ic { width: 12px; height: 12px; }
+/* collapsed docked pill — an ambient timer, not a control panel (§3-8) */
+.focus-pill.docked.collapsed {
+  width: fit-content;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-muted);
+}
+.focus-pill.docked.collapsed:hover { background: var(--hover); }
+.focus-pill.docked.collapsed .focus-elapsed { color: var(--ink-muted); font-weight: 500; }
 
 /* completion card */
 .focus-done-backdrop {
@@ -5601,10 +5700,11 @@ textarea:focus-visible,
   background: var(--canvas);
   border: 1px solid var(--hairline);
   border-radius: var(--r-md);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  box-shadow: var(--shadow-2);
   min-width: 140px;
   z-index: 9999;
   overflow: hidden;
+  animation: modalPop 0.15s var(--spring) both;
 }
 .meta-add-item {
   display: block; width: 100%;

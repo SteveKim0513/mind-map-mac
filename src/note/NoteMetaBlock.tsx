@@ -67,7 +67,7 @@ function MetaBlockItem({
     <div className="meta-block">
       <div className="meta-block-head">
         <span className="meta-block-title">{template.name}</span>
-        <button className="meta-block-close" title="메타 제거" onClick={onRemove}>
+        <button className="meta-block-close" title="양식 제거" onClick={onRemove}>
           <Icon name="close" />
         </button>
       </div>

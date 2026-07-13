@@ -136,6 +136,13 @@ interface UiState {
   templatesOpen: boolean;
   openTemplates: () => void;
   closeTemplates: () => void;
+  // smart views (overlay) — REDESIGN-VISION §3-3
+  recentOpen: boolean;
+  openRecent: () => void;
+  closeRecent: () => void;
+  favoritesOpen: boolean;
+  openFavorites: () => void;
+  closeFavorites: () => void;
   // release history (overlay) + post-update "what's new" card (a version string)
   updatesOpen: boolean;
   openUpdates: () => void;
@@ -319,6 +326,12 @@ export const useUi = create<UiState>((set, get) => ({
   templatesOpen: false,
   openTemplates: () => set({ templatesOpen: true }),
   closeTemplates: () => set({ templatesOpen: false }),
+  recentOpen: false,
+  openRecent: () => set({ recentOpen: true }),
+  closeRecent: () => set({ recentOpen: false }),
+  favoritesOpen: false,
+  openFavorites: () => set({ favoritesOpen: true }),
+  closeFavorites: () => set({ favoritesOpen: false }),
   updatesOpen: false,
   openUpdates: () => set({ updatesOpen: true }),
   closeUpdates: () => set({ updatesOpen: false }),

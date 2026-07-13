@@ -26,7 +26,7 @@ const OPENAI_KEY_URL = 'https://platform.openai.com/api-keys';
 const VIEW_TITLE: Record<SettingsView, string> = {
   main: '설정',
   ai: 'AI 기능',
-  meta: '메타 템플릿',
+  meta: '정보 양식',
   updates: '업데이트 내역',
 };
 
@@ -203,6 +203,9 @@ function MainView({
   const { templates } = useMetaStore();
   const templatesEnabled = useTemplates((s) => s.enabled);
   const setTemplatesEnabled = useTemplates((s) => s.setEnabled);
+  // 자주 안 만지는 항목은 기본으로 접어둔다(macOS 인쇄 대화상자의 "옵션 더 보기"와 같은 패턴) —
+  // REDESIGN-VISION §3-4. 안 없앤다, 접을 뿐 — AI 기능은 여기 그대로 있다.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   return (
     <>
@@ -261,39 +264,76 @@ function MainView({
         </div>
       </div>
 
-      <div className="set-sep" />
-
-      <button className="set-link" onClick={() => navigate('ai')}>
-        <span className="set-link-main"><Icon name="bulb" /> AI 기능</span>
-        {ai.active
-          ? <span className="set-link-sub">{ai.active === 'claude' ? 'Claude' : 'GPT'} 활성</span>
-          : <span className="set-link-sub">미연결</span>}
-        <Icon name="chevronRight" />
+      <button
+        className="set-advanced-toggle"
+        onClick={() => setAdvancedOpen((o) => !o)}
+        aria-expanded={advancedOpen}
+      >
+        <Icon name={advancedOpen ? 'chevronDown' : 'chevronRight'} />
+        고급 설정 {advancedOpen ? '숨기기' : '보기'}
       </button>
 
-      <button className="set-link" onClick={() => navigate('meta')}>
-        <span className="set-link-main"><Icon name="table" /> 메타 템플릿</span>
-        {templates.length > 0 && <span className="set-link-sub">{templates.length}개</span>}
-        <Icon name="chevronRight" />
-      </button>
+      {advancedOpen && (
+        <>
+          <div className="set-sep" />
 
-      <div className="set-sep" />
+          <button className="set-link" onClick={() => navigate('ai')}>
+            <span className="set-link-main"><Icon name="bulb" /> AI 기능</span>
+            {ai.active
+              ? <span className="set-link-sub">{ai.active === 'claude' ? 'Claude' : 'GPT'} 활성</span>
+              : <span className="set-link-sub">미연결</span>}
+            <Icon name="chevronRight" />
+          </button>
 
-      <button className="set-link" onClick={() => useUi.getState().openManual()}>
-        <span className="set-link-main"><Icon name="memo" /> 사용 안내</span>
-        <span className="set-link-sub">단축키 · 사용법</span>
-        <Icon name="chevronRight" />
-      </button>
-      <button className="set-link" onClick={() => void window.api.checkForUpdates()}>
-        <span className="set-link-main"><Icon name="download" /> 업데이트 확인</span>
-        <span className="set-link-sub">v{CURRENT_VERSION}</span>
-        <Icon name="chevronRight" />
-      </button>
-      <button className="set-link" onClick={() => navigate('updates')}>
-        <span className="set-link-main"><Icon name="flag" /> 업데이트 내역</span>
-        <Icon name="chevronRight" />
-      </button>
+          <button className="set-link" onClick={() => navigate('meta')}>
+            <span className="set-link-main"><Icon name="table" /> 정보 양식</span>
+            {templates.length > 0 && <span className="set-link-sub">{templates.length}개</span>}
+            <Icon name="chevronRight" />
+          </button>
+
+          <CaptureStatusRow />
+
+          <div className="set-sep" />
+
+          <button className="set-link" onClick={() => useUi.getState().openManual()}>
+            <span className="set-link-main"><Icon name="memo" /> 사용 안내</span>
+            <span className="set-link-sub">단축키 · 사용법</span>
+            <Icon name="chevronRight" />
+          </button>
+          <button className="set-link" onClick={() => void window.api.checkForUpdates()}>
+            <span className="set-link-main"><Icon name="download" /> 업데이트 확인</span>
+            <span className="set-link-sub">v{CURRENT_VERSION}</span>
+            <Icon name="chevronRight" />
+          </button>
+          <button className="set-link" onClick={() => navigate('updates')}>
+            <span className="set-link-main"><Icon name="flag" /> 업데이트 내역</span>
+            <Icon name="chevronRight" />
+          </button>
+        </>
+      )}
     </>
+  );
+}
+
+/** Global quick-capture (⌥Space) has no toggle in v1 — just a quiet status
+ *  line so a shortcut conflict with another app is at least discoverable. */
+function CaptureStatusRow() {
+  const [status, setStatus] = useState<{ registered: boolean; accelerator: string } | null>(null);
+  useEffect(() => {
+    void window.api.capture.status().then(setStatus);
+  }, []);
+  if (!status) return null;
+  return (
+    <div className="set-row">
+      <div>
+        <span className="set-label">전역 캡처</span>
+        <p className="set-desc">
+          {status.registered
+            ? `${status.accelerator} — 어디서든 빠르게 생각을 적어요`
+            : `${status.accelerator}를 다른 앱이 사용 중이라 꺼져 있어요`}
+        </p>
+      </div>
+    </div>
   );
 }
 

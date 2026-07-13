@@ -113,7 +113,7 @@ export function GlobalSearch({
         const b = e.body.toLowerCase().indexOf(s);
         const inMeta = !!e.metaText && e.metaText.toLowerCase().includes(s);
         if (inTitle || b >= 0 || inMeta) {
-          const snippet = b >= 0 ? snippetAround(e.body, b, s.length) : inMeta ? `메타: ${e.metaText}` : '';
+          const snippet = b >= 0 ? snippetAround(e.body, b, s.length) : inMeta ? `양식: ${e.metaText}` : '';
           out.push({ ...e, snippet });
         }
       }

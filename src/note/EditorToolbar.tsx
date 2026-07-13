@@ -317,11 +317,11 @@ function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd:
       <button
         ref={btnRef}
         className="md-tb-btn md-tb-type md-tb-meta"
-        title="메타 추가"
+        title="양식 추가"
         onMouseDown={(e) => e.preventDefault()}
         onClick={handleClick}
       >
-        <Icon name="table" />메타+
+        <Icon name="table" />양식+
       </button>
       {open && menuPos && createPortal(
         <div
@@ -333,7 +333,7 @@ function MetaAddButton({ templates, onAdd }: { templates: MetaTemplate[]; onAdd:
             <Icon name="search" />
             <input
               ref={searchRef}
-              placeholder="메타 필드 검색..."
+              placeholder="양식 필드 검색..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />

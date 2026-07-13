@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
+import { Icon } from '../ui/Icon';
 import { fmtDuration } from './aggregate';
 import { endFocusSession, openSessionNote, attachReflection, confirmFocusStart, cancelFocusStart } from './controller';
 
@@ -23,6 +24,11 @@ function elapsedClock(sec: number): string {
 export function FocusPill({ docked }: { docked?: boolean }) {
   const active = useUi((s) => s.activeFocus);
   const [now, setNow] = useState(Date.now());
+  // Docked (sidebar foot) starts collapsed to an ambient timer — the sidebar
+  // is a busy strip and the running session recedes into the background once
+  // acknowledged, like a macOS Focus mode (REDESIGN-VISION §3-8). Floating
+  // (sidebar hidden) is the session's only visible control, so it stays full.
+  const [expanded, setExpanded] = useState(!docked);
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -33,6 +39,19 @@ export function FocusPill({ docked }: { docked?: boolean }) {
   const elapsedSec = Math.max(0, Math.round((now - active.start) / 1000));
   const long = elapsedSec >= NUDGE_SEC; // running unusually long — gentle reminder (B9)
   const nudge = '장시간 집중 중이에요 — 종료를 잊지 않으셨나요?';
+
+  if (docked && !expanded) {
+    return (
+      <button
+        className={`focus-pill docked collapsed${long ? ' long' : ''}`}
+        title={`집중 중 · ${active.nodeText} · ${elapsedClock(elapsedSec)}`}
+        onClick={() => setExpanded(true)}
+      >
+        <span className="focus-dot" />
+        <span className="focus-elapsed">{elapsedClock(elapsedSec)}</span>
+      </button>
+    );
+  }
 
   return (
     <div className={`focus-pill${docked ? ' docked' : ' floating'}${long ? ' long' : ''}`}>
@@ -45,6 +64,11 @@ export function FocusPill({ docked }: { docked?: boolean }) {
       <button className="focus-end" onClick={() => void endFocusSession()}>
         종료
       </button>
+      {docked && (
+        <button className="focus-collapse" title="접기" onClick={() => setExpanded(false)}>
+          <Icon name="chevronDown" />
+        </button>
+      )}
     </div>
   );
 }

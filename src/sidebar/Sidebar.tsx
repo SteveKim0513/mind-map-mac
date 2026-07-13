@@ -5,6 +5,7 @@ import { useUi } from '../store/uiStore';
 import { useSession } from '../store/sessionStore';
 import { useTrash } from '../store/trashStore';
 import { useTemplates } from '../store/templateStore';
+import { usePins } from '../store/pinStore';
 import { emptyDoc, serialize, newId } from '../io/formats';
 import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
 import { fileNameFromTitle } from '../io/autoName';
@@ -60,6 +61,8 @@ export function Sidebar({
   const templatesEnabled = useTemplates((s) => s.enabled);
   const templateCount = useTemplates((s) => s.items.length);
   useEffect(() => void useTemplates.getState().refresh(), []); // hydrate templates on mount
+  const pinnedPaths = usePins((s) => s.paths);
+  useEffect(() => void usePins.getState().refresh(), []); // hydrate favorites on mount
   // work-log session notes have an immutable name (title = start time, fixed at
   // creation); they can't be renamed from the tree either.
   const isLocked = (path: string) => !!noteByPath(path)?.session || path.split('/').includes('work-log');
@@ -504,6 +507,18 @@ export function Sidebar({
             )}
 
             <span className="row-actions">
+              {node.type === 'file' && (
+                <button
+                  className={`row-act${pinnedPaths.includes(node.path) ? ' on' : ''}`}
+                  title={pinnedPaths.includes(node.path) ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void usePins.getState().toggle(node.path);
+                  }}
+                >
+                  <Icon name="star" />
+                </button>
+              )}
               {!isLocked(node.path) && (
                 <button
                   className="row-act"
@@ -563,6 +578,14 @@ export function Sidebar({
         <button className="sb-nav-item" onClick={() => useUi.getState().openHistory()}>
           <Icon name="clock" />
           <span>집중 기록</span>
+        </button>
+        <button className="sb-nav-item" onClick={() => useUi.getState().openRecent()}>
+          <Icon name="clock" />
+          <span>최근 수정</span>
+        </button>
+        <button className="sb-nav-item" onClick={() => useUi.getState().openFavorites()}>
+          <Icon name="star" />
+          <span>즐겨찾기</span>
         </button>
       </div>
 
@@ -659,7 +682,7 @@ export function Sidebar({
               onClick={() => useUi.getState().openTrash()}
             >
               <Icon name="trash" />
-              {trashCount > 0 && <span className="sb-trash-badge">{trashCount}</span>}
+              {trashCount > 0 && <span className="sb-dot-badge" />}
             </button>
             {templatesEnabled && (
               <button
@@ -668,7 +691,7 @@ export function Sidebar({
                 onClick={() => useUi.getState().openTemplates()}
               >
                 <Icon name="template" />
-                {templateCount > 0 && <span className="sb-trash-badge">{templateCount}</span>}
+                {templateCount > 0 && <span className="sb-dot-badge" />}
               </button>
             )}
           </div>

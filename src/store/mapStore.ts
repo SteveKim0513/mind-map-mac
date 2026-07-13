@@ -2,6 +2,7 @@ import { createStore, useStore, type StoreApi } from 'zustand';
 import { createContext, useContext } from 'react';
 import type { MindMapDoc, MindNode } from '../types';
 import { emptyDoc, newId } from '../io/formats';
+import { parseScheduleText, parseHashtagColor } from './parseNodeText';
 
 const HISTORY_LIMIT = 100;
 
@@ -266,8 +267,25 @@ export function createMapStore(): MapStore {
         if (n) {
           // trim so a whitespace-only commit equals an empty one (undeletable
           // nodes, e.g. a sole root, would otherwise keep an invisible " " title)
-          n.text = text.trim();
+          const trimmed = text.trim();
+          n.text = trimmed;
           n.updatedAt = Date.now(); // mark for reminder push
+
+          // Natural-language schedule/tag detection (REDESIGN-VISION §3-2) — folded
+          // into this same draft mutation so one Enter = one undo step. Only applies
+          // when the node has no schedule/color yet, so it never fights a deliberate
+          // manual choice made via SchedulePopover or the color grid on a later edit.
+          if (!n.scheduled) {
+            const sched = parseScheduleText(trimmed);
+            if (sched.matched && sched.scheduleAt) {
+              n.scheduleAt = sched.scheduleAt;
+              n.scheduled = true;
+            }
+          }
+          if (!n.color) {
+            const color = parseHashtagColor(trimmed);
+            if (color) n.color = color;
+          }
         }
       });
       set({ editingId: null, editCommittedAt: Date.now() });

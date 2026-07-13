@@ -19,6 +19,7 @@ export interface TreeNode {
   path: string;
   type: 'dir' | 'file';
   children?: TreeNode[];
+  mtimeMs?: number;
 }
 
 export interface TrashItem {
@@ -189,6 +190,27 @@ const api = {
     setEnabled: (enabled: boolean): Promise<void> =>
       ipcRenderer.invoke('settings:setTemplatesEnabled', enabled),
     list: (): Promise<TemplateSummary[]> => ipcRenderer.invoke('templates:list'),
+  },
+  // ── Favorites (.pins.json workspace file) ────────────────────────────────
+  pins: {
+    list: (): Promise<string[]> => ipcRenderer.invoke('pins:list'),
+    toggle: (path: string): Promise<string[]> => ipcRenderer.invoke('pins:toggle', path),
+  },
+  // ── Global quick capture (Alt+Space) ─────────────────────────────────────
+  capture: {
+    show: (): Promise<void> => ipcRenderer.invoke('capture:show'),
+    targetPath: (): Promise<string> => ipcRenderer.invoke('capture:targetPath'),
+    hide: (): Promise<void> => ipcRenderer.invoke('capture:hide'),
+    status: (): Promise<{ registered: boolean; accelerator: string }> =>
+      ipcRenderer.invoke('capture:status'),
+    /** Fired each time the capture window is shown — the cue to focus + clear the input. */
+    onShown: (cb: () => void) => {
+      const handler = () => cb();
+      ipcRenderer.on('capture:shown', handler);
+      return () => {
+        ipcRenderer.off('capture:shown', handler);
+      };
+    },
   },
 };
 

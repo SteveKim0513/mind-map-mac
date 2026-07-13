@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell, globalShortcut } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -170,6 +170,51 @@ function createWindow() {
   }
 }
 
+// ─── Global quick capture (REDESIGN-VISION §3-1) ───────────────────────────
+// A small always-on-top window, toggled by a global OS shortcut, that stays
+// alive for the app's whole session (hidden, not destroyed, between uses) so
+// re-showing it is instant. The renderer (not this file) owns the .mind
+// schema via src/io/formats.ts — main only hands it a target file path.
+let captureWin: BrowserWindow | null = null;
+let captureShortcutRegistered = false;
+const CAPTURE_ACCELERATOR = 'Alt+Space';
+
+function createCaptureWindow(): BrowserWindow {
+  const w = new BrowserWindow({
+    width: 560,
+    height: 76,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+    },
+  });
+  if (VITE_DEV_SERVER_URL) {
+    w.loadURL(`${VITE_DEV_SERVER_URL}?capture=1`);
+  } else {
+    w.loadFile(path.join(RENDERER_DIST, 'index.html'), { query: { capture: '1' } });
+  }
+  // Clicking away dismisses it, same as Spotlight — a quick-capture surface
+  // isn't a window you manage, it's a prompt you answer or ignore.
+  w.on('blur', () => w.hide());
+  w.on('closed', () => {
+    captureWin = null;
+  });
+  return w;
+}
+
+function showCaptureWindow() {
+  if (!captureWin || captureWin.isDestroyed()) captureWin = createCaptureWindow();
+  captureWin.center();
+  captureWin.show();
+  captureWin.focus();
+  captureWin.webContents.send('capture:shown');
+}
+
 app.whenReady().then(() => {
   log.info(`[app] start v${app.getVersion()} on ${process.platform}`);
   buildMenu();
@@ -178,6 +223,14 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+  captureShortcutRegistered = globalShortcut.register(CAPTURE_ACCELERATOR, showCaptureWindow);
+  if (!captureShortcutRegistered) {
+    log.warn(`[capture] ${CAPTURE_ACCELERATOR} already in use by another app — quick capture disabled`);
+  }
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 // Renderer → file log bridge (fire-and-forget). Renderer logs events/metadata only.
@@ -313,6 +366,7 @@ interface TreeNode {
   path: string;
   type: 'dir' | 'file';
   children?: TreeNode[];
+  mtimeMs?: number; // files only — powers the "최근 수정" smart view (REDESIGN-VISION §3-3)
 }
 
 /** Recursively list folders, .mind maps, and .md notes (hidden entries skipped). */
@@ -326,7 +380,8 @@ async function walk(dir: string): Promise<TreeNode[]> {
     if (ent.isDirectory()) {
       nodes.push({ name: ent.name, path: full, type: 'dir', children: await walk(full) });
     } else if (ent.name.endsWith('.mind') || ent.name.endsWith('.md')) {
-      nodes.push({ name: ent.name, path: full, type: 'file' });
+      const stat = await fs.stat(full);
+      nodes.push({ name: ent.name, path: full, type: 'file', mtimeMs: stat.mtimeMs });
     }
   }
   // Natural sort so "제목 없음 3" comes before "제목 없음 21" (numeric-aware).
@@ -385,6 +440,21 @@ ipcMain.handle('workspace:tree', async () => {
   const root = await getWorkspace();
   return { root, tree: await walk(root) };
 });
+
+ipcMain.handle('capture:show', () => {
+  showCaptureWindow();
+});
+
+ipcMain.handle('capture:targetPath', async () => {
+  const root = await getWorkspace();
+  return path.join(root, '오늘의 생각.mind');
+});
+
+ipcMain.handle('capture:hide', () => {
+  captureWin?.hide();
+});
+
+ipcMain.handle('capture:status', () => ({ registered: captureShortcutRegistered, accelerator: CAPTURE_ACCELERATOR }));
 
 ipcMain.handle('fs:read', async (_e, filePath: string) => {
   return fs.readFile(filePath, 'utf-8');
@@ -869,6 +939,50 @@ ipcMain.handle('meta:getTemplates', async () => {
   } catch {
     return [];
   }
+});
+
+// ─── Favorites (pinned files) ───────────────────────────────────────────────
+// A hidden <workspace>/.pins.json list of absolute paths, mirroring the
+// .trashmeta.json pattern. Dead paths (deleted/moved files) are filtered out
+// on every read rather than treated as an error — a stale pin isn't a bug.
+const PINS_FILE = '.pins.json';
+
+async function pinsPath(): Promise<string> {
+  return path.join(await getWorkspace(), PINS_FILE);
+}
+async function readPins(): Promise<string[]> {
+  try {
+    const raw = JSON.parse(await fs.readFile(await pinsPath(), 'utf-8'));
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+async function writePins(paths: string[]): Promise<void> {
+  await fs.writeFile(await pinsPath(), JSON.stringify(paths, null, 2), 'utf-8');
+}
+
+ipcMain.handle('pins:list', async () => {
+  const paths = await readPins();
+  const alive: string[] = [];
+  for (const p of paths) {
+    try {
+      await fs.access(p);
+      alive.push(p);
+    } catch { /* file gone — drop the stale pin */ }
+  }
+  if (alive.length !== paths.length) await writePins(alive);
+  return alive;
+});
+
+ipcMain.handle('pins:toggle', async (_e, target: string) => {
+  const resolved = await assertInsideWorkspace(target);
+  const paths = await readPins();
+  const next = paths.includes(resolved)
+    ? paths.filter((p) => p !== resolved)
+    : [...paths, resolved];
+  await writePins(next);
+  return next;
 });
 
 ipcMain.handle('meta:saveTemplates', async (_e, templates: unknown) => {

@@ -13,8 +13,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // .md-tb-btn / .meta-add-wrap / .qo-name-txt / .meta-block-title /
 // .set-meta-name in src/styles.css.
 
-test('노트 에디터 툴바의 "메타+" 버튼은 좁은 폭에서도 한 줄을 유지한다', async () => {
-  // The originally reported bug: .meta-add-wrap (the "메타+" button) only
+test('노트 에디터 툴바의 "양식+" 버튼은 좁은 폭에서도 한 줄을 유지한다', async () => {
+  // The originally reported bug: .meta-add-wrap (the "양식+" button) only
   // renders when at least one meta template exists, so it must be pre-seeded —
   // the other toolbar buttons (H1/B/I/…) were never affected, they already
   // sat inside a .md-tb-group with flex-shrink:0.
@@ -102,10 +102,11 @@ test('메타 블록 제목과 설정의 템플릿 이름은 좁은 폭에서 줄
     const titleBox = await page.locator('.meta-block-title').first().boundingBox();
     expect(titleBox?.height ?? 0).toBeLessThan(22);
 
-    // ── set-meta-name (Settings → 메타 템플릿, squeezed row) ──
+    // ── set-meta-name (Settings → 고급 설정 → 정보 양식, squeezed row) ──
     await page.keyboard.press('Meta+,');
     await page.waitForSelector('.settings', { timeout: 3_000 });
-    await page.click('.set-link:has-text("메타 템플릿")');
+    await page.click('.set-advanced-toggle');
+    await page.click('.set-link:has-text("정보 양식")');
     await page.waitForSelector('.set-meta-item', { timeout: 3_000 });
     await page.evaluate(() => {
       const row = document.querySelector('.set-meta-item') as HTMLElement | null;

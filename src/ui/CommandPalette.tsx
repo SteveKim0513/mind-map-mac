@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, type IconName } from './Icon';
+import { recordCommandUsage, sortByUsage, quickKeyAssignments } from './commandUsage';
 
 export interface Command {
   id: string;
@@ -38,8 +39,17 @@ export function CommandPalette({
   const [idx, setIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Frequently-run commands rise to the top of the empty-query list and earn an
+  // ⌥1-9 quick key (Spotlight "Quick Keys" pattern, REDESIGN-VISION §3-7).
+  const rankedCommandIds = useMemo(() => sortByUsage(commands).map((c) => c.id), [commands]);
+  const quickKeys = useMemo(() => quickKeyAssignments(rankedCommandIds), [rankedCommandIds]);
+
   const items = useMemo<Item[]>(() => {
-    const cmds: Item[] = commands.map((c) => ({ ...c, group: '명령' }));
+    const byId = new Map(commands.map((c) => [c.id, c]));
+    const cmds: Item[] = rankedCommandIds
+      .map((id) => byId.get(id))
+      .filter((c): c is Command => !!c)
+      .map((c) => ({ ...c, group: '명령' }));
     const fileItems: Item[] = files.map((f) => ({
       id: `file:${f.path}`,
       label: f.name,
@@ -61,7 +71,7 @@ export function CommandPalette({
     return [...cmds, ...nodeItems, ...fileItems]
       .filter((i) => `${i.label} ${i.hint ?? ''}`.toLowerCase().includes(s))
       .slice(0, 60);
-  }, [q, commands, files, nodes]);
+  }, [q, commands, rankedCommandIds, files, nodes]);
 
   useEffect(() => inputRef.current?.focus(), []);
   useEffect(() => setIdx(0), [q]);
@@ -69,10 +79,30 @@ export function CommandPalette({
   const choose = (i: number) => {
     const it = items[i];
     if (it) {
+      if (it.group === '명령') recordCommandUsage(it.id);
       it.run();
       onClose();
     }
   };
+
+  // ⌥1-9 runs a learned command instantly, independent of the current query/selection.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.metaKey || e.ctrlKey) return;
+      const n = parseInt(e.key, 10);
+      if (!(n >= 1 && n <= 9)) return;
+      const id = [...quickKeys.entries()].find(([, slot]) => slot === n)?.[0];
+      if (!id) return;
+      const cmd = commands.find((c) => c.id === id);
+      if (!cmd) return;
+      e.preventDefault();
+      recordCommandUsage(cmd.id);
+      cmd.run();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [quickKeys, commands, onClose]);
 
   let lastGroup = '';
 
@@ -123,6 +153,9 @@ export function CommandPalette({
                       )}
                       <span className="qo-name-txt">{it.label}</span>
                     </span>
+                    {it.group === '명령' && quickKeys.has(it.id) && (
+                      <kbd className="qo-quickkey" title="⌥ + 숫자로 바로 실행">⌥{quickKeys.get(it.id)}</kbd>
+                    )}
                     {it.hint && <span className="qo-folder">{it.hint}</span>}
                   </button>
                 </div>

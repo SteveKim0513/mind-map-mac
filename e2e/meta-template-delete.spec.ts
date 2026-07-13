@@ -62,12 +62,15 @@ test('템플릿 삭제 시 노트의 메타 블록이 즉시 사라지고 파일
     // 삭제된 템플릿 경고가 없어야 함 (정상 상태)
     await expect(page.locator('.meta-block--deleted')).toHaveCount(0);
 
-    // ── 설정 열기 → 메타 템플릿 서브스크린 ─────────────────────────────
+    // ── 설정 열기 → 정보 양식 서브스크린 (고급 설정 아래) ─────────────────
     await page.keyboard.press('Meta+,');
     await page.waitForSelector('.settings', { timeout: 3_000 });
 
-    // 메타 템플릿 서브스크린으로 이동
-    await page.click('.set-link:has-text("메타 템플릿")');
+    // 고급 설정을 펼쳐야 정보 양식 링크가 보인다
+    await page.click('.set-advanced-toggle');
+
+    // 정보 양식 서브스크린으로 이동
+    await page.click('.set-link:has-text("정보 양식")');
     await page.waitForSelector('.set-meta-item', { timeout: 3_000 });
     await expect(page.locator('.set-meta-name')).toContainText(TEMPLATE_NAME);
 

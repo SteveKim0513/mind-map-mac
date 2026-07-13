@@ -71,7 +71,7 @@ test('a deleted file lands in the trash panel and restores from it', async () =>
     expect(await getSidebarLabels(page)).toHaveLength(0);
 
     // trash badge appears; open the trash panel and confirm the item is there
-    await page.waitForSelector('.sb-trash-badge', { timeout: 3_000 });
+    await page.waitForSelector('.sb-dot-badge', { timeout: 3_000 });
     await page.locator('.sb-foot-btn[title^="휴지통"]').click();
     await page.waitForSelector('.trash-panel', { timeout: 3_000 });
     expect(await page.locator('.trash-row').count()).toBe(1);

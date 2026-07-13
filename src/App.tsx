@@ -9,6 +9,8 @@ import { WorkHistory } from './focus/WorkHistory';
 import { TodayView } from './focus/TodayView';
 import { TrashPanel } from './ui/TrashPanel';
 import { TemplatePanel } from './ui/TemplatePanel';
+import { RecentView } from './ui/RecentView';
+import { FavoritesView } from './ui/FavoritesView';
 import { UpdatesOverlay, WhatsNewCard } from './ui/Updates';
 import { CURRENT_VERSION, isNewer } from './ui/changelog';
 import { NoteLinkPicker } from './note/NoteLinkPicker';
@@ -66,6 +68,8 @@ export default function App() {
   const todayOpen = useUi((s) => s.todayOpen);
   const trashOpen = useUi((s) => s.trashOpen);
   const templatesOpen = useUi((s) => s.templatesOpen);
+  const recentOpen = useUi((s) => s.recentOpen);
+  const favoritesOpen = useUi((s) => s.favoritesOpen);
   const updatesOpen = useUi((s) => s.updatesOpen);
   const whatsNew = useUi((s) => s.whatsNew);
 
@@ -462,6 +466,8 @@ export default function App() {
       {todayOpen && <TodayView />}
       {trashOpen && <TrashPanel />}
       {templatesOpen && <TemplatePanel onOpen={(p) => void openByPath(p)} />}
+      {recentOpen && <RecentView onOpen={(p) => void openByPath(p)} />}
+      {favoritesOpen && <FavoritesView onOpen={(p) => void openByPath(p)} />}
       {updatesOpen && <UpdatesOverlay />}
       {whatsNew && <WhatsNewCard />}
       {settingsOpen && <Settings />}
@@ -480,6 +486,7 @@ function buildCommands(o: {
 }): Command[] {
   const cmds: Command[] = [
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
+    { id: 'capture', icon: 'bulb', label: '빠른 캡처 열기', hint: '⌥Space', run: () => void window.api.capture.show() },
     { id: 'today', icon: 'calendar', label: '오늘 열기', run: () => useUi.getState().openToday() },
     { id: 'history', icon: 'clock', label: '돌아보기 열기', run: () => useUi.getState().openHistory() },
     { id: 'trash', icon: 'trash', label: '휴지통 열기', run: () => useUi.getState().openTrash() },
