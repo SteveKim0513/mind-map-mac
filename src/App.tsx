@@ -119,6 +119,15 @@ export default function App() {
     });
   }, []);
 
+  // A global capture (§3-1) writes straight to disk — if that file is open in
+  // a tab here, reload it so this tab's own autosave can't overwrite the
+  // capture with its stale in-memory copy.
+  useEffect(() => {
+    return window.api.capture.onAppended((path) => {
+      void useSession.getState().reloadIfOpen(path);
+    });
+  }, []);
+
   // ⌘P quick-open · ⌘K command palette · ⌘W close tab (key code → layout-independent)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

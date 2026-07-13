@@ -211,6 +211,18 @@ const api = {
         ipcRenderer.off('capture:shown', handler);
       };
     },
+    /** Tell the main window a capture was just written to `targetPath` — lets it
+     *  reload that file if it happens to have it open (avoids the open-tab's
+     *  stale in-memory copy winning the next autosave and erasing the capture). */
+    notifyAppended: (targetPath: string): Promise<void> =>
+      ipcRenderer.invoke('capture:notifyAppended', targetPath),
+    onAppended: (cb: (targetPath: string) => void) => {
+      const handler = (_e: unknown, targetPath: string) => cb(targetPath);
+      ipcRenderer.on('capture:appended', handler);
+      return () => {
+        ipcRenderer.off('capture:appended', handler);
+      };
+    },
   },
 };
 

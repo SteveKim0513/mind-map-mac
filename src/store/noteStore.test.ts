@@ -43,6 +43,13 @@ describe('noteStore — dirty flag', () => {
     expect(s.getState().filePath).toBe('/new.md');
   });
 
+  it('setTitle strips control characters (e.g. a literal backspace from a paste)', () => {
+    const s = createNoteStore();
+    s.getState().loadNote(emptyNote(), '/a.md');
+    s.getState().setTitle('\b시장 리서치 - claude');
+    expect(s.getState().note.title).toBe('시장 리서치 - claude');
+  });
+
   it('reloading with loadNote resets dirty even when currently dirty', () => {
     const s = createNoteStore();
     s.getState().loadNote(emptyNote(), '/a.md');

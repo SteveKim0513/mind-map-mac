@@ -54,6 +54,7 @@ export function CaptureWindow() {
       };
       doc.rootIds.push(id);
       await window.api.save(targetPath, serialize(doc));
+      await window.api.capture.notifyAppended(targetPath);
       hide();
     } finally {
       setBusy(false);

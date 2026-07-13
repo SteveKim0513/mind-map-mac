@@ -32,7 +32,11 @@ export function createNoteStore(): NoteStore {
     markSaved: (filePath) => set({ filePath, dirty: false }),
     setFilePath: (filePath) => set({ filePath }),
 
-    setTitle: (title) => set({ note: { ...get().note, title }, dirty: true }),
+    // Strip C0 control characters (incl. a literal backspace, which a paste can
+    // insert as real text rather than deleting anything) — an unfiltered one
+    // flows straight into the file name via note-title-filename-sync and
+    // produces an invisible, hard-to-select prefix on the actual file.
+    setTitle: (title) => set({ note: { ...get().note, title: title.replace(/[\x00-\x1f\x7f]/g, '') }, dirty: true }),
     setBody: (body) => set({ note: { ...get().note, body }, dirty: true }),
     // keep an open session note's meta in sync after the app stamps end — does
     // NOT set dirty (disk already written), so a later autosave keeps the new end.

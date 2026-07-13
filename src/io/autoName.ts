@@ -12,6 +12,7 @@ export function isUntitledName(name: string): boolean {
 /** Derive a safe file name from a node title; null if nothing usable remains. */
 export function fileNameFromTitle(text: string): string | null {
   const cleaned = text
+    .replace(/[\x00-\x1f\x7f]/g, '') // control chars (e.g. a literal backspace from a paste)
     .replace(/[/\\:*?"<>|]/g, ' ') // path separators + chars invalid on common filesystems
     .replace(/\s+/g, ' ')
     .trim()

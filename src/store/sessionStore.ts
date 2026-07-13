@@ -70,6 +70,7 @@ interface SessionState {
   setActiveGroup: (group: GroupIndex) => void;
   renamePath: (oldPath: string, newPath: string) => void;
   flushSaves: (target: string) => Promise<void>;
+  reloadIfOpen: (path: string) => Promise<void>;
   beginDelete: (path: string) => void; // suppress autosave for path while trashing
   endDelete: (path: string) => void; // resume autosave (on failure or after settle)
   isDeleting: (path: string) => boolean; // true for the path or anything under it
@@ -479,6 +480,25 @@ export const useSession = create<SessionState>((set, get) => {
           }
         }),
       );
+    },
+
+    // Re-read a map tab's file from disk and replace its in-memory doc — used
+    // after a global capture (§3-1) writes a node straight to disk. Without
+    // this, an *already-open* tab on the same path keeps serving its stale
+    // copy, and that tab's own debounced autosave (e.g. after a passive
+    // zoom/fit-triggered `dirty`) would win the next write and silently erase
+    // the just-captured node. This always overwrites the in-memory doc, even
+    // if the tab has of its own unsaved edits — accepted for a low-stakes
+    // capture scratch file, since skipping the reload just reopens the race.
+    reloadIfOpen: async (path) => {
+      const tab = get().tabs.find((t) => t.path === path && t.kind === 'map');
+      if (!tab) return;
+      try {
+        const content = await window.api.readFile(path);
+        (tab.store as MapStore).getState().loadDoc(deserialize(content), path);
+      } catch {
+        /* file missing/unreadable — nothing to reload */
+      }
     },
 
     beginDelete: (path) =>

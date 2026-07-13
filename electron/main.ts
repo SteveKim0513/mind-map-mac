@@ -454,6 +454,13 @@ ipcMain.handle('capture:hide', () => {
   captureWin?.hide();
 });
 
+// Tells the main window a capture was just written to disk — if that file
+// happens to be open in a tab there, its stale in-memory copy would otherwise
+// win the next autosave and silently erase the capture (§3-1 known risk).
+ipcMain.handle('capture:notifyAppended', (_e, targetPath: string) => {
+  win?.webContents.send('capture:appended', targetPath);
+});
+
 ipcMain.handle('capture:status', () => ({ registered: captureShortcutRegistered, accelerator: CAPTURE_ACCELERATOR }));
 
 ipcMain.handle('fs:read', async (_e, filePath: string) => {
@@ -551,6 +558,16 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
       try {
         await fs.access(oldAssets);
         await fs.rename(oldAssets, newAssets);
+        // The note body embeds images as relative "./<stem>.assets/…" links
+        // (src/note/imageInsert.ts) — rewrite them to match, or a rename (e.g.
+        // the untitled-autoname flow renaming "제목 없음" → the first topic)
+        // leaves every embedded image pointing at a folder that no longer exists.
+        const oldRef = `./${oldStem}.assets/`;
+        const newRef = `./${newStem}.assets/`;
+        const body = await fs.readFile(next, 'utf-8');
+        if (body.includes(oldRef)) {
+          await fs.writeFile(next, body.split(oldRef).join(newRef), 'utf-8');
+        }
       } catch { /* no assets dir — ignore */ }
     }
   }

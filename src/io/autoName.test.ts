@@ -17,4 +17,9 @@ describe('untitled auto-naming', () => {
     expect(fileNameFromTitle('...')).toBeNull(); // would become a hidden file
     expect(fileNameFromTitle('x'.repeat(100))!.length).toBe(60);
   });
+
+  it('strips control characters (e.g. a literal backspace from a paste)', () => {
+    expect(fileNameFromTitle('\b시장 리서치 - claude')).toBe('시장 리서치 - claude');
+    expect(fileNameFromTitle('제목\x00\x1f\x7f없음')).toBe('제목없음');
+  });
 });

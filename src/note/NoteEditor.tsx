@@ -27,6 +27,13 @@ import { useTemplates } from '../store/templateStore';
 import { parseNote } from '../io/noteFormat';
 import { openLightbox } from './ImageLightbox';
 
+// Scroll position per note, keyed by file path — survives the remount that
+// happens every time the tab bar switches away and back (App.tsx renders only
+// the single active tab per pane group, so NoteEditor fully unmounts). A
+// plain module-level cache is enough; it doesn't need to be reactive or
+// survive an app restart, only a tab switch within this session.
+const scrollPositions = new Map<string, number>();
+
 interface Props {
   /** Initial Markdown body. The editor owns the document after mount; the parent
    *  remounts (via React key) when a different note loads. */
@@ -83,6 +90,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
   const editorRef = useRef<Editor | null>(null);
   const imagePathMap = useRef(new Map<string, string>());
   const pendingContent = useRef<string | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   // ── Note templates (템플릿+) ──────────────────────────────────────────────
   const templatesEnabled = useTemplates((s) => s.enabled);
@@ -441,9 +449,44 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
       } else {
         pendingContent.current = processed;
       }
+      // Substituting image src can reflow the whole note (real image height vs.
+      // the placeholder) — re-apply the saved scroll position once that settles.
+      const saved = scrollPositions.get(notePath);
+      if (saved && bodyRef.current) bodyRef.current.scrollTop = saved;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally mount-only
+
+  // Restore this note's last scroll position on mount (a plain tab switch
+  // fully remounts NoteEditor — see the scrollPositions comment above).
+  // Depends on `editor` too: it starts out null (the component renders
+  // nothing — see the early return below), so `bodyRef.current` isn't
+  // attached to a real DOM node yet on the render where this first fires.
+  //
+  // The commit is debounced rather than written on every scroll event: when
+  // this unmounts (switching to another tab), React tears down ProseMirror's
+  // content *before* running this effect's cleanup, which collapses
+  // scrollHeight and makes the browser clamp scrollTop to 0 — a real 'scroll'
+  // event fires with that bogus value. A synchronous save would overwrite the
+  // last good position with it. Debouncing means that spurious event's timer
+  // is simply cleared by the cleanup before it ever gets to run, leaving
+  // whatever the user's actual scrolling last committed untouched.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || !notePath) return;
+    const saved = scrollPositions.get(notePath);
+    if (saved) el.scrollTop = saved;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onScroll = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => scrollPositions.set(notePath, el.scrollTop), 120);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      if (timer) clearTimeout(timer);
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [notePath, editor]);
 
   useEffect(() => {
     if (editor && pendingContent.current !== null) {
@@ -479,7 +522,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
         onInsertTemplate={(name) => void insertTemplate(name)}
         onCreateTemplate={() => void createTemplate()}
       />
-      <div className="note-rich-body" onClick={() => editor.chain().focus().run()}>
+      <div ref={bodyRef} className="note-rich-body" onClick={() => editor.chain().focus().run()}>
         <EditorContent editor={editor} />
       </div>
       {menu && (
