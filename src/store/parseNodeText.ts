@@ -16,22 +16,26 @@ function dateStr(d: Date): string {
 }
 
 /**
- * Detects an explicit relative date or weekday, optionally followed by a time
- * of day. Never matches on a bare time expression — a lone "3시" is far too
- * ambiguous with ordinary sentence text (REDESIGN-VISION §3-2/§5: "과탐지보다
- * 무반응이 안전"). Default time when a date matches without a time is 09:00,
- * mirroring SchedulePopover's "아침 09:00" quick chip.
+ * Detects an explicit relative date or weekday — marked with a leading "@"
+ * (e.g. "@내일", "@화요일"), mirroring the "#색상" convention — optionally
+ * followed by a time of day. A bare "오늘"/"내일" with no "@" never matches:
+ * those words show up constantly as ordinary labels ("오늘: 회의 메모") or in
+ * plain sentences, and scheduling on every occurrence was too many false
+ * positives in practice. Never matches on a bare time expression either — a
+ * lone "3시" is far too ambiguous with ordinary sentence text (REDESIGN-VISION
+ * §3-2/§5: "과탐지보다 무반응이 안전"). Default time when a date matches
+ * without a time is 09:00, mirroring SchedulePopover's "아침 09:00" quick chip.
  */
 export function parseScheduleText(text: string, now: number = Date.now()): ScheduleParseResult {
   const base = new Date(now);
   let target: Date | null = null;
 
-  const relMatch = text.match(/(오늘|내일|모레|글피)/);
+  const relMatch = text.match(/@(오늘|내일|모레|글피)/);
   if (relMatch) {
     target = new Date(base);
     target.setDate(target.getDate() + RELATIVE_DAYS[relMatch[1]]);
   } else {
-    const wdMatch = text.match(/(다음\s?주\s?)?([월화수목금토일])요일/);
+    const wdMatch = text.match(/@(다음\s?주\s?)?([월화수목금토일])요일/);
     if (wdMatch) {
       const targetDow = WEEKDAYS.indexOf(wdMatch[2]);
       const isNextWeek = !!wdMatch[1];
