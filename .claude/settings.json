@@ -58,6 +58,10 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/block-destructive-command.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-docs-before-commit.sh"
           }
         ]
       },
@@ -78,6 +82,15 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/format-changed-files.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/remind-doc-index.sh"
           }
         ]
       }

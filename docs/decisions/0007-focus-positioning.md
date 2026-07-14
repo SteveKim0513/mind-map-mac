@@ -1,6 +1,6 @@
 # 0007 — 집중/대시보드의 위치: "사적인 거울 + 의도된 보고서"
 
-> 날짜: 2026-06-12 · 상태: 채택 · 관련: [REVIEW-2026-06-focus-and-dashboard](../product/REVIEW-2026-06-focus-and-dashboard.md), [work-dashboard-redesign](../product/specs/2026-06-12-work-dashboard-redesign.md)
+> 날짜: 2026-06-12 · 상태: 채택 · 관련: [REVIEW-2026-06-focus-and-dashboard](../product/reports/REVIEW-2026-06-focus-and-dashboard.md), [work-dashboard-redesign](../product/specs/2026-06-12-work-dashboard-redesign.md)
 
 ## 맥락
 

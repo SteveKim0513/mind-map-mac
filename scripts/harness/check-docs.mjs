@@ -146,6 +146,66 @@ if (fs.existsSync(decisionsDir)) {
   if (failures === 0) console.log(`  ✓ decisions/ ${nums.length}개 번호 중복 없음`);
 }
 
+// ── 검사 6: docs/README.md 폴더 지도가 실제 docs/ 하위 폴더와 일치하는지 ──
+console.log('\n[6] docs/README.md 폴더 지도 정합성 검사');
+const docsReadme = path.join(ROOT, 'docs/README.md');
+if (fs.existsSync(docsReadme)) {
+  const content = fs.readFileSync(docsReadme, 'utf8');
+  const dirs = fs
+    .readdirSync(path.join(ROOT, 'docs'), { withFileTypes: true })
+    .filter(e => e.isDirectory())
+    .map(e => e.name);
+  let missing = 0;
+  for (const dir of dirs) {
+    if (!content.includes(`\`${dir}/\``)) {
+      fail(`docs/README.md 폴더 표에 'docs/${dir}/'가 없습니다. 새 폴더를 추가했다면 지도도 갱신하세요.`);
+      missing++;
+    }
+  }
+  if (missing === 0) console.log(`  ✓ docs/ 하위 ${dirs.length}개 폴더 모두 지도에 반영됨`);
+}
+
+// ── 검사 7: ARCHITECTURE.md 결정 표가 decisions/README.md와 번호 일치하는지 ──
+console.log('\n[7] ARCHITECTURE.md ↔ decisions/README.md 결정 목록 동기화 검사');
+const architectureMd = path.join(ROOT, 'ARCHITECTURE.md');
+const decisionsReadme = path.join(ROOT, 'docs/decisions/README.md');
+if (fs.existsSync(architectureMd) && fs.existsSync(decisionsReadme)) {
+  const archContent = fs.readFileSync(architectureMd, 'utf8');
+  const decContent = fs.readFileSync(decisionsReadme, 'utf8');
+  const decNums = new Set([...decContent.matchAll(/\[(\d{4})\s*—/g)].map(m => m[1]));
+  const archNums = new Set([...archContent.matchAll(/docs\/decisions\/(\d{4})-/g)].map(m => m[1]));
+  let outOfSync = 0;
+  for (const n of decNums) {
+    if (!archNums.has(n)) {
+      fail(`ARCHITECTURE.md 결정 표에 docs/decisions/${n}-*.md가 없습니다. decisions/README.md에는 있습니다 — 표를 갱신하세요.`);
+      outOfSync++;
+    }
+  }
+  if (outOfSync === 0) console.log(`  ✓ 결정 ${decNums.size}건 모두 ARCHITECTURE.md에 반영됨`);
+}
+
+// ── 검사 8: docs/product/specs·reports 폴더의 모든 파일이 각 README 인덱스에 있는지 ──
+console.log('\n[8] product/specs·reports 인덱스 완전성 검사');
+for (const sub of ['specs', 'reports']) {
+  const dir = path.join(ROOT, 'docs/product', sub);
+  if (!fs.existsSync(dir)) continue;
+  const readme = path.join(dir, 'README.md');
+  if (!fs.existsSync(readme)) {
+    fail(`docs/product/${sub}/README.md가 없습니다 — 인덱스 없이는 이 폴더의 문서를 찾을 수 없습니다.`);
+    continue;
+  }
+  const readmeContent = fs.readFileSync(readme, 'utf8');
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.md') && f !== 'README.md');
+  let missing = 0;
+  for (const f of files) {
+    if (!readmeContent.includes(`(${f})`)) {
+      fail(`docs/product/${sub}/README.md에 ${f}가 색인되어 있지 않습니다.`);
+      missing++;
+    }
+  }
+  if (missing === 0) console.log(`  ✓ docs/product/${sub}/ ${files.length}개 파일 모두 색인됨`);
+}
+
 // ── 결과 ──
 console.log('\n══════════════════════════════════');
 if (failures > 0) {

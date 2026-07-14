@@ -56,6 +56,8 @@ MindMap은 **Electron + React + TypeScript** macOS 데스크탑 앱이다.
 
 ## 핵심 설계 결정
 
+전체 목록·최신 상태는 [docs/decisions/README.md](docs/decisions/README.md)가 원본이다 (아래 표는 요약이며, `make harness-check`가 두 목록의 번호 일치를 강제한다).
+
 | 결정 | 문서 |
 |---|---|
 | 색상 시맨틱 키 시스템 | `docs/decisions/0001-semantic-color-keys.md` |
@@ -64,6 +66,9 @@ MindMap은 **Electron + React + TypeScript** macOS 데스크탑 앱이다.
 | 진입점 매트릭스 (홈·탭·분할) | `docs/decisions/0004-entrypoint-matrix.md` |
 | 복사 시 reminder id 제외 | `docs/decisions/0005-copy-semantics.md` |
 | 포커스 세션과 노트 이름 변경 | `docs/decisions/0006-focus-session-and-rename.md` |
+| 포커스/대시보드의 위치 ("사적인 거울 + 의도된 보고서") | `docs/decisions/0007-focus-positioning.md` |
+| 포커스 세션 목표·과정·결과 구조화 (노트 템플릿 폐기) | `docs/decisions/0008-focus-goal-process-result.md` |
+| 노드 노트는 노드 맵과 같은 폴더에 (숨김 .notes/ 폐기) | `docs/decisions/0009-node-note-location.md` |
 
 ## 경계 규칙 (기계적으로 강제)
 

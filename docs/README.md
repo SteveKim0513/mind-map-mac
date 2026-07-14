@@ -6,10 +6,12 @@
 
 | 폴더 | 무엇이 들어가나 | 대표 문서 |
 |---|---|---|
-| `product/` | 제품 정의, 기능 명세(인벤토리), 신규 기능 스펙, 리서치 | [PRODUCT-DEFINITION.md](product/PRODUCT-DEFINITION.md), [FEATURE-INVENTORY.md](product/FEATURE-INVENTORY.md) |
+| `product/` | 제품 정의, 기능 명세(인벤토리), 신규 기능 스펙(`specs/`), 지난 감사·리서치 스냅샷(`reports/`) | [PRODUCT-DEFINITION.md](product/PRODUCT-DEFINITION.md), [FEATURE-INVENTORY.md](product/FEATURE-INVENTORY.md) |
 | `design/` | 디자인 시스템, 색상 체계, 디자인 철학 | [COLOR-SYSTEM.md](design/COLOR-SYSTEM.md), [DESIGN-notion.md](design/DESIGN-notion.md) |
 | `decisions/` | "왜 이렇게 했나" 결정 기록 (경량 ADR) | [decisions/README.md](decisions/README.md) |
 | `release/` | 릴리즈 프로세스, QA 체크리스트, 버전별 릴리즈 노트 | [RELEASE-PROCESS.md](release/RELEASE-PROCESS.md) |
+| `operations/` | 로컬 개발·테스트·배포·트러블슈팅 운영 가이드 | [local-development.md](operations/local-development.md), [troubleshooting.md](operations/troubleshooting.md) |
+| `exec-plans/` | 진행 중(`active/`)·완료(`completed/`) 실행 계획, 기술부채 추적 | [tech-debt-tracker.md](exec-plans/tech-debt-tracker.md) |
 
 루트의 `design-reference/`는 외부 디자인 시스템 벤치마킹 자료(75개)로, `design/` 문서의 참고 출처다.
 

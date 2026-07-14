@@ -1,7 +1,7 @@
 # 제품 정의 (1페이지)
 
 > 작성: 2026-06-10 · 상태: 초안 — 팀 합의 필요
-> 근거: [RESEARCH-mindmap-competitors.md](RESEARCH-mindmap-competitors.md) (검증된 경쟁사 불만 분석)
+> 근거: [RESEARCH-mindmap-competitors.md](reports/RESEARCH-mindmap-competitors.md) (검증된 경쟁사 불만 분석)
 
 ## 한 줄 정의
 
