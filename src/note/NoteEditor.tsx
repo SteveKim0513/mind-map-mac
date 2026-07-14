@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import type { MetaTemplate } from '../types';
-import { sinkListItem, liftListItem } from 'prosemirror-schema-list';
+import { sinkListItem } from 'prosemirror-schema-list';
+import { outdentListItem } from './listOutdent';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -385,7 +386,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
           for (let d = $from.depth; d > 0; d--) {
             const nodeType = $from.node(d).type;
             if (nodeType.name === 'listItem' || nodeType.name === 'taskItem') {
-              const cmd = event.shiftKey ? liftListItem(nodeType) : sinkListItem(nodeType);
+              const cmd = event.shiftKey ? outdentListItem(nodeType) : sinkListItem(nodeType);
               cmd(state, _view.dispatch);
               break;
             }
