@@ -90,6 +90,31 @@ describe('closeTab', () => {
     useSession.getState().closeTab('NONEXISTENT');
     expect(useSession.getState().tabs).toHaveLength(1);
   });
+
+  // Regression: closing a tab right after an edit used to drop it immediately,
+  // discarding whatever the ~1s debounced autosave (Pane.tsx/NoteEditor.tsx)
+  // hadn't written to disk yet — a real data-loss bug, not just a UX rough edge.
+  it('flushes a dirty tab to disk before discarding it (no data loss on close)', async () => {
+    useSession.getState().openPath('/notes/a.md', noteContent());
+    const tab = useSession.getState().tabs[0];
+    (tab.store as NoteStore).getState().setTitle('unsaved edit');
+    expect((tab.store as NoteStore).getState().dirty).toBe(true);
+
+    await useSession.getState().closeTab(tab.id);
+
+    expect(mockSave).toHaveBeenCalledOnce();
+    expect(useSession.getState().tabs).toHaveLength(0);
+  });
+
+  it('closing a clean tab does not call save (stays synchronous, no added delay)', () => {
+    useSession.getState().openPath('/maps/a.mind', mindContent());
+    const id = useSession.getState().tabs[0].id;
+    void useSession.getState().closeTab(id);
+    // No `await` here on purpose — a clean-tab close must resolve its state
+    // change in the SAME tick, exactly like before this fix.
+    expect(useSession.getState().tabs).toHaveLength(0);
+    expect(mockSave).not.toHaveBeenCalled();
+  });
 });
 
 // ── closeByPath ────────────────────────────────────────────────────────────

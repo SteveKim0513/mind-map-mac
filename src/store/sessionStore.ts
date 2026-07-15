@@ -61,9 +61,9 @@ interface SessionState {
   // used by note-link "열기" so the original never gets covered
   openBeside: (path: string, content: string, sourceGroup: GroupIndex) => void;
   selectTab: (tabId: string, group: GroupIndex) => void;
-  closeTab: (tabId: string) => void;
-  closeAllTabs: () => void;
-  closeOtherTabs: (keepId: string) => void;
+  closeTab: (tabId: string) => Promise<void>;
+  closeAllTabs: () => Promise<void>;
+  closeOtherTabs: (keepId: string) => Promise<void>;
   moveTab: (tabId: string, toGroup: GroupIndex) => void;
   reorderTab: (tabId: string, group: GroupIndex, beforeTabId: string | null) => void;
   toggleSplit: () => void;
@@ -80,6 +80,26 @@ interface SessionState {
 
 function base(path: string): string {
   return (path.split('/').pop() ?? path).replace(/\.(mind|md)$/, '');
+}
+
+/** Write out a tab's pending (debounced) edit immediately, if it has one.
+ *  Used both by `flushSaves` (rename/move race guard) and by every tab-close
+ *  path — closing a dirty tab must never discard the last ~1s of autosave-
+ *  debounced edits (see closeTab/closeAllTabs/closeOtherTabs). */
+async function flushTab(t: Tab): Promise<void> {
+  if (t.kind === 'note') {
+    const st = (t.store as NoteStore).getState();
+    if (st.dirty && st.filePath) {
+      const p = await window.api.save(st.filePath, serializeNote(st.note));
+      if (p) (t.store as NoteStore).getState().markSaved(p);
+    }
+  } else {
+    const st = (t.store as MapStore).getState();
+    if (st.dirty && st.filePath) {
+      const p = await window.api.save(st.filePath, serialize(st.doc));
+      if (p) (t.store as MapStore).getState().markSaved(p);
+    }
+  }
 }
 
 function makeTab(path: string, content: string): Tab {
@@ -161,6 +181,48 @@ export const useSession = create<SessionState>((set, get) => {
   /** Pick a group's active tab after `removed` left it (list already excludes removed). */
   const neighborActive = (list: string[], removed: string, prevActive: string | null) =>
     prevActive !== removed ? prevActive : list[list.length - 1] ?? null;
+
+  /** Drop `tabId` from tabs/groups and persist — the actual state mutation behind
+   *  closeTab, factored out so closeByPath can reuse it WITHOUT the flush-before-close
+   *  step (closeByPath only runs after the file is already gone/trashed, so writing
+   *  a dirty tab's content back out at that point would just resurrect the file). */
+  const removeTab = (tabId: string): void => {
+    const g = groupOf(tabId);
+    if (g === -1) return;
+    const s = get();
+    const tabs = s.tabs.filter((t) => t.id !== tabId);
+
+    if (g === 0) {
+      const leftTabs = s.leftTabs.filter((id) => id !== tabId);
+      const { rightTabs, rightActive, split, activeGroup } = s;
+      const leftActive = neighborActive(leftTabs, tabId, s.leftActive);
+      // if left emptied while split, pull the right group back into the left
+      if (leftTabs.length === 0 && split) {
+        set({
+          tabs,
+          leftTabs: rightTabs,
+          leftActive: rightActive,
+          rightTabs: [],
+          rightActive: null,
+          split: false,
+          activeGroup: 0,
+        });
+        persist();
+        return;
+      }
+      set({ tabs, leftTabs, leftActive, rightTabs, rightActive, split, activeGroup });
+    } else {
+      const rightTabs = s.rightTabs.filter((id) => id !== tabId);
+      const rightActive = neighborActive(rightTabs, tabId, s.rightActive);
+      if (rightTabs.length === 0) {
+        // right emptied → collapse the split
+        set({ tabs, rightTabs: [], rightActive: null, split: false, activeGroup: 0 });
+      } else {
+        set({ tabs, rightTabs, rightActive });
+      }
+    }
+    persist();
+  };
 
   return {
     tabs: [],
@@ -303,40 +365,21 @@ export const useSession = create<SessionState>((set, get) => {
 
     closeTab: (tabId) => {
       const g = groupOf(tabId);
-      if (g === -1) return;
-      const s = get();
-      const tabs = s.tabs.filter((t) => t.id !== tabId);
-
-      if (g === 0) {
-        const leftTabs = s.leftTabs.filter((id) => id !== tabId);
-        let { rightTabs, rightActive, split, activeGroup } = s;
-        let leftActive = neighborActive(leftTabs, tabId, s.leftActive);
-        // if left emptied while split, pull the right group back into the left
-        if (leftTabs.length === 0 && split) {
-          set({
-            tabs,
-            leftTabs: rightTabs,
-            leftActive: rightActive,
-            rightTabs: [],
-            rightActive: null,
-            split: false,
-            activeGroup: 0,
-          });
-          persist();
-          return;
-        }
-        set({ tabs, leftTabs, leftActive, rightTabs, rightActive, split, activeGroup });
-      } else {
-        const rightTabs = s.rightTabs.filter((id) => id !== tabId);
-        const rightActive = neighborActive(rightTabs, tabId, s.rightActive);
-        if (rightTabs.length === 0) {
-          // right emptied → collapse the split
-          set({ tabs, rightTabs: [], rightActive: null, split: false, activeGroup: 0 });
-        } else {
-          set({ tabs, rightTabs, rightActive });
-        }
-      }
-      persist();
+      if (g === -1) return Promise.resolve();
+      const closing = get().tabs.find((t) => t.id === tabId);
+      const dirty = closing
+        ? closing.kind === 'note'
+          ? (closing.store as NoteStore).getState().dirty
+          : (closing.store as MapStore).getState().dirty
+        : false;
+      // Flush a dirty tab's pending autosave to disk BEFORE discarding it — the
+      // debounced write in Pane.tsx/NoteEditor.tsx is still ~1s out when a tab is
+      // closed right after an edit, and closing used to just drop that state.
+      // The common (clean) case stays fully synchronous — no added await tick —
+      // so every existing "close then immediately assert" call site is unaffected.
+      if (closing && dirty) return flushTab(closing).then(() => removeTab(tabId));
+      removeTab(tabId);
+      return Promise.resolve();
     },
 
     moveTab: (tabId, toGroup) => {
@@ -370,7 +413,8 @@ export const useSession = create<SessionState>((set, get) => {
       persist();
     },
 
-    closeAllTabs: () => {
+    closeAllTabs: async () => {
+      await Promise.all(get().tabs.map(flushTab));
       set({
         tabs: [],
         leftTabs: [],
@@ -383,9 +427,10 @@ export const useSession = create<SessionState>((set, get) => {
       persist();
     },
 
-    closeOtherTabs: (keepId) => {
+    closeOtherTabs: async (keepId) => {
       const keep = get().tabs.find((t) => t.id === keepId);
       if (!keep) return;
+      await Promise.all(get().tabs.filter((t) => t.id !== keepId).map(flushTab));
       set({
         tabs: [keep],
         leftTabs: [keepId],
@@ -463,23 +508,7 @@ export const useSession = create<SessionState>((set, get) => {
       const affected = get().tabs.filter(
         (t) => t.path === target || t.path.startsWith(target + '/'),
       );
-      await Promise.all(
-        affected.map(async (t) => {
-          if (t.kind === 'note') {
-            const st = (t.store as NoteStore).getState();
-            if (st.dirty && st.filePath) {
-              const p = await window.api.save(st.filePath, serializeNote(st.note));
-              if (p) (t.store as NoteStore).getState().markSaved(p);
-            }
-          } else {
-            const st = (t.store as MapStore).getState();
-            if (st.dirty && st.filePath) {
-              const p = await window.api.save(st.filePath, serialize(st.doc));
-              if (p) (t.store as MapStore).getState().markSaved(p);
-            }
-          }
-        }),
-      );
+      await Promise.all(affected.map(flushTab));
     },
 
     // Re-read a map tab's file from disk and replace its in-memory doc — used
@@ -515,8 +544,11 @@ export const useSession = create<SessionState>((set, get) => {
     },
 
     closeByPath: (path) => {
+      // No flush here (unlike closeTab): the file at `path` is already gone or
+      // trashed by the time this runs (called after a delete/ENOENT), so writing
+      // a dirty tab's content back out would just resurrect it.
       const victims = get().tabs.filter((t) => t.path === path || t.path.startsWith(path + '/'));
-      victims.forEach((t) => get().closeTab(t.id));
+      victims.forEach((t) => removeTab(t.id));
       // drop the deleted file (or anything under a deleted folder) from recents
       set((s) => ({
         recent: s.recent.filter((r) => r.path !== path && !r.path.startsWith(path + '/')),
