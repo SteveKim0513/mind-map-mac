@@ -6,16 +6,20 @@ import { Icon } from '../ui/Icon';
 import { tagVar } from '../theme/palette';
 import { ColorSwatchGrid } from '../ui/ColorSwatchGrid';
 
-/** Floating action bar shown above the single selected node. */
+/** Floating action bar shown above the single selected node.
+ *
+ * 일정·링크·노드에 노트 연결은 여기 없다 — 이 셋은 값이 있을 때만 보이는
+ * 게이지 칩(`NodeView.tsx`)과 항상 존재하는 우클릭 메뉴(`ContextMenu.tsx`)
+ * 두 곳으로만 접근한다. 예전엔 이 툴바에도 아이콘이 있어 같은 기능이
+ * 칩·아이콘·메뉴 텍스트 세 가지 다른 모습으로 흩어져 있었다
+ * (UX-CLARITY-VISION 전략 C, REDESIGN-VISION §T2가 애초에 "자주 쓰는
+ * 3~4개만" 남기라고 정했던 것과도 맞춘다). */
 export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: number; sy: number }) {
   const node = useMap((s) => s.doc.nodes[nodeId]);
   const setColor = useMap((s) => s.setColor);
   const toggleDone = useMap((s) => s.toggleDone);
   const addChild = useMap((s) => s.addChild);
   const deleteNode = useMap((s) => s.deleteNode);
-  const setScheduled = useMap((s) => s.setScheduled);
-  const docId = useMap((s) => s.doc.id);
-  const filePath = useMap((s) => s.filePath);
   const mapStore = useMapStore();
   const focusing = useUi((s) => !!s.activeFocus);
   const [showColors, setShowColors] = useState(false);
@@ -46,33 +50,6 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
       <span className="st-sep" />
       <button className="st-btn" title="메모" onClick={() => useUi.getState().setMemoEditFor(nodeId)}>
         <Icon name="memo" />
-      </button>
-      <button className="st-btn" title="링크" onClick={() => useUi.getState().openAddLink(nodeId)}>
-        <Icon name="link" />
-      </button>
-      <button
-        className="st-btn"
-        title="노드에 노트 연결"
-        onClick={() =>
-          useUi.getState().openLinkNote({
-            mapId: docId ?? '',
-            nodeId,
-            nodeText: node.text,
-            mapPath: filePath ?? '',
-          })
-        }
-      >
-        <Icon name="note" />
-      </button>
-      <button
-        className={`st-btn${node.scheduled ? ' on' : ''}`}
-        title="일정"
-        onClick={() => {
-          if (!node.scheduled) setScheduled(nodeId, true);
-          useUi.getState().openSchedule(nodeId);
-        }}
-      >
-        <Icon name="calendar" />
       </button>
       <button
         className={`st-btn${focusing ? ' on' : ''}`}
