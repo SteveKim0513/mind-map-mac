@@ -10,7 +10,7 @@ vi.stubGlobal('api', { save: mockSave });
 
 // sessionStore uses localStorage — jsdom provides it.
 // Import AFTER stubbing so the module closure captures the mock.
-const { useSession } = await import('./sessionStore');
+const { useSession, isCalendarPath } = await import('./sessionStore');
 
 // ── helpers ────────────────────────────────────────────────────────────────
 const mindContent = () => serialize(emptyDoc());
@@ -240,5 +240,50 @@ describe('split view — left empties on closeTab', () => {
     expect(useSession.getState().split).toBe(false);
     expect(useSession.getState().leftTabs).toHaveLength(1);
     expect(useSession.getState().rightTabs).toHaveLength(0);
+  });
+});
+
+// ── calendar tab — singleton, storeless ─────────────────────────────────────
+describe('openCalendar', () => {
+  beforeEach(reset);
+
+  it('creates a calendar tab with a null store and the sentinel path', () => {
+    useSession.getState().openCalendar();
+    const { tabs, leftActive } = useSession.getState();
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0].kind).toBe('calendar');
+    expect(tabs[0].store).toBeNull();
+    expect(isCalendarPath(tabs[0].path)).toBe(true);
+    expect(leftActive).toBe(tabs[0].id);
+  });
+
+  it('calling it twice activates the existing tab instead of duplicating it', () => {
+    useSession.getState().openCalendar();
+    useSession.getState().openPath('/maps/a.mind', mindContent());
+    useSession.getState().openCalendar();
+    const { tabs, leftActive } = useSession.getState();
+    expect(tabs.filter((t) => t.kind === 'calendar')).toHaveLength(1);
+    expect(leftActive).toBe(tabs.find((t) => t.kind === 'calendar')!.id);
+  });
+
+  it('closing the calendar tab never calls window.api.save (nothing to flush)', async () => {
+    useSession.getState().openCalendar();
+    const id = useSession.getState().tabs[0].id;
+    await useSession.getState().closeTab(id);
+    expect(mockSave).not.toHaveBeenCalled();
+    expect(useSession.getState().tabs).toHaveLength(0);
+  });
+
+  it('hydrate recreates the calendar tab from a snapshot that had it open', () => {
+    useSession.getState().openCalendar();
+    useSession.getState().openPath('/maps/a.mind', mindContent());
+    const snap = JSON.parse(localStorage.getItem('session')!);
+
+    reset();
+    useSession.getState().hydrate([{ path: '/maps/a.mind', content: mindContent() }], snap);
+
+    const { tabs } = useSession.getState();
+    expect(tabs.some((t) => t.kind === 'calendar')).toBe(true);
+    expect(tabs).toHaveLength(2);
   });
 });

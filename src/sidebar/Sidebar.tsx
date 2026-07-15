@@ -584,19 +584,13 @@ export function Sidebar({
         <span>검색</span>
       </button>
 
-      {/* smart nav: full-width rows to navigate to views */}
+      {/* smart nav: full-width rows to navigate to views. 캘린더+즐겨찾기만 —
+          집중 기록은 관리형 화면이라 하단 바로, 최근 수정은 설정으로 옮겼다
+          (결정 0011 §4-4: 매일 들여다보는 1차 내비게이션이 아니다). */}
       <div className="sb-nav">
-        <button className="sb-nav-item" onClick={() => useUi.getState().openToday()}>
+        <button className="sb-nav-item" onClick={() => useSession.getState().openCalendar()}>
           <Icon name="calendar" />
-          <span>오늘</span>
-        </button>
-        <button className="sb-nav-item" onClick={() => useUi.getState().openHistory()}>
-          <Icon name="clock" />
-          <span>집중 기록</span>
-        </button>
-        <button className="sb-nav-item" onClick={() => useUi.getState().openRecent()}>
-          <Icon name="clock" />
-          <span>최근 수정</span>
+          <span>캘린더</span>
         </button>
         <button className="sb-nav-item" onClick={() => useUi.getState().openFavorites()}>
           <Icon name="star" />
@@ -689,8 +683,13 @@ export function Sidebar({
         <div className="sb-foot-bar">
           <span className="sb-foot-grow" />
           {/* "관리형" 화면(가끔 열어보는 목록·복구 UI) 묶음 — 새 관리 화면이 추가돼도
-              여기 편입시키는 게 기본, 푸터에 아이콘을 또 늘리지 않는다 (IA-STRATEGY §5-2). */}
+              여기 편입시키는 게 기본, 푸터에 아이콘을 또 늘리지 않는다 (IA-STRATEGY §5-2).
+              집중 기록도 같은 이유로 여기 있다 — 매일 들여다보는 1차 내비게이션이
+              아니라 가끔 되짚어보는 대시보드다 (결정 0011 §4-4). */}
           <div className="sb-foot-group">
+            <button className="sb-foot-btn" title="집중 기록" onClick={() => useUi.getState().openHistory()}>
+              <Icon name="clock" />
+            </button>
             <button
               className={`sb-foot-btn${trashCount > 0 ? ' has-items' : ''}`}
               title={trashCount > 0 ? `휴지통 (${trashCount})` : '휴지통'}

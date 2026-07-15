@@ -1,6 +1,7 @@
 import { useRef } from 'react';
-import { useMap } from '../store/mapStore';
+import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
+import { requestFocusStart } from '../focus/controller';
 import { Icon } from '../ui/Icon';
 import { useNodeAnchoredPosition } from '../ui/useNodeAnchoredPosition';
 import { useOutsideDismiss } from '../ui/useOutsideDismiss';
@@ -46,6 +47,7 @@ export function SchedulePopover({ id, onClose }: Props) {
   const setScheduleAt = useMap((s) => s.setScheduleAt);
   const setReminderOn = useMap((s) => s.setReminderOn);
   const syncStatus = useUi((s) => s.syncStatus);
+  const mapStore = useMapStore();
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -191,6 +193,14 @@ export function SchedulePopover({ id, onClose }: Props) {
           </span>
         </div>
       </div>
+
+      {/* 실행 — 스케줄 노드를 실행하는 다음 단계는 집중 세션(결정 0011 §3) */}
+      {node.scheduleAt && (
+        <button className="sched-focus" onClick={() => requestFocusStart(mapStore, id)}>
+          <Icon name="clock" />
+          지금 집중 시작
+        </button>
+      )}
 
       {node.scheduleAt && (
         <button className="sched-clear" onClick={() => setScheduleAt(id, undefined)}>

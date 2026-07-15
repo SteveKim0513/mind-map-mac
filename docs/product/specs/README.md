@@ -16,14 +16,14 @@
 - [2026-06-15-note-meta-header.md](2026-06-15-note-meta-header.md) — 노트 상단 메타 영역 (목차·연결·백링크)
 - [2026-06-15-note-to-note-links.md](2026-06-15-note-to-note-links.md) — 노트 ↔ 노트 연결 (`[[제목]]`, 백링크)
 - [2026-07-09-note-templates.md](2026-07-09-note-templates.md) — 노트 템플릿 v1
+- [2026-06-12-today-view.md](2026-06-12-today-view.md) — "오늘" 뷰 (→ 2026-07-15-calendar-view.md로 승격, 오버레이 자체는 퇴역)
+- [2026-07-15-calendar-view.md](2026-07-15-calendar-view.md) — 캘린더 뷰 ("오늘" 뷰를 일/주/월 탭으로 승격)
 
 ## 명세만 완료 · 구현 예정 / 아이디어 단계
 
 - [2026-06-12-dashboard-v2-day-week.md](2026-06-12-dashboard-v2-day-week.md) — 돌아보기 v2 (오늘 ↔ 이번 주 단일 스코프)
 - [2026-06-12-work-dashboard-redesign.md](2026-06-12-work-dashboard-redesign.md) — 작업 기록 대시보드 재기획 (아이디어 단계)
-- [2026-06-12-today-view.md](2026-06-12-today-view.md) — "오늘" 뷰 (→ 아래 캘린더 뷰로 승격)
 - [2026-06-15-release-history.md](2026-06-15-release-history.md) — 배포 내역 기록 + 사용자 가시성
-- [2026-07-15-calendar-view.md](2026-07-15-calendar-view.md) — 캘린더 뷰 ("오늘" 뷰를 일/주/월 탭으로 승격, 구현 진행 중)
 
 ## 폐기 (기록용, 대체 문서 참고)
 

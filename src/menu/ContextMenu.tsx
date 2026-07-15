@@ -79,7 +79,8 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       style={{ left: pos.left, top: pos.top }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="ctx-group-label">편집</div>
+      {/* 구조 — 노드 자체의 뼈대 (축 무관, 결정 0011) */}
+      <div className="ctx-group-label">구조</div>
       <button className="ctx-item" onClick={run(() => map.addChild(id))}>
         <span>자식 추가</span>
         <kbd>Tab</kbd>
@@ -92,22 +93,28 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
         <span>편집</span>
         <kbd>Space</kbd>
       </button>
+      {hasChildren && (
+        <button className="ctx-item" onClick={run(() => map.toggleCollapse(id))}>
+          <span>{node.collapsed ? '펼치기' : '접기'}</span>
+        </button>
+      )}
+      <button className="ctx-item" onClick={run(() => useUi.getState().zoomTo(id))}>
+        <span>이 노드로 확대</span>
+        <kbd>Z</kbd>
+      </button>
+      <button className="ctx-item" onClick={run(() => map.duplicateNode(id))}>
+        <span>복제</span>
+      </button>
       <div className="ctx-sep" />
 
-      <div className="ctx-group-label">속성</div>
+      {/* 정리 — 생각을 포착·구조화(색·아이콘·메모·링크) */}
+      <div className="ctx-group-label">정리</div>
       <div className="ctx-colors">
         <ColorSwatchGrid value={node.color} onChange={(c) => run(() => map.setColor(id, c))()} />
       </div>
       <button className="ctx-item subtle" onClick={run(() => useUi.getState().openNote(id))}>
         <span>아이콘…</span>
       </button>
-      <button className="ctx-item" onClick={run(() => map.toggleDone(id))}>
-        <span>{node.done ? '완료 해제' : '완료 표시'}</span>
-        <kbd>⌘↵</kbd>
-      </button>
-      <div className="ctx-sep" />
-
-      <div className="ctx-group-label">첨부</div>
       <button
         className="ctx-item"
         onClick={run(() => useUi.getState().setMemoEditFor(id))}
@@ -118,22 +125,14 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       <button className="ctx-item" onClick={run(() => useUi.getState().openAddLink(id))}>
         <span>링크 추가</span>
       </button>
-      <button
-        className="ctx-item"
-        onClick={run(() =>
-          useUi.getState().openLinkNote({
-            mapId: map.doc.id ?? '',
-            nodeId: id,
-            nodeText: node.text,
-            mapPath: map.filePath ?? '',
-          }),
-        )}
-      >
-        <span>노드에 노트 연결</span>
-      </button>
       <div className="ctx-sep" />
 
-      <div className="ctx-group-label">일정 · 집중</div>
+      {/* 실행 — 완료→일정→집중이 하나의 흐름(결정 0011) */}
+      <div className="ctx-group-label">실행</div>
+      <button className="ctx-item" onClick={run(() => map.toggleDone(id))}>
+        <span>{node.done ? '완료 해제' : '완료 표시'}</span>
+        <kbd>⌘↵</kbd>
+      </button>
       {node.scheduled ? (
         <>
           <button className="ctx-item" onClick={run(() => useUi.getState().openSchedule(id))}>
@@ -148,29 +147,36 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
           <span>{hasChildren ? '하위까지 스케줄 노드로 지정' : '스케줄 노드로 지정'}</span>
         </button>
       )}
-      <button className="ctx-item" onClick={run(() => {
-        if (focusing) useUi.getState().toast('집중 세션이 이미 진행 중입니다');
-        else requestFocusStart(mapStore, id);
-      })}>
+      <button
+        className="ctx-item"
+        disabled={!node.scheduled}
+        title={node.scheduled ? undefined : '일정 설정 후 이용 가능'}
+        onClick={run(() => {
+          if (focusing) useUi.getState().toast('집중 세션이 이미 진행 중입니다');
+          else requestFocusStart(mapStore, id);
+        })}
+      >
         <span>{focusing ? '집중 세션 진행 중…' : '집중 세션 시작'}</span>
       </button>
       <div className="ctx-sep" />
 
-      <div className="ctx-group-label">보기</div>
-      {hasChildren && (
-        <button className="ctx-item" onClick={run(() => map.toggleCollapse(id))}>
-          <span>{node.collapsed ? '펼치기' : '접기'}</span>
-        </button>
-      )}
+      {/* 통찰 — 더 깊이 쓰고 되짚어 이해(결정 0011) */}
+      <div className="ctx-group-label">통찰</div>
       <button className="ctx-item" onClick={run(() => map.setFocus(id))}>
         <span>이 노드만 보기</span>
       </button>
-      <button className="ctx-item" onClick={run(() => useUi.getState().zoomTo(id))}>
-        <span>이 노드로 확대</span>
-        <kbd>Z</kbd>
-      </button>
-      <button className="ctx-item" onClick={run(() => map.duplicateNode(id))}>
-        <span>복제</span>
+      <button
+        className="ctx-item"
+        onClick={run(() =>
+          useUi.getState().openLinkNote({
+            mapId: map.doc.id ?? '',
+            nodeId: id,
+            nodeText: node.text,
+            mapPath: map.filePath ?? '',
+          }),
+        )}
+      >
+        <span>노드에 노트 연결</span>
       </button>
       <div className="ctx-sep" />
       <button className="ctx-item danger" onClick={run(() => map.deleteNode(id))}>

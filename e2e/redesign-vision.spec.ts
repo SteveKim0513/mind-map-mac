@@ -49,7 +49,8 @@ test('집중 세션 위젯은 사이드바 독킹 시 기본으로 접혀 있고
     await page.click('.canvas');
     await page.keyboard.press('Enter');
     await page.waitForSelector('.editing-text', { timeout: 3_000 });
-    await page.keyboard.type('테스트 노드');
+    // 집중 버튼은 스케줄 노드에서만 나타난다(결정 0011 §3) — "@오늘"로 스케줄을 건다.
+    await page.keyboard.type('@오늘 테스트 노드');
     await page.keyboard.press('Enter');
     await page.waitForSelector('.node', { timeout: 3_000 });
 

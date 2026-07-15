@@ -5,7 +5,7 @@ import { deserialize, serialize, newId } from './../io/formats';
 import { parseNote, serializeNote } from './../io/noteFormat';
 import { useUi } from './uiStore';
 
-export type TabKind = 'map' | 'note';
+export type TabKind = 'map' | 'note' | 'calendar';
 
 export interface Tab {
   id: string;
@@ -13,7 +13,8 @@ export interface Tab {
   title: string;
   kind: TabKind;
   isTemplate: boolean;
-  store: MapStore | NoteStore;
+  // calendar tabs have no backing file/store — `null` marks that case.
+  store: MapStore | NoteStore | null;
 }
 
 /** true when this path should open as a Markdown note (vs a .mind map). */
@@ -24,6 +25,18 @@ export function isNotePath(path: string): boolean {
 /** true when this path lives in the hidden Note Template folder (.templates/). */
 export function isTemplatePath(path: string): boolean {
   return path.includes('/.templates/');
+}
+
+/** Sentinel path for the singleton calendar tab — not a real file on disk. */
+export const CALENDAR_PATH = 'calendar://agenda';
+
+/** true when this path is the calendar tab's sentinel (vs a real file path). */
+export function isCalendarPath(path: string): boolean {
+  return path === CALENDAR_PATH;
+}
+
+function makeCalendarTab(): Tab {
+  return { id: newId(), path: CALENDAR_PATH, title: '캘린더', kind: 'calendar', isTemplate: false, store: null };
 }
 
 export interface RecentFile {
@@ -56,6 +69,7 @@ interface SessionState {
 
   // actions
   openPath: (path: string, content: string) => void;
+  openCalendar: () => void; // singleton calendar tab (not path-dedup'd like openPath)
   openInRight: (path: string, content: string) => void; // open/activate beside (right split)
   // open in the pane OPPOSITE the source group (keeps the source note visible);
   // used by note-link "열기" so the original never gets covered
@@ -87,6 +101,7 @@ function base(path: string): string {
  *  path — closing a dirty tab must never discard the last ~1s of autosave-
  *  debounced edits (see closeTab/closeAllTabs/closeOtherTabs). */
 async function flushTab(t: Tab): Promise<void> {
+  if (!t.store) return; // calendar tab — nothing to save
   if (t.kind === 'note') {
     const st = (t.store as NoteStore).getState();
     if (st.dirty && st.filePath) {
@@ -276,6 +291,29 @@ export const useSession = create<SessionState>((set, get) => {
       persist();
     },
 
+    // Singleton — dedup'd by kind (there is only ever one calendar sentinel
+    // path), not by openPath's path-dedup, so the sentinel never touches the
+    // real-file open path.
+    openCalendar: () => {
+      const existing = get().tabs.find((t) => t.kind === 'calendar');
+      if (existing) {
+        const g = groupOf(existing.id);
+        if (g === 1) set({ rightActive: existing.id, activeGroup: 1 });
+        else set({ leftActive: existing.id, activeGroup: 0 });
+        persist();
+        return;
+      }
+      const tab = makeCalendarTab();
+      const toRight = get().split && get().activeGroup === 1;
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        ...(toRight
+          ? { rightTabs: [...s.rightTabs, tab.id], rightActive: tab.id, activeGroup: 1 as const }
+          : { leftTabs: [...s.leftTabs, tab.id], leftActive: tab.id, activeGroup: 0 as const }),
+      }));
+      persist();
+    },
+
     openInRight: (path, content) => {
       let tab = get().tabs.find((t) => t.path === path);
       let tabs = get().tabs;
@@ -367,7 +405,7 @@ export const useSession = create<SessionState>((set, get) => {
       const g = groupOf(tabId);
       if (g === -1) return Promise.resolve();
       const closing = get().tabs.find((t) => t.id === tabId);
-      const dirty = closing
+      const dirty = closing?.store
         ? closing.kind === 'note'
           ? (closing.store as NoteStore).getState().dirty
           : (closing.store as MapStore).getState().dirty
@@ -493,7 +531,7 @@ export const useSession = create<SessionState>((set, get) => {
             // Anchor the replacement to the path prefix — a plain String.replace
             // would rewrite the first match anywhere in the path.
             const np = newPath + t.path.slice(oldPath.length);
-            t.store.getState().setFilePath(np);
+            t.store?.getState().setFilePath(np);
             return { ...t, path: np, title: base(np) };
           }
           return t;
@@ -565,6 +603,11 @@ export const useSession = create<SessionState>((set, get) => {
       if (skipped > 0) {
         window.api?.log?.('warn', 'session', `restore skipped ${skipped} corrupt file(s)`);
         setTimeout(() => useUi.getState().toast(`${skipped}개 파일을 열 수 없어 건너뛰었습니다`), 0);
+      }
+      // the calendar tab has no backing file, so it never shows up in `files` —
+      // recreate it from the sentinel path if the snapshot had it open.
+      if (snap.leftPaths.includes(CALENDAR_PATH) || snap.rightPaths.includes(CALENDAR_PATH)) {
+        pool.push(makeCalendarTab());
       }
       const byPath = new Map(pool.map((t) => [t.path, t.id]));
       const ids = (paths: string[]) =>

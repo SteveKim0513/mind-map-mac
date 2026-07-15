@@ -105,7 +105,8 @@
 
 "오늘"을 정적인 오버레이 목록에서 **캘린더 탭**으로 승격한다 — 일간·주간·월간 보기가 가능한 진짜
 캘린더. 상세 명세는 [specs/2026-07-15-calendar-view.md](specs/2026-07-15-calendar-view.md), 구현
-계획은 [exec-plans/active/2026-07-15-calendar-view.md](../exec-plans/active/2026-07-15-calendar-view.md).
+계획은 [exec-plans/completed/2026-07-15-calendar-view.md](../exec-plans/completed/2026-07-15-calendar-view.md)
+(구현 완료).
 
 **사이드바 상단 내비게이션**: "오늘 · 집중 기록 · 최근 수정 · 즐겨찾기" 4개 → **"캘린더 · 즐겨찾기"**
 2개만 남긴다.

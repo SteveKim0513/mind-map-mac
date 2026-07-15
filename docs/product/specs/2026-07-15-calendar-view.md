@@ -1,6 +1,6 @@
 # 캘린더 뷰 — "오늘" 뷰를 일/주/월 탭으로 승격
 
-> 작성: 2026-07-15 · 상태: 명세(합의 완료, 구현 예정) · 출처: 사용자 요청(기능 계층 재편의 일부,
+> 작성: 2026-07-15 · 상태: 구현 완료 · 출처: 사용자 요청(기능 계층 재편의 일부,
 > [FEATURE-HIERARCHY-VISION](../FEATURE-HIERARCHY-VISION-2026-07.md) §4-4, [결정 0011](../../decisions/0011-three-axis-thinking-model.md)).
 > 기반: [2026-06-12-today-view.md](2026-06-12-today-view.md)(오버레이 "오늘" 뷰) — 이 명세로 대체되지
 > 않고 승격된다. 데이터 계층(`collectAgenda`/`agenda.ts`)은 그대로 재사용.

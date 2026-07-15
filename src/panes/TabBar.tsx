@@ -177,13 +177,13 @@ export function TabBar(p: Props) {
             }}
           >
             <span
-              className={`tab-ic tab-ic--${t.isTemplate ? 'template' : t.kind === 'note' ? 'note' : 'map'}`}
-              title={t.isTemplate ? '노트 템플릿' : t.kind === 'note' ? '노트' : '마인드맵'}
+              className={`tab-ic tab-ic--${t.isTemplate ? 'template' : t.kind}`}
+              title={t.isTemplate ? '노트 템플릿' : t.kind === 'note' ? '노트' : t.kind === 'calendar' ? '캘린더' : '마인드맵'}
             >
-              <Icon name={t.isTemplate ? 'template' : t.kind === 'note' ? 'note' : 'mindmap'} />
+              <Icon name={t.isTemplate ? 'template' : t.kind === 'note' ? 'note' : t.kind === 'calendar' ? 'calendar' : 'mindmap'} />
             </span>
             <span className="tab-title">{t.title || '제목 없음'}</span>
-            <TabDirty store={t.store} />
+            {t.store && <TabDirty store={t.store} />}
             <button
               className="tab-close"
               title="닫기"

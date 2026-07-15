@@ -6,7 +6,7 @@ import { NotePane } from './note/NotePane';
 import { NotePopup } from './note/NotePopup';
 import { FocusOverlay } from './focus/FocusWidget';
 import { WorkHistory } from './focus/WorkHistory';
-import { TodayView } from './focus/TodayView';
+import { CalendarView } from './calendar/CalendarView';
 import { TrashPanel } from './ui/TrashPanel';
 import { TemplatePanel } from './ui/TemplatePanel';
 import { RecentView } from './ui/RecentView';
@@ -72,7 +72,6 @@ export default function App() {
   const quickOpen = useUi((s) => s.quickOpen);
   const cmdkOpen = useUi((s) => s.cmdkOpen);
   const historyOpen = useUi((s) => s.historyOpen);
-  const todayOpen = useUi((s) => s.todayOpen);
   const trashOpen = useUi((s) => s.trashOpen);
   const templatesOpen = useUi((s) => s.templatesOpen);
   const recentOpen = useUi((s) => s.recentOpen);
@@ -337,7 +336,15 @@ export default function App() {
 
   const renderPane = (tab: Tab | null, group: 0 | 1) =>
     tab ? (
-      tab.kind === 'note' ? (
+      tab.kind === 'calendar' ? (
+        <div
+          key={tab.id}
+          className={`pane cal-pane${effectiveGroup === group ? ' active' : ''}`}
+          onPointerDownCapture={() => useSession.getState().setActiveGroup(group)}
+        >
+          <CalendarView />
+        </div>
+      ) : tab.kind === 'note' ? (
         <NotePane
           key={tab.id}
           tab={tab}
@@ -486,7 +493,6 @@ export default function App() {
       <NoteLinkPicker />
       <FocusOverlay sidebarVisible={sidebarVisible} />
       {historyOpen && <WorkHistory />}
-      {todayOpen && <TodayView />}
       {trashOpen && <TrashPanel />}
       {templatesOpen && <TemplatePanel onOpen={(p) => void openByPath(p)} />}
       {recentOpen && <RecentView onOpen={(p) => void openByPath(p)} />}
@@ -511,7 +517,7 @@ function buildCommands(o: {
   const cmds: Command[] = [
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
     { id: 'capture', icon: 'bulb', label: '빠른 캡처 열기', hint: '⌥Space', run: () => void window.api.capture.show() },
-    { id: 'today', icon: 'calendar', label: '오늘 열기', run: () => useUi.getState().openToday() },
+    { id: 'calendar', icon: 'calendar', label: '캘린더 열기', run: () => useSession.getState().openCalendar() },
     { id: 'history', icon: 'clock', label: '돌아보기 열기', run: () => useUi.getState().openHistory() },
     { id: 'recent', icon: 'clock', label: '최근 수정 보기', run: () => useUi.getState().openRecent() },
     { id: 'favorites', icon: 'star', label: '즐겨찾기 보기', run: () => useUi.getState().openFavorites() },

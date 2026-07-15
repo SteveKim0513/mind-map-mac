@@ -295,6 +295,16 @@ function MainView({
 
           <div className="set-sep" />
 
+          <button
+            className="set-link"
+            onClick={() => {
+              useUi.getState().closeSettings();
+              useUi.getState().openRecent();
+            }}
+          >
+            <span className="set-link-main"><Icon name="clock" /> 최근 수정</span>
+            <Icon name="chevronRight" />
+          </button>
           <button className="set-link" onClick={() => useUi.getState().openManual()}>
             <span className="set-link-main"><Icon name="memo" /> 사용 안내</span>
             <span className="set-link-sub">단축키 · 사용법</span>

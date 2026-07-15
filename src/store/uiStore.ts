@@ -124,10 +124,6 @@ interface UiState {
   historyOpen: boolean;
   openHistory: () => void;
   closeHistory: () => void;
-  // "오늘" agenda (overlay)
-  todayOpen: boolean;
-  openToday: () => void;
-  closeToday: () => void;
   // workspace trash (overlay)
   trashOpen: boolean;
   openTrash: () => void;
@@ -317,9 +313,6 @@ export const useUi = create<UiState>((set, get) => ({
   historyOpen: false,
   openHistory: () => set({ historyOpen: true }),
   closeHistory: () => set({ historyOpen: false }),
-  todayOpen: false,
-  openToday: () => set({ todayOpen: true }),
-  closeToday: () => set({ todayOpen: false }),
   trashOpen: false,
   openTrash: () => set({ trashOpen: true }),
   closeTrash: () => set({ trashOpen: false }),

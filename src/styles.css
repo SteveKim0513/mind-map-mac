@@ -275,6 +275,7 @@ button {
 .tab-ic--map { color: var(--state-map); }
 .tab-ic--note { color: var(--state-note); }
 .tab-ic--template { color: var(--state-note); }
+.tab-ic--calendar { color: var(--state-scheduled); }
 .tab-title {
   white-space: nowrap;
   overflow: hidden;
@@ -2216,6 +2217,32 @@ button {
   color: var(--ink-faint);
 }
 
+/* focus — primary action, sits above the destructive "clear" below */
+.sched-focus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: stretch;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: var(--r-md);
+  padding: 8px 0;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+.sched-focus svg {
+  width: 13px;
+  height: 13px;
+}
+.sched-focus:hover {
+  filter: brightness(1.08);
+}
+
 /* clear */
 .sched-clear {
   display: inline-flex;
@@ -2760,6 +2787,14 @@ button {
 }
 .ctx-item.danger:hover {
   background: var(--state-danger);
+}
+.ctx-item:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+.ctx-item:disabled:hover {
+  background: transparent;
+  color: var(--ink-faint);
 }
 .ctx-item kbd {
   font-family: var(--font);
@@ -5436,13 +5471,6 @@ textarea:focus-visible,
 .wh-trend-bar.on { background: var(--primary); }
 .work-history-btn .help-toggle-lbl .ic { width: 15px; height: 15px; }
 
-/* "오늘" agenda — scheduled nodes across maps, one-click into a focus session */
-.today {
-  width: 560px; max-width: 95vw; max-height: 88vh; overflow: auto;
-  background: var(--surface); border: 1px solid var(--hairline);
-  border-radius: var(--r-lg); box-shadow: var(--shadow-2);
-  animation: modalPop 0.2s var(--spring) both;
-}
 .today-summary { font-size: 12px; color: var(--ink-muted); margin-left: 8px; }
 .today-empty { padding: 56px 24px; text-align: center; color: var(--ink-muted); line-height: 1.8; }
 
@@ -5514,6 +5542,139 @@ textarea:focus-visible,
 /* narrow windows: stack the two-column dashboard so panels don't cramp (B10) */
 @media (max-width: 760px) {
   .wh-cols { grid-template-columns: 1fr; }
+}
+
+/* ── calendar tab — "오늘" 뷰를 일/주/월로 승격 (결정 0011 §4-4) ─────────── */
+.cal-pane { display: flex; flex-direction: column; background: var(--canvas); }
+.cal { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.cal-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; color: var(--ink); }
+.cal-title .ic { width: 17px; height: 17px; color: var(--state-scheduled); }
+
+.cal-toggle { display: flex; background: var(--canvas-soft); border-radius: var(--r-md); padding: 2px; }
+.cal-toggle-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  padding: 5px 12px;
+  border-radius: var(--r-sm);
+}
+.cal-toggle-btn.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
+
+.cal-nav { display: flex; align-items: center; gap: 4px; }
+.cal-nav-btn { border: none; background: transparent; cursor: pointer; color: var(--ink-muted); padding: 5px; border-radius: var(--r-sm); display: inline-flex; }
+.cal-nav-btn:hover { background: var(--hover); color: var(--ink); }
+.cal-nav-label { font-size: 13px; font-weight: 500; color: var(--ink); min-width: 132px; text-align: center; }
+
+.cal-today-btn {
+  border: 1px solid var(--hairline);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  padding: 5px 11px;
+  border-radius: var(--r-md);
+}
+.cal-today-btn:hover { background: var(--hover); color: var(--ink); }
+
+.cal-grow { flex: 1; }
+.cal-history-btn { border: none; background: transparent; cursor: pointer; color: var(--ink-muted); padding: 6px; border-radius: var(--r-sm); display: inline-flex; }
+.cal-history-btn:hover { background: var(--hover); color: var(--ink); }
+
+.cal-body { flex: 1; overflow-y: auto; }
+.cal-empty, .cal-day-empty { padding: 56px 24px; text-align: center; color: var(--ink-muted); line-height: 1.8; }
+.cal-day-empty { padding: 10px 4px; text-align: left; font-size: 13px; }
+.cal-day-body { padding: 16px 20px 24px; max-width: 640px; margin: 0 auto; }
+
+/* week view — 7-column grid, each column a mini agenda list */
+.cal-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  height: 100%;
+  border-left: 1px solid var(--hairline);
+}
+.cal-week-col { display: flex; flex-direction: column; border-right: 1px solid var(--hairline); min-width: 0; overflow: hidden; }
+.cal-week-col.today { background: color-mix(in srgb, var(--state-scheduled) 5%, transparent); }
+.cal-week-col-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--hairline);
+}
+.cal-week-col-head:hover { background: var(--hover); }
+.cal-week-wd { font-size: 11px; color: var(--ink-faint); }
+.cal-week-date { font-size: 15px; font-weight: 600; color: var(--ink); }
+.cal-week-col.today .cal-week-date { color: var(--state-scheduled); }
+.cal-week-items { display: flex; flex-direction: column; gap: 2px; padding: 6px; overflow: hidden auto; min-width: 0; }
+.cal-week-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  border: none;
+  background: var(--canvas-soft);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  text-align: left;
+  width: 100%;
+}
+.cal-week-chip:hover { background: var(--hover); }
+.cal-week-chip-time { font-size: 10.5px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.cal-week-chip-text { font-size: 12px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+/* month view — traditional grid with leading/trailing days dimmed */
+.cal-month { padding: 12px 20px 20px; }
+.cal-month-wd-row { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 4px; }
+.cal-month-wd { font-size: 11px; color: var(--ink-faint); text-align: center; padding: 4px 0; }
+.cal-month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-month-cell {
+  position: relative;
+  aspect-ratio: 1.15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  background: var(--canvas-soft);
+  cursor: pointer;
+  border-radius: var(--r-md);
+}
+.cal-month-cell:hover { border-color: var(--hairline); }
+.cal-month-cell.out { opacity: 0.4; }
+.cal-month-cell.today { border-color: color-mix(in srgb, var(--state-scheduled) 50%, var(--hairline)); }
+.cal-month-date { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cal-month-cell.today .cal-month-date { color: var(--state-scheduled); font-weight: 600; }
+.cal-month-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--state-scheduled);
+  border-radius: var(--r-full);
+  min-width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
 }
 
 /* node currently being focused — a soft pulsing ring */
