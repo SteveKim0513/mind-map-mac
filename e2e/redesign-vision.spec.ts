@@ -79,7 +79,7 @@ test('집중 세션 위젯은 사이드바 독킹 시 기본으로 접혀 있고
   }
 });
 
-test('휴지통·Note Template 배지는 숫자가 아닌 조용한 점으로 표시된다', async () => {
+test('휴지통·노트 템플릿 배지는 숫자가 아닌 조용한 점으로 표시된다', async () => {
   const { page, cleanup, workspace: _workspace } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 노트"]');

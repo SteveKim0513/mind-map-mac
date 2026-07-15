@@ -687,7 +687,7 @@ export function Sidebar({
             {templatesEnabled && (
               <button
                 className={`sb-foot-btn${templateCount > 0 ? ' has-items' : ''}`}
-                title={templateCount > 0 ? `Note Template (${templateCount})` : 'Note Template'}
+                title={templateCount > 0 ? `노트 템플릿 (${templateCount})` : '노트 템플릿'}
                 onClick={() => useUi.getState().openTemplates()}
               >
                 <Icon name="template" />

@@ -282,7 +282,7 @@ export const useSession = create<SessionState>((set, get) => {
       if (!tab) {
         const made = tryMakeTab(path, content);
         if (!made) {
-          useUi.getState().toast('파일을 열 수 없습니다');
+          useUi.getState().toast('파일을 열 수 없습니다 — 손상된 마인드맵');
           return;
         }
         tab = made;
@@ -323,7 +323,7 @@ export const useSession = create<SessionState>((set, get) => {
       if (!tab) {
         const made = tryMakeTab(path, content);
         if (!made) {
-          useUi.getState().toast('파일을 열 수 없습니다');
+          useUi.getState().toast('파일을 열 수 없습니다 — 손상된 마인드맵');
           return;
         }
         tab = made;

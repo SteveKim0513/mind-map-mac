@@ -117,7 +117,7 @@ function NotePaneBody() {
       await useWorkspace.getState().refresh();
       return path;
     } catch {
-      useUi.getState().toast('노트를 만들 수 없습니다');
+      useUi.getState().toast('노트를 만들 수 없습니다 — 폴더 권한을 확인해 보세요');
       return null;
     }
   };

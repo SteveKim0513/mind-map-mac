@@ -55,8 +55,8 @@ function MetaBlockItem({
   if (!template) {
     return (
       <div className="meta-block meta-block--deleted">
-        <span className="meta-block-title meta-block-title--warn">⚠ 삭제된 템플릿</span>
-        <button className="meta-block-close" title="제거" onClick={onRemove}>
+        <span className="meta-block-title meta-block-title--warn">⚠ 삭제된 양식</span>
+        <button className="meta-block-close" title="양식 제거" onClick={onRemove}>
           <Icon name="close" />
         </button>
       </div>

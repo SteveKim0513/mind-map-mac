@@ -62,7 +62,7 @@ export function NoteLinkPicker() {
       await addLinkToNoteFile(path, link);
     } catch (e) {
       console.error('[note-link] linkExisting failed', e);
-      useUi.getState().toast('노트 연결에 실패했습니다');
+      useUi.getState().toast('노트 연결에 실패했습니다 — 다시 시도해 보세요');
     }
   };
   const createAndLink = async () => {
@@ -82,7 +82,7 @@ export function NoteLinkPicker() {
       path = await window.api.createFile(dir, title, serializeNote(emptyNote(title)), '.md');
     } catch (e) {
       console.error('[note-link] createFile failed', e);
-      useUi.getState().toast('노트를 만들 수 없습니다');
+      useUi.getState().toast('노트를 만들 수 없습니다 — 폴더 권한을 확인해 보세요');
       return;
     }
 

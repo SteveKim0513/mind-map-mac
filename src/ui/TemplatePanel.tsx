@@ -65,7 +65,7 @@ export function TemplatePanel({ onOpen }: { onOpen: (path: string) => void }) {
       <div className="trash-panel" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wh-head">
           <Icon name="template" />
-          <span className="wh-title">Note Template</span>
+          <span className="wh-title">노트 템플릿</span>
           {items.length > 0 && <span className="today-summary">{items.length}개</span>}
           <button className="wh-close" title="닫기 (Esc)" onClick={close}>
             <Icon name="close" />

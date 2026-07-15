@@ -140,7 +140,7 @@ export function NotePopup() {
     try {
       await removeLinkFromNoteFile(path, popup.link.mapId, popup.link.nodeId);
     } catch {
-      useUi.getState().toast('연동을 해제하지 못했습니다');
+      useUi.getState().toast('연동을 해제하지 못했습니다 — 다시 시도해 보세요');
       return;
     }
     useUi.getState().toast('노트 연동을 해제했습니다');

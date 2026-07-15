@@ -52,7 +52,7 @@ interface Props {
   onAddMeta?: (templateId: string) => void;
 }
 
-const PLACEHOLDER = '메모를 시작하세요…  (“/” 를 눌러 블록 추가)';
+const PLACEHOLDER = '노트를 작성하세요…  (“/” 를 눌러 블록 추가)';
 const TEMPLATE_PLACEHOLDER = '템플릿 내용을 작성하세요…  (“/” 를 눌러 블록 추가)';
 
 // Slash-command block menu (power-user path on top of the toolbar).
@@ -102,7 +102,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
       const text = await window.api.readFile(`${root}/.templates/${name}`);
       editorRef.current?.chain().focus().insertContent(parseNote(text).body).run();
     } catch {
-      useUi.getState().toast('템플릿을 불러오지 못했습니다.');
+      useUi.getState().toast('템플릿을 불러오지 못했습니다 — 삭제되었거나 이동된 것 같아요');
     }
   };
   const createTemplate = async () => {
@@ -111,7 +111,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
       const content = await window.api.readFile(path);
       useSession.getState().openPath(path, content);
     } catch {
-      useUi.getState().toast('템플릿을 만들지 못했습니다.');
+      useUi.getState().toast('템플릿을 만들지 못했습니다 — 폴더 권한을 확인해 보세요');
     }
   };
 

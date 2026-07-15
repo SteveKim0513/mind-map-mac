@@ -106,7 +106,7 @@ export default function App() {
         useSession.getState().closeByPath(path);
         await useWorkspace.getState().refresh();
       } else {
-        useUi.getState().toast('파일을 열 수 없습니다');
+        useUi.getState().toast('파일을 열 수 없습니다 — 권한을 확인하거나 다시 시도해 보세요');
       }
     }
   }, []);
@@ -261,7 +261,7 @@ export default function App() {
               await createFromDoc('가져온 마인드맵', fromOpml(res.content));
             } catch (err) {
               console.error('OPML import failed', err);
-              useUi.getState().toast('OPML을 가져올 수 없습니다');
+              useUi.getState().toast('OPML을 가져올 수 없습니다 — 파일 형식을 확인해 보세요');
             }
           }
           break;
