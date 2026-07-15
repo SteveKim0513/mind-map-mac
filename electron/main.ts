@@ -23,12 +23,16 @@ if (process.env.MINDMAP_USER_DATA) {
 }
 // Test/E2E isolation: override the workspace directory directly.
 const E2E_WORKSPACE = process.env.MINDMAP_WORKSPACE ?? null;
-// E2E quiet mode: Playwright drives the renderer over CDP, which doesn't need
-// a real OS-focused/visible window — so when this is set, windows open
-// off-screen and un-activated instead of popping to the front and stealing
-// focus from whatever else is on screen. `make dev-safe` never sets this
-// (a human needs to actually see and click that window).
-const E2E_QUIET = process.env.MINDMAP_E2E_QUIET === '1';
+// E2E quiet mode: opens windows off-screen so they don't visually pop up over
+// whatever else is on screen while Playwright drives them over CDP. Only the
+// position changes — `show()`/`showInactive()` behavior is untouched, since
+// showInactive() turned out to break win.focus()/the 'focus' event that
+// e2e/file-management.spec.ts's regains-focus test depends on. Excluded on CI
+// (`CI` is set by GitHub Actions on every runner) as an extra safety margin —
+// nobody's local work is being interrupted by a CI VM, so there's nothing to
+// fix there. `make dev-safe` never sets this (a human needs to actually see
+// that window).
+const E2E_QUIET = process.env.MINDMAP_E2E_QUIET === '1' && !process.env.CI;
 
 // vite-plugin-electron injects these env vars during dev
 process.env.APP_ROOT = path.join(__dirname, '..');
@@ -141,18 +145,16 @@ function createWindow() {
     minHeight: 440,
     backgroundColor: '#f6f5f4',
     titleBarStyle: 'hiddenInset',
-    ...(E2E_QUIET ? { x: -3000, y: -3000, show: false } : {}),
+    // Off-screen (not showInactive()/focusable tricks — those broke real
+    // window-focus mechanics, e.g. the win.focus()-driven sidebar refresh
+    // test) so it never visually covers whatever else is on screen. This
+    // doesn't stop the one-time OS app-activation blip on launch, but it
+    // does stop an actual window from popping up over other work.
+    ...(E2E_QUIET ? { x: -3000, y: -3000 } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   });
-
-  if (E2E_QUIET) {
-    // showInactive() skips the OS-level "activate this app" step that a
-    // normal show() does — the window exists (Playwright can still drive it
-    // over CDP) but never jumps in front of or steals focus from other apps.
-    win.once('ready-to-show', () => win?.showInactive());
-  }
 
   // Open external links in the browser, not in-app.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -224,18 +226,13 @@ function createCaptureWindow(): BrowserWindow {
 function showCaptureWindow() {
   if (!captureWin || captureWin.isDestroyed()) captureWin = createCaptureWindow();
   captureWin.center();
-  if (E2E_QUIET) {
-    captureWin.showInactive();
-  } else {
-    captureWin.show();
-    captureWin.focus();
-  }
+  captureWin.show();
+  captureWin.focus();
   captureWin.webContents.send('capture:shown');
 }
 
 app.whenReady().then(() => {
   log.info(`[app] start v${app.getVersion()} on ${process.platform}`);
-  if (E2E_QUIET && process.platform === 'darwin') app.dock?.hide();
   buildMenu();
   createWindow();
   initAutoUpdate(() => win);

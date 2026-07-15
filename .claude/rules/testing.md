@@ -35,7 +35,7 @@ description: "테스트 작성 규칙 — Vitest(단위) + Playwright(E2E)"
 - **새 기능·UI 변경 시 E2E 추가 의무**: 기능이 배포될 때 `e2e/*.spec.ts`에 해당 기능의 핵심 시나리오가 반드시 있어야 한다. E2E 없이 배포하면 다음 릴리즈에서 회귀를 잡을 그물망이 없다.
 - E2E는 핵심 사용자 여정(노드 생성, 저장, 노트 연결)을 커버한다.
 - `MINDMAP_USER_DATA`와 `MINDMAP_WORKSPACE` 환경변수로 실제 데이터와 격리한다 (`e2e/helpers.ts`의 `launchApp()` 사용).
-- `launchApp()`은 `MINDMAP_E2E_QUIET=1`도 함께 설정 — Electron 창을 화면 밖(off-screen)에 비활성 상태로 띄워 실행 중 포커스를 뺏지 않는다(Playwright는 CDP로 제어하므로 창이 실제로 보이거나 활성화될 필요가 없다). `make dev-safe`는 이 값을 설정하지 않는다 — 사람이 직접 보고 조작해야 하므로 창이 정상적으로 뜨고 포커스를 받아야 한다.
+- `launchApp()`은 `MINDMAP_E2E_QUIET=1`도 함께 설정 — Electron 창을 화면 밖(off-screen, x/y만 이동) 위치에 띄워 실행 중 화면을 가리지 않는다. `showInactive()`/포커스 불가 같은 트릭은 쓰지 않는다 — `win.focus()`가 실제로 창을 포커스시켜야 하는 `file-management.spec.ts`의 "regains focus" 테스트가 깨졌었다(CI에서 실제로 겪음). `CI` 환경변수가 있으면(GitHub Actions) 이 값을 끈다 — CI 러너에서는 어차피 화면을 가릴 사람이 없다. `make dev-safe`는 이 값을 설정하지 않는다 — 사람이 직접 보고 조작해야 한다.
 - 시간 기반 `sleep` 대기 대신 명시적인 준비 상태 확인(`waitForSelector` 등)을 사용한다.
 - VSCode 환경에서는 `ELECTRON_RUN_AS_NODE`를 반드시 제거한다 (`e2e/helpers.ts` 참조).
 
