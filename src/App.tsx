@@ -42,6 +42,13 @@ import {
   fromOpml,
 } from './io/formats';
 import { emptyNote, serializeNote } from './io/noteFormat';
+import { requestFocusStart } from './focus/controller';
+import { TAG_KEYS, type TagKey } from './theme/palette';
+
+const TAG_LABEL: Record<TagKey, string> = {
+  red: '빨강', orange: '주황', yellow: '노랑', green: '초록',
+  teal: '청록', violet: '보라', pink: '분홍', brown: '갈색',
+};
 
 export default function App() {
   useKeyboard();
@@ -445,6 +452,13 @@ export default function App() {
             newMindmap: () => void newMindmap(),
             fit: () => activeControls.current?.fit(),
             toggleSidebar: () => setSidebarVisible((v) => !v),
+            selectedNode: activeStore && activeTab
+              ? (() => {
+                  const st = activeStore.getState();
+                  const n = st.selectedId ? st.doc.nodes[st.selectedId] : undefined;
+                  return n ? { id: n.id, text: n.text, mapId: st.doc.id ?? '', mapPath: activeTab.path, store: activeStore } : null;
+                })()
+              : null,
           })}
           files={flattenFiles(wsTree, (p) => void openByPath(p))}
           nodes={
@@ -492,12 +506,15 @@ function buildCommands(o: {
   newMindmap: () => void;
   fit: () => void;
   toggleSidebar: () => void;
+  selectedNode: { id: string; text: string; mapId: string; mapPath: string; store: MapStore } | null;
 }): Command[] {
   const cmds: Command[] = [
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
     { id: 'capture', icon: 'bulb', label: '빠른 캡처 열기', hint: '⌥Space', run: () => void window.api.capture.show() },
     { id: 'today', icon: 'calendar', label: '오늘 열기', run: () => useUi.getState().openToday() },
     { id: 'history', icon: 'clock', label: '돌아보기 열기', run: () => useUi.getState().openHistory() },
+    { id: 'recent', icon: 'clock', label: '최근 수정 보기', run: () => useUi.getState().openRecent() },
+    { id: 'favorites', icon: 'star', label: '즐겨찾기 보기', run: () => useUi.getState().openFavorites() },
     { id: 'trash', icon: 'trash', label: '휴지통 열기', run: () => useUi.getState().openTrash() },
     { id: 'globalsearch', icon: 'search', label: '전체 검색 (노드·노트)', hint: '⌘⇧F', run: () => useUi.getState().setGlobalSearch(true) },
     { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
@@ -506,6 +523,28 @@ function buildCommands(o: {
     { id: 'split', icon: 'expand', label: o.split ? '화면 분할 해제' : '화면 분할', run: () => useSession.getState().toggleSplit() },
     { id: 'relayout', icon: 'refresh', label: '새로고침 (재배치)', run: () => useUi.getState().relayout() },
   ];
+  // 선택된 노드에 대한 동작 — 아이콘을 몰라도, 마우스로 우연히 찾지 못해도
+  // "이걸 하고 싶다"고 타이핑해서 도달할 수 있는 통로 (UX-CLARITY-VISION 전략 D).
+  const sel = o.selectedNode;
+  if (sel) {
+    cmds.push(
+      { id: 'node-schedule', icon: 'calendar', label: '선택 노드: 일정 설정', run: () => useUi.getState().openSchedule(sel.id) },
+      { id: 'node-link', icon: 'link', label: '선택 노드: 링크 추가', run: () => useUi.getState().openAddLink(sel.id) },
+      {
+        id: 'node-link-note',
+        icon: 'note',
+        label: '선택 노드: 노트 연결',
+        run: () => useUi.getState().openLinkNote({ mapId: sel.mapId, nodeId: sel.id, nodeText: sel.text, mapPath: sel.mapPath }),
+      },
+      { id: 'node-focus', icon: 'clock', label: '선택 노드: 집중 세션 시작', run: () => requestFocusStart(sel.store, sel.id) },
+      ...TAG_KEYS.map((c) => ({
+        id: `node-color-${c}`,
+        icon: 'paint' as const,
+        label: `선택 노드: 색상 — ${TAG_LABEL[c]}`,
+        run: () => sel.store.getState().setColor(sel.id, c),
+      })),
+    );
+  }
   if (o.hasActive) {
     cmds.splice(1, 0, {
       id: 'search',
