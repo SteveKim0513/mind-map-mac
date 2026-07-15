@@ -5,6 +5,7 @@ import { Icon } from '../ui/Icon';
 import type { Tab, GroupIndex } from '../store/sessionStore';
 import type { MapStore } from '../store/mapStore';
 import type { NoteStore } from '../store/noteStore';
+import { useDismissablePosition } from '../ui/useDismissablePosition';
 
 function TabDirty({ store }: { store: MapStore | NoteStore }) {
   // both map and note stores expose `dirty`
@@ -45,6 +46,13 @@ export function TabBar(p: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const byId = (id: string) => p.tabs.find((t) => t.id === id);
+  // Same viewport-clamping + outside-click/Escape dismissal as the canvas
+  // context menu — this menu used to have neither (UX-CLARITY-VISION 전략 A).
+  const { ref: menuRef, pos: menuPos } = useDismissablePosition<HTMLDivElement>(
+    menu?.x ?? 0,
+    menu?.y ?? 0,
+    () => setMenu(null),
+  );
 
   // Resolve what the cursor is over: a split drop-zone, a tab, or a group strip.
   const hit = (x: number, y: number) => {
@@ -211,7 +219,7 @@ export function TabBar(p: Props) {
       {menu && (
         <>
           <div className="ctx-backdrop" onMouseDown={() => setMenu(null)} />
-          <div className="ctx-menu tab-menu" style={{ left: menu.x, top: menu.y }}>
+          <div ref={menuRef} className="ctx-menu tab-menu" style={{ left: menuPos.left, top: menuPos.top }}>
             <button
               className="ctx-item"
               onClick={() => {

@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
 import { requestFocusStart } from '../focus/controller';
 import { ColorSwatchGrid } from '../ui/ColorSwatchGrid';
+import { useDismissablePosition } from '../ui/useDismissablePosition';
 
 interface Props {
   id: string;
@@ -15,33 +15,9 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
   const node = useMap((s) => s.doc.nodes[id]);
   const map = useMap((s) => s);
   const mapStore = useMapStore();
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ left: x, top: y });
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    // 76px bottom inset keeps the menu clear of the floating zoom toolbar,
-    // which paints above us (the pane's stacking context outranks the canvas's)
-    setPos({
-      left: Math.min(x, window.innerWidth - r.width - 8),
-      top: Math.min(y, window.innerHeight - r.height - 76),
-    });
-  }, [x, y]);
-
-  useEffect(() => {
-    const down = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('mousedown', down);
-    window.addEventListener('keydown', key, true);
-    return () => {
-      window.removeEventListener('mousedown', down);
-      window.removeEventListener('keydown', key, true);
-    };
-  }, [onClose]);
+  // 76px bottom inset keeps the menu clear of the floating zoom toolbar,
+  // which paints above us (the pane's stacking context outranks the canvas's)
+  const { ref, pos } = useDismissablePosition<HTMLDivElement>(x, y, onClose, { bottomInset: 76 });
 
   if (!node) return null;
   const run = (fn: () => void) => () => {
