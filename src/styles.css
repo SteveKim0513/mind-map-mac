@@ -4058,16 +4058,25 @@ textarea:focus-visible,
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: none; }
 }
+/* Each group gets its own faint outline "chip" so 서식/구조/삽입 read as
+   distinct zones at a glance, not just a flat row split by hairlines
+   (UX-CLARITY-VISION 전략 I — a dense, undifferentiated toolbar is harder to
+   scan than one with visual grouping, even before any label is added). A
+   border (not a fill) keeps the button hover background — also canvas-soft —
+   clearly distinguishable from the group's own resting state. */
 .md-tb-group {
   display: inline-flex;
   align-items: center;
   gap: 1px;
   flex-shrink: 0;
+  padding: 2px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--hairline);
 }
 .md-tb-sep {
   width: 1px;
   height: 18px;
-  margin: 0 7px;
+  margin: 0 5px;
   background: var(--hairline);
   border-radius: 1px;
 }
