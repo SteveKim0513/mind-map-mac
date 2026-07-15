@@ -482,6 +482,21 @@ function MetaView() {
 
   const newId = () => Math.random().toString(36).slice(2, 10);
 
+  // removeTemplate cascades: it strips this template's block out of EVERY note
+  // that uses it, across the whole workspace, with no undo — confirm first
+  // (per UX-CLARITY-VISION §전략 H, every irreversible multi-file action needs
+  // either a confirm or an undo; this one can't offer undo, so it gets a confirm).
+  const deleteTemplate = async (t: MetaTemplate) => {
+    const r = await window.api.message({
+      message: `"${t.name}" 양식을 삭제할까요?`,
+      detail: '이 양식을 쓰는 모든 노트에서 해당 항목이 함께 사라지며, 되돌릴 수 없습니다.',
+      buttons: ['삭제', '취소'],
+      cancelId: 1,
+    });
+    if (r !== 0) return;
+    await removeTemplate(t.id);
+  };
+
   if (editing) {
     return (
       <TemplateEditor
@@ -505,10 +520,10 @@ function MetaView() {
   return (
     <div className="set-meta-view">
       <div className="set-meta-view-head">
-        <button className="set-mini-btn" onClick={() => setCreating(true)}>+ 새 템플릿</button>
+        <button className="set-mini-btn" onClick={() => setCreating(true)}>+ 새 양식</button>
       </div>
       {templates.length === 0 ? (
-        <p className="set-empty">템플릿이 없습니다. 노트 속성을 구조화하려면 새 템플릿을 만드세요.</p>
+        <p className="set-empty">양식이 없습니다. 노트 속성을 구조화하려면 새 양식을 만드세요.</p>
       ) : (
         <div className="set-meta-list">
           {templates.map((t) => (
@@ -516,7 +531,7 @@ function MetaView() {
               <span className="set-meta-name">{t.name}</span>
               <span className="set-meta-count">{t.fields.length}개 필드</span>
               <button className="set-meta-edit" onClick={() => setEditing(t)}>편집</button>
-              <button className="set-meta-del" onClick={() => void removeTemplate(t.id)}>삭제</button>
+              <button className="set-meta-del" onClick={() => void deleteTemplate(t)}>삭제</button>
             </div>
           ))}
         </div>
@@ -599,7 +614,7 @@ function TemplateEditor({
   return (
     <div className="tmpl-editor">
       <div className="tmpl-name-row">
-        <span className="tmpl-name-label">템플릿 이름</span>
+        <span className="tmpl-name-label">양식 이름</span>
         <input
           className="tmpl-name-input"
           value={name}
@@ -645,7 +660,7 @@ function TemplateEditor({
         <button
           className="tmpl-save"
           disabled={!name.trim()}
-          title={!name.trim() ? '템플릿 이름을 입력하세요' : undefined}
+          title={!name.trim() ? '양식 이름을 입력하세요' : undefined}
           onClick={() => void onSave({ ...template, name: name.trim(), fields: fields.filter(f => f.label.trim()) })}
         >저장</button>
       </div>
