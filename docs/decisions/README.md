@@ -27,3 +27,4 @@
 - [0007 — 집중/대시보드의 위치: "사적인 거울 + 의도된 보고서"](0007-focus-positioning.md)
 - [0008 — 집중 세션: 목표·과정·결과를 프로세스에서 구조화 포착 (노트 템플릿 폐기)](0008-focus-goal-process-result.md)
 - [0009 — 노드에서 만든 노트는 그 노드 맵과 같은 폴더에 (숨김 .notes/ 폐기)](0009-node-note-location.md)
+- [0010 — 노트 이미지 첨부 폴더를 진짜 숨김 폴더로 (`notename.assets/` → `.notename.assets/`)](0010-note-image-assets-hidden-folder.md)

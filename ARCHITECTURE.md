@@ -69,6 +69,7 @@ MindMap은 **Electron + React + TypeScript** macOS 데스크탑 앱이다.
 | 포커스/대시보드의 위치 ("사적인 거울 + 의도된 보고서") | `docs/decisions/0007-focus-positioning.md` |
 | 포커스 세션 목표·과정·결과 구조화 (노트 템플릿 폐기) | `docs/decisions/0008-focus-goal-process-result.md` |
 | 노드 노트는 노드 맵과 같은 폴더에 (숨김 .notes/ 폐기) | `docs/decisions/0009-node-note-location.md` |
+| 노트 이미지 첨부 폴더를 진짜 숨김 폴더로 | `docs/decisions/0010-note-image-assets-hidden-folder.md` |
 
 ## 경계 규칙 (기계적으로 강제)
 

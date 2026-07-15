@@ -395,6 +395,56 @@ async function walk(dir: string): Promise<TreeNode[]> {
   return nodes;
 }
 
+/** Local image attachments live in a dot-prefixed sibling folder so they stay out
+ *  of Finder/other file browsers — only the app itself needs to see them. */
+function assetsDirName(stem: string): string {
+  return `.${stem}.assets`;
+}
+/** Pre-0.8.3 folders used this visible name. Still recognized so notes created by
+ *  older versions keep working; upgraded to the hidden name the next time their
+ *  companion folder is touched (rename/move/trash/restore). */
+function legacyAssetsDirName(stem: string): string {
+  return `${stem}.assets`;
+}
+/** Find a note's companion image-assets folder under either naming convention. */
+async function findAssetsDir(dir: string, stem: string): Promise<{ path: string; name: string } | null> {
+  for (const name of [assetsDirName(stem), legacyAssetsDirName(stem)]) {
+    const p = path.join(dir, name);
+    try {
+      await fs.access(p);
+      return { path: p, name };
+    } catch {
+      /* try next convention */
+    }
+  }
+  return null;
+}
+/** Move `found` to the canonical hidden name inside `destDir`, rewriting `notePath`'s
+ *  embedded "./<old-dir-name>/…" image links to match. Used by every note lifecycle
+ *  operation (rename/move/trash/restore) so a pre-0.8.3 visible folder gets upgraded
+ *  the first time it's touched, instead of needing a dedicated migration pass. */
+async function relocateAssetsDir(
+  found: { path: string; name: string },
+  destDir: string,
+  newStem: string,
+  notePath: string,
+): Promise<void> {
+  const newName = assetsDirName(newStem);
+  const dest = path.join(destDir, newName);
+  if (found.path === dest) return;
+  try {
+    await fs.rename(found.path, dest);
+    if (found.name !== newName) {
+      const oldRef = `./${found.name}/`;
+      const newRef = `./${newName}/`;
+      const body = await fs.readFile(notePath, 'utf-8');
+      if (body.includes(oldRef)) await fs.writeFile(notePath, body.split(oldRef).join(newRef), 'utf-8');
+    }
+  } catch {
+    /* rename failed — leave the assets dir where it was */
+  }
+}
+
 /** Append " 2", " 3", … to avoid clobbering an existing file/folder. */
 async function uniquePath(dir: string, base: string, ext: string): Promise<string> {
   let name = `${base}${ext}`;
@@ -472,10 +522,16 @@ ipcMain.handle(
   async (_e, args: { notePath: string; filename: string; buffer: number[] }) => {
     const resolved = await assertInsideWorkspace(args.notePath);
     const base = path.basename(resolved, path.extname(resolved));
-    const assetsDir = path.join(path.dirname(resolved), `${base}.assets`);
+    const dir = path.dirname(resolved);
+    // Reuse an existing (possibly pre-0.8.3, visible) folder if this note already
+    // has one, so its images stay together in one place; otherwise create the
+    // canonical hidden folder.
+    const existing = await findAssetsDir(dir, base);
+    const dirName = existing?.name ?? assetsDirName(base);
+    const assetsDir = path.join(dir, dirName);
     await fs.mkdir(assetsDir, { recursive: true });
     await fs.writeFile(path.join(assetsDir, args.filename), Buffer.from(args.buffer));
-    return `./${base}.assets/${args.filename}`;
+    return `./${dirName}/${args.filename}`;
   },
 );
 
@@ -548,28 +604,13 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
   }
   await fs.rename(src, next);
 
-  // Keep the companion image-assets directory in sync with the renamed note.
+  // Keep the companion image-assets directory in sync with the renamed note
+  // (also upgrades a pre-0.8.3 visible folder to the hidden naming convention).
   if (path.extname(next) === '.md') {
     const oldStem = path.basename(src, path.extname(src));
     const newStem = path.basename(next, path.extname(next));
-    if (oldStem !== newStem) {
-      const oldAssets = path.join(path.dirname(src), `${oldStem}.assets`);
-      const newAssets = path.join(path.dirname(next), `${newStem}.assets`);
-      try {
-        await fs.access(oldAssets);
-        await fs.rename(oldAssets, newAssets);
-        // The note body embeds images as relative "./<stem>.assets/…" links
-        // (src/note/imageInsert.ts) — rewrite them to match, or a rename (e.g.
-        // the untitled-autoname flow renaming "제목 없음" → the first topic)
-        // leaves every embedded image pointing at a folder that no longer exists.
-        const oldRef = `./${oldStem}.assets/`;
-        const newRef = `./${newStem}.assets/`;
-        const body = await fs.readFile(next, 'utf-8');
-        if (body.includes(oldRef)) {
-          await fs.writeFile(next, body.split(oldRef).join(newRef), 'utf-8');
-        }
-      } catch { /* no assets dir — ignore */ }
-    }
+    const found = await findAssetsDir(path.dirname(src), oldStem);
+    if (found) await relocateAssetsDir(found, path.dirname(next), newStem, next);
   }
 
   return next;
@@ -631,14 +672,10 @@ ipcMain.handle('trash:move', async (_e, target: string) => {
   const dest = await uniquePath(dir, stem, ext); // never clobber inside .trash
   await fs.rename(target, dest);
 
-  // Move the companion .assets directory into trash alongside the .md file.
+  // Move the companion image-assets folder into trash alongside the .md file.
   if (ext === '.md') {
-    const srcAssets = path.join(path.dirname(target), `${stem}.assets`);
-    try {
-      await fs.access(srcAssets);
-      const trashedStem = path.basename(dest, ext);
-      await fs.rename(srcAssets, path.join(dir, `${trashedStem}.assets`));
-    } catch { /* no assets dir — ignore */ }
+    const found = await findAssetsDir(path.dirname(target), stem);
+    if (found) await relocateAssetsDir(found, dir, path.basename(dest, ext), dest);
   }
 
   const items = await readTrash(metaFile);
@@ -687,16 +724,11 @@ ipcMain.handle('trash:restore', async (_e, trashedPath: string) => {
   }
   await fs.rename(it.trashedPath, dest);
 
-  // Restore the companion .assets directory if it was trashed alongside the note.
+  // Restore the companion image-assets folder if it was trashed alongside the note.
   if (path.extname(it.trashedPath) === '.md') {
     const trashedStem = path.basename(it.trashedPath, '.md');
-    const trashAssetsDir = path.join(path.dirname(it.trashedPath), `${trashedStem}.assets`);
-    try {
-      await fs.access(trashAssetsDir);
-      const destStem = path.basename(dest, path.extname(dest));
-      const destAssetsDir = path.join(path.dirname(dest), `${destStem}.assets`);
-      await fs.rename(trashAssetsDir, destAssetsDir);
-    } catch { /* no assets dir in trash — ignore */ }
+    const found = await findAssetsDir(path.dirname(it.trashedPath), trashedStem);
+    if (found) await relocateAssetsDir(found, path.dirname(dest), path.basename(dest, path.extname(dest)), dest);
   }
 
   items.splice(idx, 1);
@@ -712,18 +744,17 @@ ipcMain.handle('trash:deleteOne', async (_e, trashedPath: string) => {
   } catch {
     await fs.rm(trashedPath, { recursive: true, force: true });
   }
-  // Also permanently delete the companion .assets directory if present.
+  // Also permanently delete the companion image-assets folder if present.
   if (path.extname(trashedPath) === '.md') {
     const stem = path.basename(trashedPath, '.md');
-    const assetsDir = path.join(path.dirname(trashedPath), `${stem}.assets`);
-    try {
-      await fs.access(assetsDir);
+    const found = await findAssetsDir(path.dirname(trashedPath), stem);
+    if (found) {
       try {
-        await shell.trashItem(assetsDir);
+        await shell.trashItem(found.path);
       } catch {
-        await fs.rm(assetsDir, { recursive: true, force: true });
+        await fs.rm(found.path, { recursive: true, force: true });
       }
-    } catch { /* no assets dir — ignore */ }
+    }
   }
   await writeTrash(
     metaFile,
@@ -741,18 +772,17 @@ ipcMain.handle('trash:empty', async () => {
     } catch {
       await fs.rm(it.trashedPath, { recursive: true, force: true });
     }
-    // Also delete the companion .assets directory if present.
+    // Also delete the companion image-assets folder if present.
     if (path.extname(it.trashedPath) === '.md') {
       const stem = path.basename(it.trashedPath, '.md');
-      const assetsDir = path.join(path.dirname(it.trashedPath), `${stem}.assets`);
-      try {
-        await fs.access(assetsDir);
+      const found = await findAssetsDir(path.dirname(it.trashedPath), stem);
+      if (found) {
         try {
-          await shell.trashItem(assetsDir);
+          await shell.trashItem(found.path);
         } catch {
-          await fs.rm(assetsDir, { recursive: true, force: true });
+          await fs.rm(found.path, { recursive: true, force: true });
         }
-      } catch { /* no assets dir — ignore */ }
+      }
     }
   }
   await writeTrash(metaFile, []);
@@ -780,15 +810,11 @@ ipcMain.handle('fs:move', async (_e, args: { src: string; destDir: string }) => 
   }
   await fs.rename(src, target);
 
-  // Move the companion .assets directory when moving a .md note.
+  // Move the companion image-assets folder when moving a .md note.
   if (name.endsWith('.md')) {
     const srcStem = name.slice(0, -'.md'.length);
-    const srcAssets = path.join(path.dirname(src), `${srcStem}.assets`);
-    try {
-      await fs.access(srcAssets);
-      const targetStem = path.basename(target, '.md');
-      await fs.rename(srcAssets, path.join(destDir, `${targetStem}.assets`));
-    } catch { /* no assets dir — ignore */ }
+    const found = await findAssetsDir(path.dirname(src), srcStem);
+    if (found) await relocateAssetsDir(found, destDir, path.basename(target, '.md'), target);
   }
 
   return target;
