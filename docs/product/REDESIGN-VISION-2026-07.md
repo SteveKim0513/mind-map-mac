@@ -87,6 +87,8 @@
 
 - 지금 뜨는 플로팅 UI를 세어보면: 우클릭 메뉴, SchedulePopover, NodePicker, MetaAddButton 드롭다운, TemplateAddButton 드롭다운, CommandPalette, QuickOpen, GlobalSearch — **8개의 서로 다른 구현**이 각자 다른 위치 계산·모션·배경을 갖고 있다. 토스가 "가벼운 동작 → 부모 화면으로 복귀"를 전부 바텀시트 하나의 컴포넌트로 통일하듯, 이것들을 **하나의 `Sheet` 프리미티브**(트리거 기준 위치 계산, 동일한 12ms~120ms 등장 모션, 동일한 배경·그림자)로 재구현한다. 사용자에게는 "이 앱은 뭘 열어도 똑같이 느껴진다"는 일관성으로 나타난다.
 
+> **부분 구현 완료 (2026-07-15, UX-CLARITY-VISION 전략 A)** — 완전한 `Sheet` 프리미티브(시각적 형태까지 통일)는 여전히 안 했지만, 위치 계산 + 바깥클릭/Escape 닫기 로직은 두 공유 훅으로 뽑아냈다: 클릭 지점 기준(우클릭 메뉴, 탭 메뉴)엔 `useDismissablePosition`, 노드 기준(SchedulePopover·NodePicker·LinkAddPopover)엔 `useNodeAnchoredPosition`+`useOutsideDismiss`(`src/ui/`). 탭 메뉴는 이전엔 Escape가 아예 안 먹고 화면 밖으로 잘렸었고, MetaAddButton/TemplateAddButton 드롭다운도 Escape가 없었다 — 둘 다 고쳤다. SchedulePopover의 z-index(50)도 같은 계열인 NodePicker/LinkAddPopover(60)에 맞췄다. CommandPalette/QuickOpen/GlobalSearch까지 포함한 완전 통합은 여전히 남은 작업.
+
 ### 3-6. 마이크로카피 전수 감사 (T1, T3, T4, T5)
 
 > **부분 구현 완료 (2026-07-10)** — 용어 교체("메타+"→"양식+", "메타 템플릿"→"정보 양식")는

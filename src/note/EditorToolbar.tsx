@@ -282,8 +282,16 @@ function useAddMenu(btnRef: RefObject<HTMLButtonElement | null>) {
         setOpen(false);
       }
     };
+    // Every other floating menu in the app closes on Escape (ContextMenu,
+    // SchedulePopover/NodePopover/LinkAddPopover, tab menu) — this one didn't
+    // (UX-CLARITY-VISION 전략 A).
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    window.addEventListener('keydown', key, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', key, true);
+    };
   }, [open, btnRef]);
 
   useEffect(() => {

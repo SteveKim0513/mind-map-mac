@@ -1,7 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useMap } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
 import { Icon } from '../ui/Icon';
+import { useNodeAnchoredPosition } from '../ui/useNodeAnchoredPosition';
+import { useOutsideDismiss } from '../ui/useOutsideDismiss';
 
 interface Props {
   id: string;
@@ -46,7 +48,6 @@ export function SchedulePopover({ id, onClose }: Props) {
   const syncStatus = useUi((s) => s.syncStatus);
 
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
   const { date, time } = splitISO(node?.scheduleAt);
 
@@ -77,39 +78,14 @@ export function SchedulePopover({ id, onClose }: Props) {
     { label: '밤', sub: '21:00', val: '21:00' },
   ];
 
-  useLayoutEffect(() => {
-    const el = document.querySelector(`[data-node-id="${id}"]`) as HTMLElement | null;
-    const W = 300;
-    const H = 360;
-    if (!el) {
-      setPos({ left: window.innerWidth - W - 24, top: 80 });
-      return;
-    }
-    const r = el.getBoundingClientRect();
-    const left = Math.max(12, Math.min(r.left, window.innerWidth - W - 12));
-    let top = r.bottom + 10;
-    if (top + H > window.innerHeight - 12) top = Math.max(12, r.top - H - 10);
-    setPos({ left, top });
-  }, [id]);
+  const pos = useNodeAnchoredPosition(id, 300, { height: 360 });
 
-  useEffect(() => {
-    const down = (e: MouseEvent) => {
-      if (!ref.current) return;
-      if (ref.current.contains(e.target as Node)) return;
-      // a native date/time picker overlay renders OUTSIDE our DOM; while one of
-      // our inputs holds focus, an outside mousedown is likely a click in that
-      // picker (selecting a day/time) — don't close the popover then.
-      if (ref.current.contains(document.activeElement)) return;
-      onClose();
-    };
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('mousedown', down);
-    window.addEventListener('keydown', key, true);
-    return () => {
-      window.removeEventListener('mousedown', down);
-      window.removeEventListener('keydown', key, true);
-    };
-  }, [onClose]);
+  useOutsideDismiss(ref, onClose, {
+    // a native date/time picker overlay renders OUTSIDE our DOM; while one of
+    // our inputs holds focus, an outside mousedown is likely a click in that
+    // picker (selecting a day/time) — don't close the popover then.
+    skip: () => !!ref.current?.contains(document.activeElement),
+  });
 
   if (!node || !pos) return null;
 

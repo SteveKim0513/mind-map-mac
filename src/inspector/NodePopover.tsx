@@ -1,6 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useMap } from '../store/mapStore';
 import { Icon, type IconName } from '../ui/Icon';
+import { useNodeAnchoredPosition } from '../ui/useNodeAnchoredPosition';
+import { useOutsideDismiss } from '../ui/useOutsideDismiss';
 
 const ICONS: { name: IconName; label: string }[] = [
   { name: 'star', label: '별표' },
@@ -33,32 +35,8 @@ export function NodePopover({ id, onClose }: Props) {
   const setIcon = useMap((s) => s.setIcon);
 
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-
-  useLayoutEffect(() => {
-    const el = document.querySelector(`[data-node-id="${id}"]`) as HTMLElement | null;
-    const W = 220;
-    if (!el) {
-      setPos({ left: window.innerWidth - W - 24, top: 80 });
-      return;
-    }
-    const r = el.getBoundingClientRect();
-    const left = Math.max(12, Math.min(r.left, window.innerWidth - W - 12));
-    setPos({ left, top: r.bottom + 10 });
-  }, [id]);
-
-  useEffect(() => {
-    const down = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('mousedown', down);
-    window.addEventListener('keydown', key, true);
-    return () => {
-      window.removeEventListener('mousedown', down);
-      window.removeEventListener('keydown', key, true);
-    };
-  }, [onClose]);
+  const pos = useNodeAnchoredPosition(id, 220);
+  useOutsideDismiss(ref, onClose);
 
   // one-time upgrade: a node saved with the old emoji picker → its line-icon name
   const legacyIcon = node?.icon ? LEGACY_ICONS[node.icon] : undefined;

@@ -194,7 +194,8 @@
 - **Smart Views**(REDESIGN-VISION §3-3, 2026-07-10): 상단 내비게이션 행에 "최근 수정"·"즐겨찾기" 2개 추가(Apple Notes Smart Folder 패턴 — 새 UI 없이 "오늘"·"집중 기록"과 시각적으로 동일한 평범한 행). "최근 수정"은 `workspace:tree` 응답에 추가된 파일별 `mtimeMs`를 상위 20개 정렬해 보여줌(새 IPC 채널 아님, 기존 채널 응답 확장). "즐겨찾기"는 파일 행에 마우스를 올리면 나타나는 별표로 토글, `<workspace>/.pins.json`에 절대경로 배열로 저장(`.trashmeta.json`과 동일 패턴), 삭제된 파일의 죽은 핀은 다음 조회 시 조용히 정리됨. 두 뷰 모두 휴지통·Note Template 패널과 같은 `.trash-panel` 셸을 재사용(`src/ui/RecentView.tsx`, `src/ui/FavoritesView.tsx`) — [계획](../exec-plans/completed/2026-07-10-smart-views.md).
 - 사이드바는 폴더·`.mind`·`.md`만 표시(숨김 파일 제외), 폴더→맵→노트 순 정렬. 인라인 이름 변경, 드래그로 폴더 이동, ⌘클릭 다중 선택 후 일괄 삭제(휴지통으로).
 - 분할은 최대 2그룹(좌/우). 우측 그룹이 비면 자동으로 분할 해제. 같은 파일을 양쪽에 동시에 열 수 없음(기존 탭 활성화).
-- **탭 우클릭 메뉴는 캔버스 우클릭 메뉴와 같은 공유 훅(`src/ui/useDismissablePosition.ts`)을 쓴다**(2026-07-15) — 이전엔 탭 메뉴만 Escape로 안 닫히고 화면 경계 클램핑도 없어, 우클릭하면 보조 메뉴가 뜬다는 학습이 탭에서는 배신당했다(UX-CLARITY-VISION 전략 A, 일부).
+- **탭 우클릭 메뉴는 캔버스 우클릭 메뉴와 같은 공유 훅(`src/ui/useDismissablePosition.ts`)을 쓴다**(2026-07-15) — 이전엔 탭 메뉴만 Escape로 안 닫히고 화면 경계 클램핑도 없어, 우클릭하면 보조 메뉴가 뜬다는 학습이 탭에서는 배신당했다(UX-CLARITY-VISION 전략 A).
+- **일정·아이콘·링크추가 팝오버(SchedulePopover·NodePopover·LinkAddPopover)도 위치·닫기 로직을 공유 훅으로 통일**(2026-07-15, `src/ui/useNodeAnchoredPosition.ts`+`src/ui/useOutsideDismiss.ts`) — 셋 다 노드 DOM 위치를 기준으로 화면에 붙는 계산과 바깥클릭/Escape 닫기를 각자 따로 복사해 갖고 있었다. SchedulePopover의 z-index(50)도 같은 계열(60)에 맞췄다. 노트 툴바의 "템플릿 추가"/"양식 추가" 드롭다운에도 Escape 닫기를 추가(이전엔 이 드롭다운만 Escape가 안 먹었음).
 - 탭이 5개 이상 열리면 화면 분할을 1회 토스트로 제안한다(`src/ui/GrowthNudges.tsx`, IA-STRATEGY §5-6). 비슷한 제목의 노트가 3개 이상 쌓이거나(기본값 "제목 없음" 계열 제외) 열린 맵에 스케줄 노드가 3개 이상 생기면 각각 노트 템플릿·리마인더 동기화를 제안 — 전부 1회성, 닫으면 다시 안 뜸.
 - 세션(열린 탭·분할 상태)과 최근 파일은 localStorage에 저장 → 재시작 시 복원.
 - 파일 삭제·이름 변경 시 열린 탭과 자동 저장 충돌을 정리(flushSaves 선행).
