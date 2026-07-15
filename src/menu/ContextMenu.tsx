@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
 import { requestFocusStart } from '../focus/controller';
-import { TAG_KEYS, tagVar } from '../theme/palette';
+import { ColorSwatchGrid } from '../ui/ColorSwatchGrid';
 
 interface Props {
   id: string;
@@ -79,19 +79,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
         <div className="ctx-group-label">속성</div>
         {/* 색상 — 선택 전체에 한 번에 적용 */}
         <div className="ctx-colors">
-          {TAG_KEYS.map((c) => (
-            <button
-              key={c}
-              className={`ctx-swatch${uniformColor === c ? ' on' : ''}`}
-              style={{ background: tagVar(c), ['--sw' as string]: tagVar(c) }}
-              onClick={run(() => map.setColorSelected(uniformColor === c ? undefined : c))}
-            />
-          ))}
-          <button
-            className={`ctx-swatch none${!uniformColor ? ' on' : ''}`}
-            title="색 제거"
-            onClick={run(() => map.setColorSelected(undefined))}
-          />
+          <ColorSwatchGrid value={uniformColor} onChange={(c) => run(() => map.setColorSelected(c))()} />
         </div>
         <button className="ctx-item" onClick={run(() => map.toggleDoneSelected())}>
           <span>{allDone ? '완료 해제' : '완료 표시'}</span>
@@ -132,19 +120,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
 
       <div className="ctx-group-label">속성</div>
       <div className="ctx-colors">
-        {TAG_KEYS.map((c) => (
-          <button
-            key={c}
-            className={`ctx-swatch${node.color === c ? ' on' : ''}`}
-            style={{ background: tagVar(c), ['--sw' as string]: tagVar(c) }}
-            onClick={run(() => map.setColor(id, node.color === c ? undefined : c))}
-          />
-        ))}
-        <button
-          className={`ctx-swatch none${!node.color ? ' on' : ''}`}
-          title="색 제거"
-          onClick={run(() => map.setColor(id, undefined))}
-        />
+        <ColorSwatchGrid value={node.color} onChange={(c) => run(() => map.setColor(id, c))()} />
       </div>
       <button className="ctx-item subtle" onClick={run(() => useUi.getState().openNote(id))}>
         <span>아이콘…</span>

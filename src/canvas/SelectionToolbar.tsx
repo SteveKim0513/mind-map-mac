@@ -3,7 +3,8 @@ import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
 import { requestFocusStart } from '../focus/controller';
 import { Icon } from '../ui/Icon';
-import { TAG_KEYS, tagVar } from '../theme/palette';
+import { tagVar } from '../theme/palette';
+import { ColorSwatchGrid } from '../ui/ColorSwatchGrid';
 
 /** Floating action bar shown above the single selected node. */
 export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: number; sy: number }) {
@@ -93,22 +94,10 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
 
       {showColors && (
         <div className="st-swatches">
-          {TAG_KEYS.map((c) => (
-            <button
-              key={c}
-              className="st-swatch"
-              style={{ background: tagVar(c) }}
-              onClick={() => {
-                setColor(nodeId, node.color === c ? undefined : c);
-                setShowColors(false);
-              }}
-            />
-          ))}
-          <button
-            className="st-swatch none"
-            title="색 제거"
-            onClick={() => {
-              setColor(nodeId, undefined);
+          <ColorSwatchGrid
+            value={node.color}
+            onChange={(c) => {
+              setColor(nodeId, c);
               setShowColors(false);
             }}
           />

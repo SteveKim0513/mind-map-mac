@@ -1658,7 +1658,9 @@ button {
   color: var(--primary);
 }
 /* fixed slot (no width animation → no gutter reflow → no measure churn);
-   revealed by opacity only on hover. */
+   always faintly visible (never opacity:0 — a control you can't see at all
+   isn't discoverable, UX-CLARITY-VISION 전략 B) and fully clickable at rest;
+   only its full-strength appearance is reserved for hover. */
 .gchip-x {
   display: inline-flex;
   align-items: center;
@@ -1669,13 +1671,11 @@ button {
   cursor: pointer;
   width: 20px;
   padding: 0 4px 0 0;
-  opacity: 0;
-  pointer-events: none;
+  opacity: 0.35;
   transition: opacity 0.12s ease;
 }
 .gchip.link:hover .gchip-x {
   opacity: 1;
-  pointer-events: auto;
 }
 .gchip-x .ic {
   width: 10px;
@@ -2795,32 +2795,37 @@ button {
   gap: 5px;
   padding: 5px 9px 7px;
 }
-.ctx-swatch {
+/* ── Shared color-picking grid (ColorSwatchGrid.tsx) — used inline in the
+   context menu AND inside the selection toolbar's flyout (UX-CLARITY-VISION
+   전략 G: one component, one look, wherever a node color can be set). ── */
+.color-swatch-grid {
+  display: flex;
+  gap: 5px;
+}
+.color-swatch {
   width: 18px;
   height: 18px;
   border-radius: var(--r-full);
   border: 1px solid rgba(0, 0, 0, 0.12);
   cursor: pointer;
   padding: 0;
-}
-.ctx-swatch {
   transition: transform 0.12s var(--spring);
 }
-.ctx-swatch:hover {
+.color-swatch:hover {
   transform: scale(1.15);
 }
 /* current colour gets a ring (surface gap + the colour itself) */
-.ctx-swatch.on {
+.color-swatch.on {
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--sw, var(--primary));
 }
-.ctx-swatch.none.on {
+.color-swatch.none.on {
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--ink-faint);
 }
-.ctx-swatch.none {
+.color-swatch.none {
   background: var(--surface);
   position: relative;
 }
-.ctx-swatch.none::after {
+.color-swatch.none::after {
   content: '';
   position: absolute;
   inset: 3px;
@@ -3481,36 +3486,14 @@ textarea:focus-visible,
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  display: flex;
-  gap: 5px;
   padding: 6px 8px;
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: var(--r-full);
   box-shadow: var(--shadow-2);
 }
-.st-swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: var(--r-full);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  padding: 0;
-}
-.st-swatch:hover {
-  transform: scale(1.15);
-}
-.st-swatch.none {
-  background: var(--surface);
-  position: relative;
-}
-.st-swatch.none::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-top: 1px solid var(--ink-faint);
-  transform: rotate(45deg);
-}
+/* the swatch buttons themselves are the shared .color-swatch-grid/.color-swatch
+   (ColorSwatchGrid.tsx) — this flyout only supplies its own floating position. */
 
 /* ── Command palette group header (C) ───────────────────────────────────────── */
 .qo-group {
@@ -3558,9 +3541,11 @@ textarea:focus-visible,
   visibility: hidden;
 }
 
-/* ── Collapse chevron only when collapsed or hovering (E) ───────────────────── */
+/* ── Collapse chevron: always faintly visible, full on hover/collapsed ───────
+   (never opacity:0 — UX-CLARITY-VISION 전략 B: a control nobody can see isn't
+   discoverable, even if it's "supposed to" only matter once you're hovering) */
 .collapse-toggle {
-  opacity: 0;
+  opacity: 0.3;
   transition: opacity 0.1s ease;
 }
 .node:hover .collapse-toggle,

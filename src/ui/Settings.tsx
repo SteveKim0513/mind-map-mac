@@ -386,7 +386,7 @@ function AiView({
               <div className="set-ai-provider-row">
                 <button
                   className={`set-ai-radio${ai.active === 'claude' ? ' on' : ''}${bothSet ? ' switchable' : ''}`}
-                  title={bothSet ? 'Claude를 활성 모델로 선택' : undefined}
+                  title={bothSet ? 'Claude를 활성 모델로 선택' : ai.active === 'claude' ? '현재 활성 모델' : '비활성 모델'}
                   onClick={bothSet ? () => void ai.switchActive('claude') : undefined}
                 />
                 <span className="set-ai-provider-name">Claude</span>
@@ -441,7 +441,7 @@ function AiView({
               <div className="set-ai-provider-row">
                 <button
                   className={`set-ai-radio${ai.active === 'openai' ? ' on' : ''}${bothSet ? ' switchable' : ''}`}
-                  title={bothSet ? 'GPT를 활성 모델로 선택' : undefined}
+                  title={bothSet ? 'GPT를 활성 모델로 선택' : ai.active === 'openai' ? '현재 활성 모델' : '비활성 모델'}
                   onClick={bothSet ? () => void ai.switchActive('openai') : undefined}
                 />
                 <span className="set-ai-provider-name">GPT</span>
