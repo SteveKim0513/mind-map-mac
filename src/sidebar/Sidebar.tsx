@@ -16,6 +16,7 @@ import { UrlImportModal } from '../note/UrlImportModal';
 import type { NoteDoc } from '../types';
 import { Icon } from '../ui/Icon';
 import { FocusPill } from '../focus/FocusWidget';
+import { useDismissablePosition } from '../ui/useDismissablePosition';
 
 interface Props {
   openPaths: string[];
@@ -72,6 +73,16 @@ export function Sidebar({
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null); // folder path, or '' = root
   const [marked, setMarked] = useState<Set<string>>(new Set());
+  // Row right-click menu — same "즐겨찾기/이름 변경/삭제" actions the hover
+  // icons already offer, just via the same right-click pattern canvas nodes
+  // and tabs use (UX-CLARITY-VISION 전략 A: sidebar rows were the one place
+  // right-click did nothing at all).
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; node: TreeNode } | null>(null);
+  const { ref: rowMenuRef, pos: rowMenuPos } = useDismissablePosition<HTMLDivElement>(
+    rowMenu?.x ?? 0,
+    rowMenu?.y ?? 0,
+    () => setRowMenu(null),
+  );
 
   const toggleMark = (path: string) =>
     setMarked((prev) => {
@@ -482,6 +493,10 @@ export function Sidebar({
                 onOpenFile(node.path);
               }
             }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setRowMenu({ x: e.clientX, y: e.clientY, node });
+            }}
           >
             <span className="twisty">
               {node.type === 'dir' && (
@@ -708,6 +723,43 @@ export function Sidebar({
           onSubmit={(url) => void importNoteFromUrl(url)}
           onClose={() => setUrlImport(null)}
         />
+      )}
+
+      {rowMenu && (
+        <div ref={rowMenuRef} className="ctx-menu" style={{ left: rowMenuPos.left, top: rowMenuPos.top }}>
+          {rowMenu.node.type === 'file' && (
+            <button
+              className="ctx-item"
+              onClick={() => {
+                void usePins.getState().toggle(rowMenu.node.path);
+                setRowMenu(null);
+              }}
+            >
+              <span>{pinnedPaths.includes(rowMenu.node.path) ? '즐겨찾기 해제' : '즐겨찾기 추가'}</span>
+            </button>
+          )}
+          {!isLocked(rowMenu.node.path) && (
+            <button
+              className="ctx-item"
+              onClick={() => {
+                setRenaming({ path: rowMenu.node.path, isFile: rowMenu.node.type === 'file' });
+                setRowMenu(null);
+              }}
+            >
+              <span>이름 변경</span>
+            </button>
+          )}
+          <div className="ctx-sep" />
+          <button
+            className="ctx-item danger"
+            onClick={() => {
+              void removeNode(rowMenu.node);
+              setRowMenu(null);
+            }}
+          >
+            <span>삭제</span>
+          </button>
+        </div>
       )}
     </div>
   );

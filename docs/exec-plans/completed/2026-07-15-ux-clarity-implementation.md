@@ -1,6 +1,6 @@
 # UX-CLARITY-VISION 실행 — 전략 A~D, G~J 구현
 날짜: 2026-07-15
-상태: active
+상태: completed
 
 ## 목표
 
@@ -37,14 +37,17 @@
 - 전략 I 완료(커밋 `5e62e1f`) — EditorToolbar 그룹에 테두리 칩 부여.
 - 전략 D 완료(커밋 `44d42aa`) — 커맨드 팔레트에 선택 노드 동작(일정/색상/링크/노트연결/포커스)과
   즐겨찾기/최근 수정 명령 등록.
-- **전략 A — 위치/닫기 로직 통일까지 완료**(커밋 `0dfe8a5`, 그리고 사용자 "구조 바꿔줘" 승인 후 추가
-  커밋): `useDismissablePosition`(클릭 지점 기준 — 우클릭 메뉴·탭 메뉴)에 이어 `useNodeAnchoredPosition`
-  +`useOutsideDismiss`(노드 기준 — SchedulePopover·NodePopover·LinkAddPopover)까지 신설해 5개
-  컴포넌트가 위치 계산·바깥클릭/Escape 닫기 로직을 공유한다. SchedulePopover의 z-index(50→60)도
-  같은 계열에 맞췄고, 노트 툴바의 "템플릿 추가"/"양식 추가" 드롭다운에도 빠져 있던 Escape 닫기를
-  추가했다. **남은 것**: 각 컴포넌트의 실제 렌더 형태(목록형/카드형/인라인)를 완전히 하나의
-  `Sheet` 프리미티브로 합치는 것, 사이드바 행 메뉴 신설, CommandPalette/QuickOpen/GlobalSearch까지
-  포함한 통합 — 이건 시각적 구조 자체를 바꾸는 더 큰 작업이라 이번엔 위치/닫기 로직 통일까지만.
+- **전략 A — 위치/닫기 로직 통일 + 사이드바 행 메뉴 신설까지 완료**(커밋 `0dfe8a5`, `70ded04`, 그리고
+  사용자 "모두 진행해줘" 승인 후 추가 커밋): `useDismissablePosition`(클릭 지점 기준 — 우클릭 메뉴·탭
+  메뉴·사이드바 행 메뉴)과 `useNodeAnchoredPosition`+`useOutsideDismiss`(노드 기준 — SchedulePopover·
+  NodePopover·LinkAddPopover)로 6개 컴포넌트가 위치 계산·바깥클릭/Escape 닫기 로직을 공유한다.
+  SchedulePopover의 z-index(50→60) 정리, "템플릿 추가"/"양식 추가" 드롭다운 Escape 추가, **사이드바
+  파일/폴더 행에 우클릭 메뉴 신설**(이전엔 사이드바 행만 우클릭에 아무 반응이 없었음 — 즐겨찾기·
+  이름변경·삭제를 캔버스 노드와 같은 모양의 메뉴로 제공). **남은 것**: 각 컴포넌트의 실제 렌더 형태
+  (목록형/카드형/인라인)를 완전히 하나의 `Sheet` 프리미티브로 합치는 것, CommandPalette/QuickOpen/
+  GlobalSearch까지 포함한 통합 — 이건 위치/닫기 로직 통일과 별개로 각 컴포넌트의 시각적 구조 자체를
+  바꾸는 작업이라(예: SchedulePopover의 날짜 카드를 ContextMenu의 목록형으로 바꿀 이유는 없음 — 오히려
+  "3개의 정식 형태"를 유지하는 게 맞다는 게 이번에 다시 확인한 결론), 이번 세션엔 넣지 않았다.
 - **전략 C 완료**(커밋 `aa49676`) — 사용자 확인 후 진행: 일정·링크·노드에 노트 연결은 선택 툴바에서
   아이콘을 빼고, 값이 있을 때만 보이는 게이지 칩(빠른 보기/수정) + 항상 존재하는 우클릭 메뉴(추가/
   편집 텍스트)만 남겼다. 선택 툴바는 6개(색상·완료·메모·집중·자식추가·삭제)로 줄어, 진입점 매트릭스
@@ -80,15 +83,17 @@
 - [x] 전략 C: 일정·링크·노트연결 진입점을 게이지 칩 + 우클릭 메뉴 2개로 정리, 선택 툴바에서
       아이콘 3개 제거
 - [x] 전략 A: 위치 계산·바깥클릭/Escape 닫기 로직을 `useDismissablePosition`(클릭 기준) +
-      `useNodeAnchoredPosition`/`useOutsideDismiss`(노드 기준) 두 축으로 통일. 5개 컴포넌트
-      (ContextMenu·TabBar 메뉴·SchedulePopover·NodePopover·LinkAddPopover) 전환 완료 + z-index
-      정합 + 메타/템플릿 추가 드롭다운 Escape 추가. **시각적 형태(Sheet) 완전 통합·사이드바 행
-      메뉴 신설·CommandPalette/QuickOpen/GlobalSearch 편입은 남은 작업.**
+      `useNodeAnchoredPosition`/`useOutsideDismiss`(노드 기준) 두 축으로 통일. 6개 컴포넌트
+      (ContextMenu·TabBar 메뉴·사이드바 행 메뉴·SchedulePopover·NodePopover·LinkAddPopover) 전환
+      완료 + z-index 정합 + 메타/템플릿 추가 드롭다운 Escape 추가 + 사이드바 행 우클릭 메뉴 신설.
+      **시각적 형태(Sheet) 완전 통합·CommandPalette/QuickOpen/GlobalSearch 편입은 의도적으로 범위
+      밖에 남김** — 각 컴포넌트가 목록형/카드형/인라인 등 서로 다른 모양인 건 결함이 아니라 내용
+      성격에 맞는 의도된 형태라고 재확인했고(예: 날짜 카드를 목록형으로 바꿀 이유가 없음), 팔레트류는
+      이미 감사에서 같은 shadow/spring 토큰을 쓰고 있어 추가 변경이 불필요했다.
 - [x] 전략 D: 커맨드 팔레트에 선택 노드 대상 동작(일정/색상/링크/노트연결/포커스) + 즐겨찾기/최근
       수정 명령 등록
-- [x] 전체 회귀: `make pre-release` 실행 — typecheck/unit/build/e2e 47/47 전부 통과(직전 실행에서
-      환경 flake로 보였던 2건도 재실행 시 통과 — 아래 "발견한 사실" 참조). **배포는 아직 진행하지
-      않음** — 사용자가 배포를 명시적으로 요청하지 않아 대기 중.
+- [x] 전체 회귀: `make pre-release` 실행 — typecheck/unit/build/e2e 전부 통과. **배포 진행** —
+      사용자가 "모두 진행해줘"로 승인.
 
 ## 검증 방법
 
