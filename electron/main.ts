@@ -23,6 +23,12 @@ if (process.env.MINDMAP_USER_DATA) {
 }
 // Test/E2E isolation: override the workspace directory directly.
 const E2E_WORKSPACE = process.env.MINDMAP_WORKSPACE ?? null;
+// E2E quiet mode: Playwright drives the renderer over CDP, which doesn't need
+// a real OS-focused/visible window — so when this is set, windows open
+// off-screen and un-activated instead of popping to the front and stealing
+// focus from whatever else is on screen. `make dev-safe` never sets this
+// (a human needs to actually see and click that window).
+const E2E_QUIET = process.env.MINDMAP_E2E_QUIET === '1';
 
 // vite-plugin-electron injects these env vars during dev
 process.env.APP_ROOT = path.join(__dirname, '..');
@@ -135,10 +141,18 @@ function createWindow() {
     minHeight: 440,
     backgroundColor: '#f6f5f4',
     titleBarStyle: 'hiddenInset',
+    ...(E2E_QUIET ? { x: -3000, y: -3000, show: false } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   });
+
+  if (E2E_QUIET) {
+    // showInactive() skips the OS-level "activate this app" step that a
+    // normal show() does — the window exists (Playwright can still drive it
+    // over CDP) but never jumps in front of or steals focus from other apps.
+    win.once('ready-to-show', () => win?.showInactive());
+  }
 
   // Open external links in the browser, not in-app.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -210,13 +224,18 @@ function createCaptureWindow(): BrowserWindow {
 function showCaptureWindow() {
   if (!captureWin || captureWin.isDestroyed()) captureWin = createCaptureWindow();
   captureWin.center();
-  captureWin.show();
-  captureWin.focus();
+  if (E2E_QUIET) {
+    captureWin.showInactive();
+  } else {
+    captureWin.show();
+    captureWin.focus();
+  }
   captureWin.webContents.send('capture:shown');
 }
 
 app.whenReady().then(() => {
   log.info(`[app] start v${app.getVersion()} on ${process.platform}`);
+  if (E2E_QUIET && process.platform === 'darwin') app.dock?.hide();
   buildMenu();
   createWindow();
   initAutoUpdate(() => win);

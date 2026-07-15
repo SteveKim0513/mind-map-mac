@@ -21,7 +21,15 @@ export async function launchApp(): Promise<AppHandle> {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
 
-  const env = { ...process.env, MINDMAP_USER_DATA: userData, MINDMAP_WORKSPACE: workspace };
+  // MINDMAP_E2E_QUIET keeps the Electron window off-screen and un-activated —
+  // Playwright drives it over CDP either way, so there's no reason for it to
+  // pop to the front and steal focus from whatever else is on screen.
+  const env = {
+    ...process.env,
+    MINDMAP_USER_DATA: userData,
+    MINDMAP_WORKSPACE: workspace,
+    MINDMAP_E2E_QUIET: '1',
+  };
   // VSCode sets ELECTRON_RUN_AS_NODE=1 which makes Electron behave as plain Node.
   // Remove it so the child process starts as a real Electron browser process.
   delete env.ELECTRON_RUN_AS_NODE;
