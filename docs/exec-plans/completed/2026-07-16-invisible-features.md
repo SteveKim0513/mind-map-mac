@@ -1,6 +1,6 @@
 # 안보이는 기능 구현 (Invisible Features)
 날짜: 2026-07-16
-상태: active
+상태: completed · 2026-07-16 검증 완료 + v0.10.1 배포(211 단위 + 74 E2E, 독립 보안 검토 통과, IF-06 기본값 off 정정)
 
 ## 목표
 [INVISIBLE-FEATURES-2026-07.md](../../product/INVISIBLE-FEATURES-2026-07.md)의 "바로 할 것" 전체 + 휴지통 보관 정책(IF-06, on/off·3개월 자동)을 검증 가능한 배치로 구현한다. 목표는 고객 경험·만족 개선(데이터 신뢰 우선).
