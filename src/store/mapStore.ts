@@ -120,6 +120,7 @@ interface MapState {
   setIcon: (id: string, icon: string | undefined) => void;
   toggleDone: (id: string) => void;
   toggleDoneSelected: () => void; // toggle done across the whole multi-selection
+  setTodo: (id: string, on: boolean) => void; // 할 일로 전환 / 일반 노드로 되돌리기 (결정 0014)
   // schedule / reminders
   setScheduled: (id: string, on: boolean) => void; // applies to the node + all descendants
   setScheduleAt: (id: string, iso: string | undefined) => void;
@@ -311,6 +312,7 @@ export function createMapStore(): MapStore {
             if (sched.matched && sched.scheduleAt) {
               n.scheduleAt = sched.scheduleAt;
               n.scheduled = true;
+              n.todo = true; // @내일 3시 등 자연어 일정도 할 일로 승격 (결정 0014)
             }
           }
           if (!n.color) {
@@ -359,6 +361,7 @@ export function createMapStore(): MapStore {
           parentId: null,
           children: [],
           collapsed: false,
+          todo: true, // 일정이 잡힌 노드 = 할 일 (결정 0014)
           scheduled: true,
           scheduleAt: iso,
           updatedAt: Date.now(),
@@ -405,9 +408,9 @@ export function createMapStore(): MapStore {
         const parent = d.nodes[parentId];
         if (!parent) return;
         parent.collapsed = false;
+        // 결정 0014 · 새 자식은 순수 생각(일반 노드) — 부모가 할 일/일정이어도 상속하지 않는다.
+        // 실행 상태는 명시적 전환(할 일로)이나 일정 지정으로만.
         d.nodes[id] = { id, text: '', parentId, children: [], collapsed: false };
-        // a child of a scheduled node is scheduled too
-        if (parent.scheduled) d.nodes[id].scheduled = true;
         parent.children.push(id);
       });
       set({ selectedId: id, selectedIds: [id], editingId: id });
@@ -422,14 +425,12 @@ export function createMapStore(): MapStore {
         if (node.parentId) {
           const parent = d.nodes[node.parentId];
           const idx = parent.children.indexOf(refId);
+          // 결정 0014 · 새 형제는 순수 생각(일반 노드) — 주변 레벨의 실행 상태를 상속하지 않는다.
           d.nodes[id] = { id, text: '', parentId: node.parentId, children: [], collapsed: false };
-          // inherit the scheduled state of the surrounding level
-          if (parent.scheduled || node.scheduled) d.nodes[id].scheduled = true;
           parent.children.splice(idx + 1, 0, id);
         } else {
-          // sibling of a root is a new root
+          // sibling of a root is a new root (plain thought)
           d.nodes[id] = { id, text: '', parentId: null, children: [], collapsed: false };
-          if (node.scheduled) d.nodes[id].scheduled = true;
           d.rootIds.splice(d.rootIds.indexOf(refId) + 1, 0, id);
         }
       });
@@ -516,6 +517,7 @@ export function createMapStore(): MapStore {
         const n = d.nodes[id];
         if (n) {
           n.done = !n.done;
+          n.todo = true; // completing something makes it a 할 일 (결정 0014)
           n.updatedAt = Date.now(); // mark for reminder push
         }
       }),
@@ -528,9 +530,35 @@ export function createMapStore(): MapStore {
         const next = !ids.every((id) => d.nodes[id].done);
         for (const id of ids) {
           d.nodes[id].done = next;
+          d.nodes[id].todo = true; // 결정 0014
           d.nodes[id].updatedAt = Date.now();
         }
       }),
+
+    // 할 일로 전환 / 일반 노드로 되돌리기 (결정 0014). 되돌릴 때는 완료·일정·리마인더를 정리한다
+    // — 반드시 reminderOn/reminderId 불변조건 경유(고아 방지). 노드별(자식에 전파하지 않음).
+    setTodo: (id, on) => {
+      const removedReminders: string[] = [];
+      commit((d) => {
+        const n = d.nodes[id];
+        if (!n) return;
+        if (on) {
+          n.todo = true;
+        } else {
+          n.todo = undefined;
+          n.done = undefined;
+          n.scheduleAt = undefined;
+          n.scheduled = undefined;
+          n.durationMin = undefined;
+          if (n.reminderId) removedReminders.push(n.reminderId);
+          n.reminderOn = undefined;
+          n.reminderId = undefined;
+          n.reminderSyncedAt = undefined;
+          n.updatedAt = Date.now();
+        }
+      });
+      if (removedReminders.length && reminderDeleteHook) reminderDeleteHook(removedReminders);
+    },
 
     setScheduled: (id, on) =>
       commit((d) => {
@@ -539,6 +567,7 @@ export function createMapStore(): MapStore {
           const n = d.nodes[nid];
           if (!n) return;
           n.scheduled = on || undefined;
+          if (on) n.todo = true; // 일정을 잡으면 자동으로 할 일 (결정 0014)
           if (!on) {
             // un-scheduling also clears the date and detaches any reminder
             n.scheduleAt = undefined;
@@ -562,6 +591,7 @@ export function createMapStore(): MapStore {
         n.updatedAt = Date.now(); // mark for reminder push
         if (iso) {
           n.scheduled = true;
+          n.todo = true; // 일정을 잡으면 자동으로 할 일 (결정 0014)
         } else {
           // Clearing the date must fully unschedule this node — `scheduled`
           // has no "set but dateless" rendering (scheduleInfo(undefined) falls

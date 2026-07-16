@@ -15,9 +15,13 @@ import { collectAgendaCached } from './collectAgendaCached';
 import { buildAgenda, type AgendaItem, type Agenda } from '../focus/agenda';
 import { dayKey, dailyTotals, fmtDuration } from '../focus/aggregate';
 import { mapStoreById } from '../focus/controller';
-import type { FocusSession } from '../types';
+import type { FocusSession, MindMapDoc } from '../types';
+import { deserialize, emptyDoc, serialize, newId } from '../io/formats';
 import { rowTime, linkOf, mapName, makeAgendaActions, type AgendaActions } from '../focus/AgendaRow';
 import { revealNode } from '../note/noteLinks';
+import { SubtreeMiniView } from './SubtreeMiniView';
+import { SchedulePicker } from './SchedulePicker';
+import type { NodeRef } from './collectNodesCached';
 import {
   startOfDay,
   addDays,
@@ -32,7 +36,10 @@ import {
   blockSpanMinutes,
   layoutDayBlocks,
   WEEK_GRID_START_HOUR,
+  WEEK_GRID_END_HOUR,
   WEEK_GRID_MINUTES,
+  minutesToPx,
+  pxToMinutes,
 } from './calendarMath';
 
 type ViewMode = 'day' | 'week' | 'month';
@@ -53,17 +60,53 @@ export interface DragReschedule {
   dragOverKey: string | null;
 }
 
-/** Empty-slot quick-capture on the week grid (Phase 1c). Creates a scheduled node
- *  in the *active map tab* — nodes live in maps, so the calendar never makes an
- *  orphan; with no map open it shows a hint instead. */
-export interface CaptureCtl {
-  active: { key: string; minute: number } | null; // open input's column + minute-of-day
-  text: string;
-  hint: boolean; // true when a click had no active map to capture into
-  openAt: (key: string, dayMs: number, minute: number) => void;
-  setText: (t: string) => void;
-  submit: () => void;
-  cancel: () => void;
+
+/** Schedule-node peek (§3.2): first click opens a read-only subtree preview
+ *  (day = drawer under the card, month = panel below the grid, week = floating
+ *  popup); clicking the schedule node inside it opens the map in the right split.
+ *  The doc is the open map's live doc, or a closed map read from disk. */
+export interface PeekCtl {
+  active: { item: AgendaItem; doc: MindMapDoc } | null;
+  open: (it: AgendaItem) => void; // toggle the preview for this item
+  openSplit: (it: AgendaItem) => void; // open the map beside (right split) + focus node
+  close: () => void;
+}
+
+/** Create-a-schedule popup control (§3.3–3.6). `fixed` is a locked minute-of-day
+ *  from a week slot; null means day/month → the popup shows a 종일/시간 toggle. */
+export interface PickerCtl {
+  active: { dayMs: number; fixed: number | null } | null;
+  openAt: (dayMs: number, fixed: number | null) => void;
+  close: () => void;
+}
+
+/** Is `it` the item currently being previewed? (nodeId is stable per map.) */
+function isPeeked(peek: PeekCtl, it: AgendaItem): boolean {
+  return peek.active != null && peek.active.item.nodeId === it.nodeId && peek.active.item.mapId === it.mapId;
+}
+
+/** Shared preview body: a header (title · map · "오른쪽에 열기" · 닫기) over the
+ *  read-only subtree mini-view. Wrapped by each view's own container. */
+function PeekBody({ peek }: { peek: PeekCtl }) {
+  if (!peek.active) return null;
+  const { item, doc } = peek.active;
+  return (
+    <div className="cal-peek">
+      <div className="cal-peek-head">
+        <span className="cal-peek-title">{item.text || '무제'}</span>
+        {mapName(item) && <span className="cal-peek-map">{mapName(item)}</span>}
+        <span className="cal-grow" />
+        <button className="cal-peek-open" onClick={() => peek.openSplit(item)} title="오른쪽 화면에 맵 열기">
+          오른쪽에 열기
+          <Icon name="chevronRight" />
+        </button>
+        <button className="cal-peek-x" onClick={peek.close} title="닫기">
+          <Icon name="close" />
+        </button>
+      </div>
+      <SubtreeMiniView doc={doc} rootId={item.nodeId} onOpenRoot={() => peek.openSplit(item)} />
+    </div>
+  );
 }
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -167,51 +210,134 @@ export function CalendarView() {
     dragOverKey,
   };
 
-  // ── empty-slot quick-capture (week grid) ─────────────────────────────────────
-  const [capture, setCapture] = useState<{ key: string; dayMs: number; minute: number } | null>(null);
-  const [captureText, setCaptureText] = useState('');
-  const [noMapHint, setNoMapHint] = useState(false);
-
-  // The calendar tab is itself active while capturing, so activeStore() is null —
-  // fall back to the first open map tab. Nodes live in maps; with none open we hint.
-  const targetMapStore = (): MapStore | null => {
-    const s = useSession.getState();
-    return s.activeStore() ?? ((s.tabs.find((t) => t.kind === 'map')?.store as MapStore | undefined) ?? null);
+  // ── create a schedule: search an existing node, or make a new one (§3.3–3.6) ──
+  const [picker, setPicker] = useState<{ dayMs: number; fixed: number | null } | null>(null);
+  const pickerCtl: PickerCtl = {
+    active: picker,
+    openAt: (dayMs, fixed) => setPicker({ dayMs, fixed }),
+    close: () => setPicker(null),
   };
 
-  const captureCtl: CaptureCtl = {
-    active: capture,
-    text: captureText,
-    hint: noMapHint,
-    openAt: (key, dayMs, minute) => {
-      if (!targetMapStore()) {
-        setNoMapHint(true);
+  /** Pin an EXISTING node to `iso`. Open map → its store; closed map → open it in
+   *  the background, apply, then return focus to the calendar (§8). Always through
+   *  mapStore.setScheduleAt so the Reminders invariant holds. */
+  const assignExisting = (node: NodeRef, iso: string) => {
+    void (async () => {
+      const store = mapStoreById(node.mapId);
+      if (store) {
+        store.getState().setScheduleAt(node.nodeId, iso);
+      } else if (node.mapPath) {
+        try {
+          const content = await window.api.readFile(node.mapPath);
+          const sess = useSession.getState();
+          sess.openPath(node.mapPath, content); // opens the closed map (creates its store)
+          mapStoreById(node.mapId)?.getState().setScheduleAt(node.nodeId, iso);
+          sess.openCalendar(); // keep the user on the calendar tab
+          useUi.getState().toast(`'${node.mapName}'에 일정을 잡았어요`);
+        } catch {
+          useUi.getState().toast('맵을 열 수 없어 일정을 잡지 못했어요');
+        }
+      }
+      setPicker(null);
+      setTimeout(reload, 80);
+    })();
+  };
+
+  /** Make a NEW scheduled node in "오늘의 생각" (the same inbox as ⌥Space capture),
+   *  never in the active map. Uses the open tab's store if it's open (avoids a
+   *  file/store write race), else appends to the file directly. */
+  const createInInbox = (text: string, iso: string) => {
+    void (async () => {
+      const targetPath = await window.api.capture.targetPath();
+      const sess = useSession.getState();
+      const openTab = sess.tabs.find((t) => t.kind === 'map' && t.path === targetPath);
+      if (openTab) {
+        (openTab.store as MapStore).getState().captureScheduled(text, iso);
+      } else {
+        let doc: MindMapDoc;
+        try {
+          doc = deserialize(await window.api.readFile(targetPath));
+        } catch {
+          doc = emptyDoc();
+        }
+        const id = newId();
+        doc.nodes[id] = {
+          id,
+          text,
+          parentId: null,
+          children: [],
+          collapsed: false,
+          todo: true,
+          scheduled: true,
+          scheduleAt: iso,
+        };
+        doc.rootIds.push(id);
+        await window.api.save(targetPath, serialize(doc));
+        await window.api.capture.notifyAppended(targetPath);
+        // a brand-new 오늘의 생각.mind isn't in the sidebar tree yet → refresh so
+        // the calendar's disk scan can find it on reload.
+        await useWorkspace.getState().refresh();
+      }
+      useUi.getState().toast('오늘의 생각에 새 일정을 담았어요');
+      setPicker(null);
+      setTimeout(reload, 120);
+    })();
+  };
+
+  // ── schedule peek → split (§3.2) ─────────────────────────────────────────────
+  const [peek, setPeek] = useState<{ item: AgendaItem; doc: MindMapDoc } | null>(null);
+
+  const peekCtl: PeekCtl = {
+    active: peek,
+    open: (it) => {
+      // toggle off if this item is already open
+      if (peek && peek.item.nodeId === it.nodeId && peek.item.mapId === it.mapId) {
+        setPeek(null);
         return;
       }
-      setNoMapHint(false);
-      setCaptureText('');
-      setCapture({ key, dayMs, minute });
+      void (async () => {
+        // open map → live doc; closed map → read from disk (no tab opened yet)
+        const openDoc = mapStoreById(it.mapId)?.getState().doc ?? null;
+        let doc: MindMapDoc | null = openDoc;
+        if (!doc && it.mapPath) {
+          try {
+            doc = deserialize(await window.api.readFile(it.mapPath));
+          } catch {
+            doc = null;
+          }
+        }
+        if (doc && doc.nodes[it.nodeId]) setPeek({ item: it, doc });
+        else void revealNode(linkOf(it)); // can't resolve → fall back to opening the map
+      })();
     },
-    setText: setCaptureText,
-    submit: () => {
-      const store = targetMapStore();
-      const text = captureText.trim();
-      if (capture && text && store) {
-        const iso = rescheduleToMinute(`${isoDate(capture.dayMs)}T00:00:00`, capture.minute);
-        store.getState().captureScheduled(text, iso);
-        setTimeout(reload, 80);
-      }
-      setCapture(null);
-      setCaptureText('');
+    openSplit: (it) => {
+      setPeek(null);
+      void (async () => {
+        if (!it.mapPath) {
+          void revealNode(linkOf(it)); // no path hint → best-effort open
+          return;
+        }
+        let content: string;
+        try {
+          content = await window.api.readFile(it.mapPath);
+        } catch {
+          void revealNode(linkOf(it));
+          return;
+        }
+        useSession.getState().openInRight(it.mapPath, content);
+        // openInRight added the tab synchronously → its store is now resolvable
+        const store = mapStoreById(it.mapId);
+        if (store) {
+          store.getState().select(it.nodeId);
+          setTimeout(() => useUi.getState().focusNode(it.nodeId), 0);
+        }
+      })();
     },
-    cancel: () => {
-      setCapture(null);
-      setCaptureText('');
-      setNoMapHint(false);
-    },
+    close: () => setPeek(null),
   };
 
   const shift = (dir: 1 | -1) => {
+    setPeek(null);
     setAnchor((a) => {
       if (mode === 'day') return addDays(a, dir);
       if (mode === 'week') return addDays(a, dir * 7);
@@ -220,6 +346,7 @@ export function CalendarView() {
     });
   };
   const jumpToDay = (ms: number) => {
+    setPeek(null);
     setAnchor(startOfDay(ms));
     setMode('day');
   };
@@ -237,7 +364,10 @@ export function CalendarView() {
             <button
               key={m}
               className={`cal-toggle-btn${mode === m ? ' on' : ''}`}
-              onClick={() => setMode(m)}
+              onClick={() => {
+                setPeek(null);
+                setMode(m);
+              }}
             >
               {m === 'day' ? '일' : m === 'week' ? '주' : '월'}
             </button>
@@ -271,7 +401,7 @@ export function CalendarView() {
         {items == null ? (
           <div className="cal-empty">불러오는 중…</div>
         ) : mode === 'day' ? (
-          <DayPane anchor={anchor} agenda={agenda} grouped={grouped} now={now} actions={actions} focusByDay={focusByDay} />
+          <DayPane anchor={anchor} agenda={agenda} grouped={grouped} now={now} actions={actions} peek={peekCtl} picker={pickerCtl} focusByDay={focusByDay} />
         ) : mode === 'week' ? (
           <WeekPane
             anchor={anchor}
@@ -280,7 +410,8 @@ export function CalendarView() {
             onPickDay={jumpToDay}
             drag={drag}
             actions={actions}
-            capture={captureCtl}
+            peek={peekCtl}
+            picker={pickerCtl}
             focusByDay={focusByDay}
             onResize={setDurationFor}
           />
@@ -292,10 +423,22 @@ export function CalendarView() {
             onPickDay={jumpToDay}
             drag={drag}
             actions={actions}
+            peek={peekCtl}
+            picker={pickerCtl}
             focusByDay={focusByDay}
           />
         )}
       </div>
+
+      {pickerCtl.active && (
+        <SchedulePicker
+          dayMs={pickerCtl.active.dayMs}
+          fixed={pickerCtl.active.fixed}
+          onAssign={assignExisting}
+          onCreate={createInInbox}
+          onClose={pickerCtl.close}
+        />
+      )}
     </div>
   );
 }
@@ -329,19 +472,23 @@ const durLabel = (m: number): string =>
 function DayCard({
   it,
   actions,
+  peek,
   overdue,
   isNext,
 }: {
   it: AgendaItem;
   actions: AgendaActions;
+  peek: PeekCtl;
   overdue?: boolean;
   isNext?: boolean;
 }) {
   const timeLabel = overdue ? `${new Date(it.at).getMonth() + 1}/${new Date(it.at).getDate()}` : rowTime(it);
   const map = mapName(it);
+  const peeked = isPeeked(peek, it);
   return (
-    <div className={`cal-daycard${it.done ? ' done' : ''}${overdue ? ' over' : ''}${isNext ? ' next' : ''}`}>
-      <button className="cal-daycard-hit" onClick={() => actions.reveal(it)} title="노드로 이동">
+    <div className="cal-daycard-wrap">
+      <div className={`cal-daycard${it.done ? ' done' : ''}${overdue ? ' over' : ''}${isNext ? ' next' : ''}${peeked ? ' peeked' : ''}`}>
+      <button className="cal-daycard-hit" onClick={() => peek.open(it)} title="일정 미리보기">
         <span className="cal-daycard-time">{timeLabel}</span>
         <span className="cal-daycard-main">
           <span className="cal-daycard-title">{it.text}</span>
@@ -355,21 +502,32 @@ function DayCard({
         </span>
       </button>
       <span className="cal-daycard-acts">
-        <button className="cal-daycard-focus" onClick={() => actions.startFocus(it)} title="집중 세션 시작">
+        <button className="cal-daycard-act cal-daycard-act--focus" onClick={() => actions.startFocus(it)} title="집중 세션 시작">
           <Icon name="clock" />
           집중
         </button>
-        <button className="cal-daycard-check" title="완료 표시" onClick={() => actions.toggleDone(it)}>
+        <button
+          className={`cal-daycard-act cal-daycard-act--done${it.done ? ' is-done' : ''}`}
+          title={it.done ? '완료 취소' : '완료 표시'}
+          onClick={() => actions.toggleDone(it)}
+        >
           <Icon name="check" />
+          {it.done ? '완료됨' : '완료'}
         </button>
       </span>
+      </div>
+      {peeked && (
+        <div className="cal-peek-drawer">
+          <PeekBody peek={peek} />
+        </div>
+      )}
     </div>
   );
 }
 
 /** Overdue = carried-over work (still actionable today). Collapsed by default so
  *  the day view leads with *today only*; one click reveals it. */
-function OverdueSection({ items, actions }: { items: AgendaItem[]; actions: AgendaActions }) {
+function OverdueSection({ items, actions, peek }: { items: AgendaItem[]; actions: AgendaActions; peek: PeekCtl }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={`cal-overdue${open ? ' open' : ''}`}>
@@ -380,7 +538,7 @@ function OverdueSection({ items, actions }: { items: AgendaItem[]; actions: Agen
       {open && (
         <div className="cal-day-list">
           {items.map((it) => (
-            <DayCard key={it.nodeId} it={it} actions={actions} overdue />
+            <DayCard key={it.nodeId} it={it} actions={actions} peek={peek} overdue />
           ))}
         </div>
       )}
@@ -394,6 +552,8 @@ function DayPane({
   grouped,
   now,
   actions,
+  peek,
+  picker,
   focusByDay,
 }: {
   anchor: number;
@@ -401,16 +561,25 @@ function DayPane({
   grouped: Map<string, AgendaItem[]>;
   now: number;
   actions: AgendaActions;
+  peek: PeekCtl;
+  picker: PickerCtl;
   focusByDay: Map<string, number>;
 }) {
   const isToday = anchor === startOfDay(now);
   const dayAll = grouped.get(dayKey(anchor)) ?? [];
   const summary = (
-    <DaySummary
-      planned={dayAll.length}
-      focusSec={focusByDay.get(dayKey(anchor)) ?? 0}
-      done={dayAll.filter((i) => i.done).length}
-    />
+    <div className="cal-day-top">
+      <DaySummary
+        planned={dayAll.length}
+        focusSec={focusByDay.get(dayKey(anchor)) ?? 0}
+        done={dayAll.filter((i) => i.done).length}
+      />
+      <span className="cal-grow" />
+      <button className="cal-day-add" onClick={() => picker.openAt(anchor, null)} title="이 날에 일정 추가">
+        <Icon name="plus" />
+        일정 추가
+      </button>
+    </div>
   );
 
   // Today: lead with *today only* (no upcoming days). Overdue sits collapsed above.
@@ -420,11 +589,11 @@ function DayPane({
     return (
       <div className="cal-day-body">
         {summary}
-        {agenda.overdue.length > 0 && <OverdueSection items={agenda.overdue} actions={actions} />}
+        {agenda.overdue.length > 0 && <OverdueSection items={agenda.overdue} actions={actions} peek={peek} />}
         {agenda.today.length > 0 ? (
           <div className="cal-day-list">
             {agenda.today.map((it) => (
-              <DayCard key={it.nodeId} it={it} actions={actions} isNext={it.nodeId === nextId} />
+              <DayCard key={it.nodeId} it={it} actions={actions} peek={peek} isNext={it.nodeId === nextId} />
             ))}
           </div>
         ) : nothing ? (
@@ -450,7 +619,7 @@ function DayPane({
       ) : (
         <div className="cal-day-list">
           {pending.map((it) => (
-            <DayCard key={it.nodeId} it={it} actions={actions} />
+            <DayCard key={it.nodeId} it={it} actions={actions} peek={peek} />
           ))}
         </div>
       )}
@@ -483,16 +652,18 @@ function CalChip({
   it,
   drag,
   actions,
+  peek,
   showTime,
 }: {
   it: AgendaItem;
   drag: DragReschedule;
   actions: AgendaActions;
+  peek: PeekCtl;
   showTime: boolean;
 }) {
   return (
     <div
-      className="cal-chip"
+      className={`cal-chip${isPeeked(peek, it) ? ' peeked' : ''}`}
       draggable
       onDragStart={(e) => {
         e.stopPropagation();
@@ -505,7 +676,7 @@ function CalChip({
         className="cal-chip-main"
         onClick={(e) => {
           e.stopPropagation();
-          actions.reveal(it);
+          peek.open(it);
         }}
       >
         {showTime && <span className="cal-chip-time">{rowTime(it)}</span>}
@@ -527,6 +698,7 @@ function WeekBlock({
   cols,
   drag,
   actions,
+  peek,
   onResize,
 }: {
   it: AgendaItem;
@@ -536,6 +708,7 @@ function WeekBlock({
   cols: number;
   drag: DragReschedule;
   actions: AgendaActions;
+  peek: PeekCtl;
   onResize: (it: AgendaItem, minutes: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -549,10 +722,10 @@ function WeekBlock({
     const column = ref.current?.parentElement;
     if (!column) return;
     const rect = column.getBoundingClientRect();
-    const topPx = (topMin / WEEK_GRID_MINUTES) * rect.height;
+    const topPx = minutesToPx(topMin);
     const minuteAt = (clientY: number) => {
       const spanPx = clientY - rect.top - topPx;
-      const raw = (spanPx / rect.height) * WEEK_GRID_MINUTES;
+      const raw = pxToMinutes(spanPx);
       return Math.max(15, Math.round(raw / 15) * 15); // snap 15 min, min 15
     };
     setResizing(true);
@@ -571,10 +744,10 @@ function WeekBlock({
   return (
     <div
       ref={ref}
-      className="cal-wk-block"
+      className={`cal-wk-block${isPeeked(peek, it) ? ' peeked' : ''}`}
       style={{
-        top: `${(topMin / WEEK_GRID_MINUTES) * 100}%`,
-        height: `${(Math.min(span, WEEK_GRID_MINUTES - topMin) / WEEK_GRID_MINUTES) * 100}%`,
+        top: `${minutesToPx(topMin)}px`,
+        height: `${minutesToPx(Math.min(span, WEEK_GRID_MINUTES - topMin))}px`,
         left: `${(col / cols) * 100}%`,
         width: `${100 / cols}%`,
       }}
@@ -590,7 +763,7 @@ function WeekBlock({
         className="cal-wk-block-main"
         onClick={(e) => {
           e.stopPropagation();
-          actions.reveal(it);
+          peek.open(it);
         }}
       >
         <span className="cal-wk-block-time">{rowTime(it)}</span>
@@ -609,7 +782,8 @@ function WeekPane({
   onPickDay,
   drag,
   actions,
-  capture,
+  peek,
+  picker,
   focusByDay,
   onResize,
 }: {
@@ -619,7 +793,8 @@ function WeekPane({
   onPickDay: (ms: number) => void;
   drag: DragReschedule;
   actions: AgendaActions;
-  capture: CaptureCtl;
+  peek: PeekCtl;
+  picker: PickerCtl;
   focusByDay: Map<string, number>;
   onResize: (it: AgendaItem, minutes: number) => void;
 }) {
@@ -627,23 +802,18 @@ function WeekPane({
   const todayMs = startOfDay(now);
   const hours = gridHourLabels();
 
-  /** Clicked-Y within a day column → minute-of-day, snapped to 15 min. */
+  /** Clicked-Y within a day column → minute-of-day, snapped to 15 min. Uses the
+   *  fixed px scale (not column height) so the captured time matches the visual
+   *  gridline even when the pane is taller than the grid content (§3.8). */
   const minuteFromClick = (e: ReactMouseEvent<HTMLDivElement>): number => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    return WEEK_GRID_START_HOUR * 60 + Math.round((frac * WEEK_GRID_MINUTES) / 15) * 15;
+    const raw = WEEK_GRID_START_HOUR * 60 + pxToMinutes(e.clientY - rect.top);
+    const snapped = Math.round(raw / 15) * 15;
+    return Math.max(WEEK_GRID_START_HOUR * 60, Math.min(WEEK_GRID_END_HOUR * 60 - 15, snapped));
   };
 
   return (
     <div className="cal-wk">
-      {capture.hint && (
-        <div className="cal-wk-hint">
-          새 일정을 담을 맵을 먼저 열어주세요.
-          <button className="cal-wk-hint-x" onClick={() => capture.cancel()} title="닫기">
-            <Icon name="close" />
-          </button>
-        </div>
-      )}
       <div className="cal-wk-head">
         <span className="cal-wk-rail-sp" />
         {days.map((ms) => {
@@ -673,14 +843,16 @@ function WeekPane({
             <div
               key={key}
               className={`cal-wk-allday-col${drag.dragOverKey === key ? ' drop' : ''}`}
+              onClick={() => picker.openAt(ms, null)}
               onDragOver={(e) => {
                 e.preventDefault();
                 drag.onOverDay(key);
               }}
               onDrop={() => drag.dropAllDay(ms)}
+              title="클릭해서 종일 일정 추가"
             >
               {strip.map((it) => (
-                <CalChip key={it.nodeId} it={it} drag={drag} actions={actions} showTime={it.hasTime} />
+                <CalChip key={it.nodeId} it={it} drag={drag} actions={actions} peek={peek} showTime={it.hasTime} />
               ))}
             </div>
           );
@@ -712,7 +884,7 @@ function WeekPane({
               key={key}
               data-day={key}
               className={`cal-wk-col${isToday ? ' today' : ''}${drag.dragOverKey === key ? ' drop' : ''}`}
-              onClick={(e) => capture.openAt(key, ms, minuteFromClick(e))}
+              onClick={(e) => picker.openAt(ms, minuteFromClick(e))}
               onDragOver={(e) => {
                 e.preventDefault();
                 drag.onOverDay(key);
@@ -732,33 +904,23 @@ function WeekPane({
                   cols={b.cols}
                   drag={drag}
                   actions={actions}
+                  peek={peek}
                   onResize={onResize}
                 />
               ))}
-              {capture.active?.key === key && (
-                <div
-                  className="cal-wk-capture"
-                  style={{ top: `${((capture.active.minute - WEEK_GRID_START_HOUR * 60) / WEEK_GRID_MINUTES) * 100}%` }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <input
-                    autoFocus
-                    className="cal-wk-capture-input"
-                    value={capture.text}
-                    placeholder="새 일정…"
-                    onChange={(e) => capture.setText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') capture.submit();
-                      else if (e.key === 'Escape') capture.cancel();
-                    }}
-                    onBlur={() => capture.cancel()}
-                  />
-                </div>
-              )}
             </div>
           );
         })}
       </div>
+
+      {/* week has no room for an inline drawer → float the preview as a popup (§3.2) */}
+      {peek.active && (
+        <div className="cal-peek-popup-scrim" onClick={peek.close}>
+          <div className="cal-peek-popup" onClick={(e) => e.stopPropagation()}>
+            <PeekBody peek={peek} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -770,6 +932,8 @@ function MonthPane({
   onPickDay,
   drag,
   actions,
+  peek,
+  picker,
   focusByDay,
 }: {
   anchor: number;
@@ -778,6 +942,8 @@ function MonthPane({
   onPickDay: (ms: number) => void;
   drag: DragReschedule;
   actions: AgendaActions;
+  peek: PeekCtl;
+  picker: PickerCtl;
   focusByDay: Map<string, number>;
 }) {
   const d = new Date(anchor);
@@ -815,25 +981,38 @@ function MonthPane({
               <button className="cal-month-datebtn" onClick={() => onPickDay(c.ms)}>
                 {new Date(c.ms).getDate()}
               </button>
+              <button
+                className="cal-month-add"
+                title="이 날에 일정 추가"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  picker.openAt(c.ms, null);
+                }}
+              >
+                <Icon name="plus" />
+              </button>
               {(focusByDay.get(key) ?? 0) > 0 && (
                 <span className="cal-focus-tag" title="이 날 집중한 시간">
                   {fmtDuration(focusByDay.get(key)!)}
                 </span>
               )}
+              {/* All items scroll within the cell (no "+N" truncation) — §3.7 */}
               <div className="cal-month-chips">
-                {dayItems.slice(0, 3).map((it) => (
-                  <CalChip key={it.nodeId} it={it} drag={drag} actions={actions} showTime={it.hasTime} />
+                {dayItems.map((it) => (
+                  <CalChip key={it.nodeId} it={it} drag={drag} actions={actions} peek={peek} showTime={it.hasTime} />
                 ))}
-                {dayItems.length > 3 && (
-                  <button className="cal-month-more" onClick={() => onPickDay(c.ms)}>
-                    +{dayItems.length - 3}
-                  </button>
-                )}
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* month cells are too small for an inline preview → panel below the grid (§3.2) */}
+      {peek.active && (
+        <div className="cal-peek-panel">
+          <PeekBody peek={peek} />
+        </div>
+      )}
     </div>
   );
 }

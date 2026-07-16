@@ -43,26 +43,32 @@ test('일간 요약이 오늘의 계획 개수를 보여준다 (계획↔실행)
   }
 });
 
-test('빈 슬롯을 클릭해 새 일정을 캡처하면 캘린더에 나타난다', async () => {
+test('빈 슬롯을 클릭하면 일정 피커가 열리고, 기존 노드를 검색해 일정을 잡는다', async () => {
   const { page, cleanup } = await launchApp();
   try {
-    // 활성 맵 탭이 열려 있어야 캡처가 그 맵에 노드를 만든다.
+    // 일정 없는 일반 노드를 하나 만든다 (피커의 검색 대상).
     await page.click('.sb-section-btn[title="새 마인드맵"]');
     await page.waitForSelector('.canvas', { timeout: 5_000 });
+    await page.click('.canvas');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.editing-text', { timeout: 3_000 });
+    await page.keyboard.type('픽커노드');
+    await page.keyboard.press('Enter');
 
     await page.click('.sb-nav-item:has-text("캘린더")');
     await page.waitForSelector('.cal', { timeout: 5_000 });
     await page.click('.cal-toggle-btn:has-text("주")');
     await page.waitForSelector('.cal-wk-grid', { timeout: 3_000 });
 
-    // 오늘 컬럼의 빈 곳을 클릭 → 인라인 입력 → 타이핑 → Enter
+    // 오늘 컬럼의 빈 곳을 클릭 → 피커가 열린다 (새 노드 생성 아님).
     await page.locator('.cal-wk-col.today').click({ position: { x: 20, y: 180 } });
-    const input = page.locator('.cal-wk-capture-input');
-    await expect(input).toBeVisible();
-    await input.fill('캡처된일정');
-    await input.press('Enter');
+    await page.waitForSelector('.cal-picker', { timeout: 3_000 });
 
-    await expect(page.locator('.cal-wk-block', { hasText: '캡처된일정' })).toBeVisible({ timeout: 3_000 });
+    // 기존 노드를 검색해 선택 → 그 슬롯 시각에 일정이 잡혀 블록으로 뜬다.
+    await page.locator('.cal-picker-search').fill('픽커노드');
+    await page.locator('.cal-picker-row', { hasText: '픽커노드' }).first().click();
+
+    await expect(page.locator('.cal-wk-block', { hasText: '픽커노드' })).toBeVisible({ timeout: 3_000 });
   } finally {
     await cleanup();
   }

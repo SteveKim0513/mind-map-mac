@@ -23,12 +23,13 @@ describe('serialize / deserialize', () => {
           parentId: null,
           children: ['b'],
           collapsed: false,
+          todo: true, // execution state ⇒ 할 일 node (decision 0014); explicit so round-trip equals
           scheduled: true,
           scheduleAt: '2026-06-15T09:00:00',
           reminderOn: true,
           reminderId: 'x-apple://1',
         },
-        b: { id: 'b', text: 'child', parentId: 'a', children: [], collapsed: false, done: true },
+        b: { id: 'b', text: 'child', parentId: 'a', children: [], collapsed: false, todo: true, done: true },
       },
       ['a'],
     );
@@ -58,6 +59,33 @@ describe('serialize / deserialize', () => {
     const back = deserialize(serialize(doc));
     expect(back.nodes.a.durationMin).toBe(90);
     expect(back.version).toBe(1); // additive optional field — no migration, version stays 1
+  });
+
+  it('backfills todo on legacy nodes that carry an execution state (decision 0014)', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      rootIds: ['a', 'b', 'c', 'd'],
+      nodes: {
+        a: { id: 'a', text: 'done', parentId: null, children: [], collapsed: false, done: true },
+        b: { id: 'b', text: 'sched', parentId: null, children: [], collapsed: false, scheduled: true, scheduleAt: '2026-06-15T09:00:00' },
+        c: { id: 'c', text: 'remind', parentId: null, children: [], collapsed: false, reminderOn: true },
+        d: { id: 'd', text: 'plain thought', parentId: null, children: [], collapsed: false },
+      },
+    });
+    const doc = deserialize(raw);
+    expect(doc.nodes.a.todo).toBe(true); // had done → todo
+    expect(doc.nodes.b.todo).toBe(true); // had schedule → todo
+    expect(doc.nodes.c.todo).toBe(true); // had reminder → todo
+    expect(doc.nodes.d.todo).toBeUndefined(); // pure thought stays a plain node
+  });
+
+  it('leaves an explicit todo flag untouched on load', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      rootIds: ['a'],
+      nodes: { a: { id: 'a', text: 'x', parentId: null, children: [], collapsed: false, todo: true } },
+    });
+    expect(deserialize(raw).nodes.a.todo).toBe(true);
   });
 
   it('loads a legacy doc that predates durationMin (field simply absent)', () => {

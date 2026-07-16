@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { createMapStore, setNoteLinkDeleteHook, setNoteLinkRenameHook } from './mapStore';
+import {
+  createMapStore,
+  setNoteLinkDeleteHook,
+  setNoteLinkRenameHook,
+  setReminderDeleteHook,
+} from './mapStore';
 
 /** Build a root with `n` children and return [rootId, childIds]. */
 function rootWithChildren(s: ReturnType<typeof createMapStore>, n: number): [string, string[]] {
@@ -193,6 +198,56 @@ describe('IF-05 · editing a node text signals note-label refresh', () => {
       expect(events.some((e) => e.nodeId === root && e.text === '주간 회의 준비')).toBe(true);
     } finally {
       setNoteLinkRenameHook(null);
+    }
+  });
+});
+
+describe('todo node (decision 0014)', () => {
+  it('setTodo(true) marks a plain node as a 할 일 node', () => {
+    const s = createMapStore();
+    const [root] = rootWithChildren(s, 0);
+    expect(s.getState().doc.nodes[root].todo).toBeUndefined();
+    s.getState().setTodo(root, true);
+    expect(s.getState().doc.nodes[root].todo).toBe(true);
+  });
+
+  it('scheduling, capturing, and completing auto-promote to todo', () => {
+    const s = createMapStore();
+    const [root, [c1, c2]] = rootWithChildren(s, 2);
+    s.getState().setScheduleAt(c1, '2026-07-01T09:00:00');
+    expect(s.getState().doc.nodes[c1].todo).toBe(true);
+    s.getState().toggleDone(c2);
+    expect(s.getState().doc.nodes[c2].todo).toBe(true);
+    const capId = s.getState().captureScheduled('회의', '2026-07-02T10:00:00');
+    expect(s.getState().doc.nodes[capId].todo).toBe(true);
+    // plain sibling untouched
+    expect(s.getState().doc.nodes[root].todo).toBeUndefined();
+  });
+
+  it('setTodo(false) reverts to a plain node and cleans up done/schedule/reminder', () => {
+    const removed: string[] = [];
+    setReminderDeleteHook((ids) => removed.push(...ids));
+    try {
+      const s = createMapStore();
+      const [root, [c]] = rootWithChildren(s, 1);
+      s.getState().setScheduleAt(c, '2026-06-15T09:00:00');
+      s.getState().setReminderOn(c, true);
+      s.getState().applyReminderPatch(c, { reminderId: 'x-apple://1' });
+      s.getState().toggleDone(c);
+      expect(s.getState().doc.nodes[c].todo).toBe(true);
+
+      s.getState().setTodo(c, false);
+      const n = s.getState().doc.nodes[c];
+      expect(n.todo).toBeUndefined();
+      expect(n.done).toBeUndefined();
+      expect(n.scheduled).toBeUndefined();
+      expect(n.scheduleAt).toBeUndefined();
+      expect(n.reminderOn).toBeUndefined();
+      expect(n.reminderId).toBeUndefined();
+      expect(removed).toContain('x-apple://1'); // reminder detached, no orphan
+      expect(root).toBeDefined();
+    } finally {
+      setReminderDeleteHook(null);
     }
   });
 });

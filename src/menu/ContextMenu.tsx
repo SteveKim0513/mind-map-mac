@@ -33,6 +33,8 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
     const colorSet = new Set(sel.map((i) => map.doc.nodes[i]?.color));
     const uniformColor = colorSet.size === 1 ? [...colorSet][0] : undefined;
     const allDone = sel.every((i) => map.doc.nodes[i]?.done);
+    // 결정 0014 · 완료는 할 일 노드에서만. 선택에 일반 노드가 하나라도 섞이면 "완료"를 아예 숨긴다.
+    const allTodo = sel.every((i) => map.doc.nodes[i]?.todo);
     return (
       <div
         ref={ref}
@@ -55,9 +57,11 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
         <div className="ctx-colors">
           <ColorSwatchGrid value={uniformColor} onChange={(c) => run(() => map.setColorSelected(c))()} />
         </div>
-        <button className="ctx-item" onClick={run(() => map.toggleDoneSelected())}>
-          <span>{allDone ? '완료 해제' : '완료 표시'}</span>
-        </button>
+        {allTodo && (
+          <button className="ctx-item" onClick={run(() => map.toggleDoneSelected())}>
+            <span>{allDone ? '완료 해제' : '완료 표시'}</span>
+          </button>
+        )}
         <div className="ctx-sep" />
 
         <button className="ctx-item danger" onClick={run(() => map.deleteSelected())}>
@@ -123,36 +127,48 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       </button>
       <div className="ctx-sep" />
 
-      {/* 실행 — 완료→일정→집중이 하나의 흐름(결정 0011) */}
-      <button className="ctx-item" onClick={run(() => map.toggleDone(id))}>
-        <span>{node.done ? '완료 해제' : '완료 표시'}</span>
-        <kbd>⌘↵</kbd>
-      </button>
-      {node.scheduled ? (
+      {/* 실행 — 완료·일정·집중은 할 일(todo) 노드에서만. 일반 노드는 "할 일로 전환"만 (결정 0014) */}
+      {node.todo ? (
         <>
-          <button className="ctx-item" onClick={run(() => useUi.getState().openSchedule(id))}>
-            <span>날짜·시간 설정…</span>
+          <button className="ctx-item" onClick={run(() => map.toggleDone(id))}>
+            <span>{node.done ? '완료 해제' : '완료 표시'}</span>
+            <kbd>⌘↵</kbd>
           </button>
-          <button className="ctx-item" onClick={run(() => map.setScheduled(id, false))}>
-            <span>{hasChildren ? '하위까지 스케줄 해제' : '스케줄 해제'}</span>
+          {node.scheduled ? (
+            <>
+              <button className="ctx-item" onClick={run(() => useUi.getState().openSchedule(id))}>
+                <span>날짜·시간 설정…</span>
+              </button>
+              <button className="ctx-item" onClick={run(() => map.setScheduled(id, false))}>
+                <span>{hasChildren ? '하위까지 스케줄 해제' : '스케줄 해제'}</span>
+              </button>
+            </>
+          ) : (
+            <button className="ctx-item" onClick={run(() => map.setScheduled(id, true))}>
+              <span>{hasChildren ? '하위까지 일정 지정' : '일정 지정'}</span>
+            </button>
+          )}
+          <button
+            className="ctx-item"
+            disabled={!node.scheduled}
+            title={node.scheduled ? undefined : '일정 설정 후 이용 가능'}
+            onClick={run(() => {
+              if (focusing) useUi.getState().toast('집중이 이미 진행 중입니다');
+              else requestFocusStart(mapStore, id);
+            })}
+          >
+            <span>{focusing ? '집중 중…' : '집중 시작'}</span>
+          </button>
+          <button className="ctx-item subtle" onClick={run(() => map.setTodo(id, false))}>
+            <span>일반 노드로 되돌리기</span>
           </button>
         </>
       ) : (
-        <button className="ctx-item" onClick={run(() => map.setScheduled(id, true))}>
-          <span>{hasChildren ? '하위까지 스케줄 노드로 지정' : '스케줄 노드로 지정'}</span>
+        <button className="ctx-item" onClick={run(() => map.setTodo(id, true))}>
+          <span>할 일로 전환</span>
+          <kbd>⌘↵</kbd>
         </button>
       )}
-      <button
-        className="ctx-item"
-        disabled={!node.scheduled}
-        title={node.scheduled ? undefined : '일정 설정 후 이용 가능'}
-        onClick={run(() => {
-          if (focusing) useUi.getState().toast('집중이 이미 진행 중입니다');
-          else requestFocusStart(mapStore, id);
-        })}
-      >
-        <span>{focusing ? '집중 중…' : '집중 시작'}</span>
-      </button>
       <div className="ctx-sep" />
 
       {/* 통찰 — 더 깊이 쓰고 되짚어 이해(결정 0011) */}

@@ -15,6 +15,11 @@ import {
   DEFAULT_BLOCK_MIN,
   WEEK_GRID_START_HOUR,
   WEEK_GRID_MINUTES,
+  WEEK_GRID_HOUR_PX,
+  WEEK_GRID_HEIGHT_PX,
+  minutesToPx,
+  pxToMinutes,
+  gridHourPx,
 } from './calendarMath';
 import type { AgendaItem } from '../focus/agenda';
 
@@ -229,5 +234,30 @@ describe('layoutDayBlocks', () => {
       { nodeId: 'b', startMin: 30, endMin: 60 },
     ]);
     expect(out.every((b) => b.cols === 1)).toBe(true);
+  });
+});
+
+describe('week grid px scale (alignment §3.8)', () => {
+  it('rail label px and a block at that hour resolve to the SAME px', () => {
+    // The bug: blocks were placed by percent-of-column-height while the rail is
+    // fixed-px, so they drifted apart. The fix: both go through minutesToPx. A
+    // schedule at h:00 must land exactly on the rail's h label.
+    for (let h = WEEK_GRID_START_HOUR; h < WEEK_GRID_START_HOUR + 6; h++) {
+      const at = new Date(2026, 6, 15, h, 0, 0).getTime();
+      const topMin = gridTopMinutes(at, true)!;
+      expect(minutesToPx(topMin)).toBe(gridHourPx(h));
+    }
+  });
+
+  it('minutesToPx is a linear fixed scale independent of any container height', () => {
+    expect(minutesToPx(0)).toBe(0);
+    expect(minutesToPx(60)).toBe(WEEK_GRID_HOUR_PX);
+    expect(minutesToPx(WEEK_GRID_MINUTES)).toBe(WEEK_GRID_HEIGHT_PX);
+  });
+
+  it('pxToMinutes round-trips minutesToPx (click/resize inverse)', () => {
+    for (const min of [0, 15, 90, 375, WEEK_GRID_MINUTES]) {
+      expect(pxToMinutes(minutesToPx(min))).toBeCloseTo(min, 6);
+    }
   });
 });

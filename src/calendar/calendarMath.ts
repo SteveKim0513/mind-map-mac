@@ -124,6 +124,31 @@ export function gridTopMinutes(at: number, hasTime: boolean): number | null {
   return min;
 }
 
+// One fixed vertical scale for the whole week grid — the hour rail, the slot
+// rows, the blocks, and the capture input all convert minutes→px through this,
+// so they stay aligned no matter how tall the pane is. (The old code positioned
+// blocks by a PERCENT of the column height; when the grid stretched taller than
+// its content the percent drifted off the fixed-px rail — see the alignment bug
+// in specs/2026-07-16-calendar-ux-overhaul.md §3.8.)
+export const WEEK_GRID_HOUR_PX = 40; // must match .cal-wk-hour / .cal-wk-slot height
+export const PX_PER_MIN = WEEK_GRID_HOUR_PX / 60;
+export const WEEK_GRID_HEIGHT_PX = WEEK_GRID_MINUTES * PX_PER_MIN;
+
+/** Vertical px from the grid top for `minutesFromGridTop` (0 = WEEK_GRID_START_HOUR). */
+export function minutesToPx(minutesFromGridTop: number): number {
+  return minutesFromGridTop * PX_PER_MIN;
+}
+
+/** Inverse of minutesToPx: a px offset from the grid top → minutes from the top. */
+export function pxToMinutes(px: number): number {
+  return px / PX_PER_MIN;
+}
+
+/** px offset of an hour label/gridline on the rail (0 at WEEK_GRID_START_HOUR). */
+export function gridHourPx(hour: number): number {
+  return (hour - WEEK_GRID_START_HOUR) * WEEK_GRID_HOUR_PX;
+}
+
 // ── Time blocks (Phase 3) ─────────────────────────────────────────────────────
 // A block's visual length is its durationMin; a point event (no duration) gets a
 // small default so it stays legible. Overlapping blocks are packed side-by-side.

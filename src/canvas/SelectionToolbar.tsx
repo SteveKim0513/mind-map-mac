@@ -24,6 +24,7 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
   const node = useMap((s) => s.doc.nodes[nodeId]);
   const setColor = useMap((s) => s.setColor);
   const toggleDone = useMap((s) => s.toggleDone);
+  const setTodo = useMap((s) => s.setTodo);
   const addChild = useMap((s) => s.addChild);
   const deleteNode = useMap((s) => s.deleteNode);
   const mapStore = useMapStore();
@@ -52,24 +53,32 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
       </button>
       <span className="st-sep" />
 
-      {/* 실행 */}
-      <button
-        className={`st-btn${node.done ? ' on' : ''}`}
-        title="완료"
-        onClick={() => toggleDone(nodeId)}
-      >
-        <Icon name="check" />
-      </button>
-      {node.scheduled && (
-        <button
-          className={`st-btn${focusing ? ' on' : ''}`}
-          title={focusing ? '집중 중 (클릭하면 안내)' : '집중 시작'}
-          onClick={() => {
-            if (focusing) useUi.getState().toast('집중이 이미 진행 중입니다. 먼저 종료하세요.');
-            else requestFocusStart(mapStore, nodeId);
-          }}
-        >
-          <Icon name="clock" />
+      {/* 실행 — 완료·집중은 할 일(todo) 노드에서만. 일반 노드는 "할 일로" 전환만 (결정 0014) */}
+      {node.todo ? (
+        <>
+          <button
+            className={`st-btn${node.done ? ' on' : ''}`}
+            title="완료"
+            onClick={() => toggleDone(nodeId)}
+          >
+            <Icon name="check" />
+          </button>
+          {node.scheduled && (
+            <button
+              className={`st-btn${focusing ? ' on' : ''}`}
+              title={focusing ? '집중 중 (클릭하면 안내)' : '집중 시작'}
+              onClick={() => {
+                if (focusing) useUi.getState().toast('집중이 이미 진행 중입니다. 먼저 종료하세요.');
+                else requestFocusStart(mapStore, nodeId);
+              }}
+            >
+              <Icon name="clock" />
+            </button>
+          )}
+        </>
+      ) : (
+        <button className="st-btn" title="할 일로 전환" onClick={() => setTodo(nodeId, true)}>
+          <Icon name="checklist" />
         </button>
       )}
       <span className="st-sep" />

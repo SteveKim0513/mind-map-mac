@@ -66,9 +66,14 @@ export function useKeyboard() {
           break;
         case 'Enter':
           e.preventDefault();
-          // ⌘Enter toggles "done"
+          // ⌘Enter — 결정 0014: 일반 노드는 할 일로 전환, 할 일 노드는 완료 토글.
+          // (한 번 눌러 할 일로 만들고, 다시 눌러 완료)
           if (e.metaKey || e.ctrlKey) {
-            if (sel) s.toggleDone(sel);
+            if (sel) {
+              const node = s.doc.nodes[sel];
+              if (node && !node.todo) s.setTodo(sel, true);
+              else if (node) s.toggleDone(sel);
+            }
             break;
           }
           // Backup guard: ignore the Enter that just finished an edit (same key press

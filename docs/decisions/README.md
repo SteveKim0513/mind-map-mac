@@ -31,3 +31,4 @@
 - [0011 — 기능의 3가지 축: 정리·실행·통찰 (0007 G3 보강)](0011-three-axis-thinking-model.md)
 - [0012 — 노드 지속시간 필드(durationMin) — version 범프 없는 선택 필드](0012-node-duration-field.md)
 - [0013 — 온보딩(첫 실행 코치)은 기능이 안정된 뒤에 도입한다](0013-onboarding-after-features-stable.md)
+- [0014 — 완료·일정·집중은 할 일(todo) 노드 전용 (0011 §4 실행 그룹 개정)](0014-todo-node.md)

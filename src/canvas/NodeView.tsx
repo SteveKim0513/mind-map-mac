@@ -37,6 +37,7 @@ export function NodeView({
   const commitText = useMap((s) => s.commitText);
   const cancelEdit = useMap((s) => s.cancelEdit);
   const deleteNode = useMap((s) => s.deleteNode);
+  const toggleDone = useMap((s) => s.toggleDone);
   const toggleCollapse = useMap((s) => s.toggleCollapse);
   const addChild = useMap((s) => s.addChild);
   const removeNodeLink = useMap((s) => s.removeNodeLink);
@@ -144,6 +145,7 @@ export function NodeView({
     editing ? 'editing' : '',
     isDropTarget ? 'drop-target' : '',
     isDragging ? 'dragging' : '',
+    node.todo ? 'todo' : '',
     node.done ? 'done' : '',
     node.scheduled ? 'scheduled' : '',
     isMatch ? 'match' : '',
@@ -190,6 +192,19 @@ export function NodeView({
     >
       {/* title row */}
       <div className="node-line">
+        {node.todo && !editing && (
+          <button
+            className={`node-check${node.done ? ' done' : ''}`}
+            title={node.done ? '완료 해제' : '완료'}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleDone(node.id);
+            }}
+          >
+            {node.done && <Icon name="check" />}
+          </button>
+        )}
         {node.icon && (
           <span className="icon">{isIconName(node.icon) ? <Icon name={node.icon} /> : node.icon}</span>
         )}

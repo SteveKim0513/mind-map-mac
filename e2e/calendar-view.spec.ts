@@ -54,7 +54,7 @@ test('오늘 일정이 있으면 일간 뷰에 나타나고, 집중을 시작할
 
     const card = page.locator('.cal-daycard', { hasText: '캘린더 테스트 노드' });
     await expect(card).toBeVisible();
-    await card.locator('.cal-daycard-focus').click();
+    await card.locator('.cal-daycard-act--focus').click();
     await page.waitForSelector('.focus-start', { timeout: 3_000 });
   } finally {
     await cleanup();

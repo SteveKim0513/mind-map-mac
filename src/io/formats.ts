@@ -36,6 +36,10 @@ export function deserialize(text: string): MindMapDoc {
     n.children ??= [];
     n.collapsed ??= false;
     if (n.color) n.color = normalizeColor(n.color); // legacy raw-hex tags → semantic keys
+    // 결정 0014 · pre-todo files: any node that already carried an execution state
+    // (done/schedule/reminder) is an implicit 할 일 node — backfill so it keeps its
+    // completion/schedule/focus affordances after the todo-gating change.
+    if (n.todo === undefined && (n.done || n.scheduled || n.reminderOn)) n.todo = true;
   }
   for (const s of parsed.sections ?? []) if (s.color) s.color = normalizeColor(s.color);
   parsed.view ??= { zoom: 1, panX: 0, panY: 0 };

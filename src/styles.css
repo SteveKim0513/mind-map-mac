@@ -1545,6 +1545,30 @@ button {
   max-width: 100%;
 }
 
+/* 할 일(todo) 노드 — 체크박스 글리프가 일반 노드(생각)와 시각으로 구분한다 (결정 0014) */
+.node-check {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1.5px solid var(--ink-faint);
+  border-radius: var(--r-full);
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: background 0.12s, border-color 0.12s;
+}
+.node-check .ic { width: 11px; height: 11px; }
+.node-check:hover { border-color: var(--primary); }
+.node-check.done { background: var(--state-done); border-color: var(--state-done); }
+/* todo 노드 박스에 아주 옅은 실행 악센트(왼쪽) — 색이 지정된/선택된 노드는 그 상태가 우선 */
+.node.todo:not(.tinted):not(.selected):not(.done) {
+  border-color: color-mix(in srgb, var(--state-done) 22%, var(--hairline));
+}
+
 /* ① inline memo — a secondary body line, clearly subordinate to the title:
    smaller, lighter, and set off by a quote-like left rule. */
 .node-memo {
@@ -5666,7 +5690,10 @@ textarea:focus-visible,
 }
 .cal-daycard-map, .cal-daycard-dur { color: var(--ink-faint); }
 .cal-daycard-acts { display: flex; align-items: center; gap: 4px; padding-right: 8px; }
-.cal-daycard-focus {
+/* 집중·완료 = one matched pill pair (icon + label), role differentiated only by
+   hover/active color. Unified so the two buttons read as a set (design principle
+   5, calendar-ux-overhaul §3.1). */
+.cal-daycard-act {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -5679,15 +5706,18 @@ textarea:focus-visible,
   border-radius: var(--r-sm);
   white-space: nowrap;
 }
-.cal-daycard-focus .ic { width: 13px; height: 13px; }
-.cal-daycard-focus:hover {
+.cal-daycard-act .ic { width: 13px; height: 13px; }
+.cal-daycard-act--focus:hover {
   color: var(--primary);
   border-color: color-mix(in srgb, var(--primary) 40%, var(--hairline));
   background: color-mix(in srgb, var(--primary) 8%, var(--canvas));
 }
-.cal-daycard-check { display: inline-flex; border: none; background: transparent; color: var(--ink-faint); cursor: pointer; padding: 6px; border-radius: var(--r-sm); }
-.cal-daycard-check .ic { width: 15px; height: 15px; }
-.cal-daycard-check:hover { color: var(--state-done); background: var(--hover); }
+.cal-daycard-act--done:hover,
+.cal-daycard-act--done.is-done {
+  color: var(--state-done);
+  border-color: color-mix(in srgb, var(--state-done) 40%, var(--hairline));
+  background: color-mix(in srgb, var(--state-done) 8%, var(--canvas));
+}
 /* overdue — carried-over work, collapsed above today */
 .cal-overdue { margin-bottom: 12px; }
 .cal-overdue-toggle {
@@ -5740,7 +5770,7 @@ textarea:focus-visible,
 .cal-item-act:hover { background: var(--hover); color: var(--ink); }
 
 /* week view — time grid: day header, all-day strip, hour rail + 7 day columns */
-.cal-wk { display: flex; flex-direction: column; height: 100%; }
+.cal-wk { display: flex; flex-direction: column; height: 100%; position: relative; }
 .cal-wk-head, .cal-wk-allday {
   display: grid;
   grid-template-columns: 46px repeat(7, minmax(0, 1fr));
@@ -5771,6 +5801,10 @@ textarea:focus-visible,
   overflow-y: auto;
   display: grid;
   grid-template-columns: 46px repeat(7, minmax(0, 1fr));
+  /* Keep the single row at its fixed content height (18h × 40px) instead of
+     stretching to fill a tall pane — blocks are placed in fixed px (minutesToPx)
+     to match the hour rail, so a stretched column would drift them (§3.8). */
+  align-content: start;
 }
 .cal-wk-rail { border-right: 1px solid var(--hairline); }
 .cal-wk-hour { height: 40px; position: relative; }
@@ -5799,31 +5833,7 @@ textarea:focus-visible,
 .cal-wk-block-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; z-index: 2; }
 .cal-wk-block:hover .cal-wk-block-resize { background: color-mix(in srgb, var(--state-scheduled) 45%, transparent); }
 
-/* empty-slot quick-capture (Phase 1c) */
-.cal-wk-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  font-size: 12px;
-  color: var(--ink-secondary);
-  background: color-mix(in srgb, var(--state-scheduled) 10%, var(--canvas-soft));
-  border-bottom: 1px solid var(--hairline);
-}
-.cal-wk-hint-x { margin-left: auto; border: none; background: transparent; cursor: pointer; color: var(--ink-muted); display: inline-flex; padding: 2px; border-radius: var(--r-sm); }
-.cal-wk-hint-x:hover { background: var(--hover); color: var(--ink); }
-.cal-wk-hint-x .ic { width: 13px; height: 13px; }
-.cal-wk-capture { position: absolute; left: 2px; right: 2px; z-index: 3; }
-.cal-wk-capture-input {
-  width: 100%;
-  font-size: 12px;
-  color: var(--ink);
-  background: var(--canvas);
-  border: 1px solid var(--primary);
-  border-radius: var(--r-sm);
-  padding: 4px 6px;
-  outline: none;
-}
+.cal-wk-allday-col { cursor: pointer; }
 
 /* month view — traditional grid; each cell shows draggable item chips */
 .cal-month { padding: 12px 20px 20px; }
@@ -5832,7 +5842,9 @@ textarea:focus-visible,
 .cal-month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-month-cell {
   position: relative;
-  min-height: 92px;
+  /* Fixed height so every cell is uniform and its chips scroll inside instead of
+     truncating with "+N" (§3.7). Raised 92→120px to show more before scrolling. */
+  height: 120px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -5859,9 +5871,204 @@ textarea:focus-visible,
 }
 .cal-month-datebtn:hover { background: var(--hover); }
 .cal-month-cell.today .cal-month-datebtn { color: var(--state-scheduled); font-weight: 600; }
-.cal-month-chips { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; }
-.cal-month-more { align-self: flex-start; border: none; background: transparent; cursor: pointer; font-size: 11px; color: var(--ink-muted); padding: 0 4px; }
-.cal-month-more:hover { color: var(--ink); text-decoration: underline; }
+.cal-month-chips { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-y: auto; }
+
+/* ── SubtreeMiniView — read-only schedule-node preview (§3.2) ─────────────── */
+.cal-peek-mini { width: 100%; overflow: hidden; }
+.cal-peek-edge { fill: none; stroke: var(--edge); stroke-width: 1.4; }
+.cal-peek-node rect { fill: var(--surface); stroke: var(--hairline); stroke-width: 1; }
+.cal-peek-node text { fill: var(--ink); font-size: 12px; }
+.cal-peek-node.root rect {
+  fill: color-mix(in srgb, var(--state-scheduled) 16%, var(--surface));
+  stroke: color-mix(in srgb, var(--state-scheduled) 45%, var(--hairline));
+}
+.cal-peek-node.root text { font-weight: 600; }
+.cal-peek-node.root:hover rect { fill: color-mix(in srgb, var(--state-scheduled) 26%, var(--surface)); }
+.cal-peek-node.done text { fill: var(--ink-faint); text-decoration: line-through; }
+.cal-peek-empty { font-size: 12px; color: var(--ink-faint); padding: 8px; }
+
+/* ── Peek containers: day drawer / month panel / week popup (§3.2) ─────────── */
+.cal-daycard-wrap { display: flex; flex-direction: column; gap: 6px; }
+.cal-daycard.peeked { border-color: color-mix(in srgb, var(--state-scheduled) 45%, var(--hairline)); }
+.cal-peek {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.cal-peek-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--canvas-soft);
+}
+.cal-peek-title { font-size: 13px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-peek-map { font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
+.cal-peek-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid color-mix(in srgb, var(--state-scheduled) 40%, var(--hairline));
+  background: color-mix(in srgb, var(--state-scheduled) 10%, var(--canvas));
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+.cal-peek-open:hover { color: var(--state-scheduled); border-color: color-mix(in srgb, var(--state-scheduled) 55%, var(--hairline)); }
+.cal-peek-open .ic { width: 13px; height: 13px; }
+.cal-peek-x { display: inline-flex; border: none; background: transparent; color: var(--ink-faint); cursor: pointer; padding: 5px; border-radius: var(--r-sm); }
+.cal-peek-x .ic { width: 14px; height: 14px; }
+.cal-peek-x:hover { color: var(--ink); background: var(--hover); }
+.cal-peek-panel { margin-top: 12px; }
+.cal-peek-popup-scrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  z-index: 20;
+}
+.cal-peek-popup {
+  width: min(460px, 90%);
+  max-height: 80%;
+  overflow: auto;
+  box-shadow: var(--shadow-2);
+  border-radius: var(--r-md);
+}
+.cal-peek-popup .cal-peek { border: none; }
+
+/* ── Create-schedule entry points (§3.4–3.5) ──────────────────────────────── */
+.cal-day-top { display: flex; align-items: center; gap: 8px; padding: 0 2px 8px; }
+.cal-day-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+}
+.cal-day-add:hover {
+  color: var(--state-scheduled);
+  border-color: color-mix(in srgb, var(--state-scheduled) 40%, var(--hairline));
+}
+.cal-day-add .ic { width: 13px; height: 13px; }
+.cal-month-add {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.cal-month-add .ic { width: 13px; height: 13px; }
+.cal-month-add:hover { color: var(--state-scheduled); background: var(--hover); }
+.cal-month-cell:hover .cal-month-add { opacity: 1; }
+
+/* ── SchedulePicker: search existing / new → 오늘의 생각 / 종일·시간 (§3.3) ── */
+.cal-picker-scrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8vh;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  z-index: 30;
+}
+.cal-picker {
+  width: min(440px, 92%);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.cal-picker-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 8px 14px; }
+.cal-picker-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.cal-picker-when { font-size: 12px; color: var(--state-scheduled); font-variant-numeric: tabular-nums; }
+.cal-picker-x { display: inline-flex; border: none; background: transparent; color: var(--ink-faint); cursor: pointer; padding: 5px; border-radius: var(--r-sm); }
+.cal-picker-x .ic { width: 14px; height: 14px; }
+.cal-picker-x:hover { color: var(--ink); background: var(--hover); }
+.cal-picker-search {
+  margin: 0 14px 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  outline: none;
+}
+.cal-picker-search:focus { border-color: var(--state-map); }
+.cal-picker-time { display: flex; align-items: center; gap: 10px; padding: 0 14px 10px; }
+.cal-picker-seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: var(--r-sm); overflow: hidden; }
+.cal-picker-seg-btn { border: none; background: var(--canvas); color: var(--ink-secondary); cursor: pointer; font-size: 12px; padding: 5px 12px; }
+.cal-picker-seg-btn.on { background: color-mix(in srgb, var(--state-scheduled) 16%, var(--canvas)); color: var(--state-scheduled); }
+.cal-picker-timefield {
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  outline: none;
+}
+.cal-picker-timefield:focus { border-color: var(--state-map); }
+.cal-picker-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px; border-top: 1px solid var(--hairline); }
+.cal-picker-new {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  color: var(--state-map);
+  font-size: 13px;
+  text-align: left;
+}
+.cal-picker-new:hover { background: color-mix(in srgb, var(--state-map) 12%, transparent); }
+.cal-picker-new .ic { width: 14px; height: 14px; flex-shrink: 0; }
+.cal-picker-new-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-picker-new-dest { color: var(--ink-faint); font-size: 12px; }
+.cal-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  text-align: left;
+}
+.cal-picker-row:hover { background: var(--hover); }
+.cal-picker-row-text { flex: 1; min-width: 0; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-picker-row-map { font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
+.cal-picker-row.scheduled .cal-picker-row-text { color: var(--ink-muted); }
+.cal-picker-empty { font-size: 12px; color: var(--ink-faint); padding: 10px; text-align: center; }
 
 /* plan ↔ actual overlay (Phase 2) — real focus time shown against the plan */
 .cal-day-summary { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }

@@ -5,7 +5,11 @@ export interface MindNode {
   parentId: string | null; // null = this node is a root
   children: string[]; // ordered child ids
   collapsed: boolean; // when true, descendants are hidden
-  done?: boolean; // marked complete (strikethrough + faded)
+  // 할 일(todo) 노드 표식 — 완료·일정·집중은 todo 노드에서만 노출된다(결정 0014). 일반 노드는
+  // 순수 생각. 선택 필드·가산이라 version 무범프(0012 선례); done/scheduled/reminderOn이 있으면
+  // 로드 시 todo로 backfill(io/formats.ts).
+  todo?: boolean;
+  done?: boolean; // marked complete (strikethrough + faded) — only on todo nodes
   color?: string; // tag-palette key ('red'…'brown'); see theme/palette.ts
   icon?: string; // optional emoji/icon prefix
   note?: string; // optional long-form note

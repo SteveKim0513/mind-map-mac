@@ -73,6 +73,7 @@ MindMap은 **Electron + React + TypeScript** macOS 데스크탑 앱이다.
 | 기능의 3가지 축: 정리·실행·통찰 | `docs/decisions/0011-three-axis-thinking-model.md` |
 | 노드 지속시간 필드(durationMin) — version 무범프 선택 필드 | `docs/decisions/0012-node-duration-field.md` |
 | 온보딩은 기능 안정화 후 도입 (조기 코치 제거) | `docs/decisions/0013-onboarding-after-features-stable.md` |
+| 완료·일정·집중은 할 일(todo) 노드 전용 (0011 실행 그룹 개정) | `docs/decisions/0014-todo-node.md` |
 
 ## 경계 규칙 (기계적으로 강제)
 
