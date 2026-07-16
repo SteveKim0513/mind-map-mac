@@ -8,6 +8,7 @@ Claude Code가 실행하는 이벤트 기반 스크립트. `.claude/settings.jso
 |---|---|---|
 | `PreToolUse` (Bash) | `block-destructive-command.sh` | 파괴적 명령 차단 |
 | `PreToolUse` (Bash) | `check-docs-before-commit.sh` | `git commit` 전 `make harness-check` 실행 — 문서 구조 무결성(폴더 지도·결정 표·인덱스 동기화) 깨지면 커밋 차단 |
+| `PreToolUse` (Bash) | `remind-usage-guide.sh` | `git commit` 시 사용자 대면 기능 코드가 바뀌었는데 사용 안내(`src/ui/Manual.tsx`)가 함께 안 바뀌면 갱신 안내 (advisory) |
 | `PreToolUse` (Edit/Write) | `protect-sensitive-files.sh` | 민감 파일 보호 |
 | `PostToolUse` (Edit/Write) | `format-changed-files.sh` | 변경 파일 빠른 타입 검사 |
 | `PostToolUse` (Write) | `remind-doc-index.sh` | 새 결정/명세/리포트 문서 생성 시 인덱스 갱신 안내 (advisory) |

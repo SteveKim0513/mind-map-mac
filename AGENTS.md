@@ -102,6 +102,7 @@ make harness-check # 아키텍처 + 문서 무결성 검사
 ## 문서 갱신 규칙
 
 - 기능 변경 → 같은 PR에서 `docs/product/FEATURE-INVENTORY.md` 갱신
+- 사용자 대면 기능 추가·변경 → `src/ui/Manual.tsx`(앱 내 "사용 안내")도 같은 PR에서 갱신 (`remind-usage-guide.sh` hook이 커밋 시 누락을 알림)
 - 번복 가능한 설계 결정 → `docs/decisions/NNNN-title.md` 추가
 - 신규 기능 → `docs/product/specs/` 에 명세 먼저
 - 빌드·실행·테스트 명령 변경 → `AGENTS.md`, `CLAUDE.md`, `docs/operations/` 동시 갱신

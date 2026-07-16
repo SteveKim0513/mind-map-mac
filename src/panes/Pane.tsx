@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContext, useMap, useMapStore, type MapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
@@ -10,7 +10,6 @@ import { SchedulePopover } from '../inspector/SchedulePopover';
 import { LinkAddPopover } from '../inspector/LinkAddPopover';
 import { ContextMenu } from '../menu/ContextMenu';
 import { Breadcrumb } from '../ui/Breadcrumb';
-import { FirstRunCoach } from '../ui/FirstRunCoach';
 import { Icon } from '../ui/Icon';
 import { tagVar } from '../theme/palette';
 import { useSession, type Tab } from '../store/sessionStore';
@@ -68,26 +67,6 @@ function PaneBody({
 
   const isEmpty = doc.rootIds.length === 0;
 
-  // 첫 실행 코치: 처음 빈 맵에서만 1회. 첫 노드를 만들면(빈 상태 벗어남) 본 것으로 간주.
-  const [coachSeen, setCoachSeen] = useState(() => {
-    try {
-      return !!localStorage.getItem('onboardingSeen');
-    } catch {
-      return true;
-    }
-  });
-  const markCoachSeen = useCallback(() => {
-    try {
-      localStorage.setItem('onboardingSeen', '1');
-    } catch {
-      /* localStorage unavailable — coach just won't persist */
-    }
-    setCoachSeen(true);
-  }, []);
-  useEffect(() => {
-    if (!isEmpty && !coachSeen) markCoachSeen();
-  }, [isEmpty, coachSeen, markCoachSeen]);
-
   // report zoom controls up when this pane is the active one
   useEffect(() => {
     onControls(isActive ? handle : null);
@@ -143,17 +122,14 @@ function PaneBody({
       <Canvas ref={setHandle} active={isActive} />
       <Breadcrumb />
 
-      {isEmpty &&
-        (!coachSeen ? (
-          <FirstRunCoach onDismiss={markCoachSeen} />
-        ) : (
-          <div className="empty">
-            <div className="title">빈 마인드맵</div>
-            <div className="hint">
-              <kbd>Enter</kbd> 를 눌러 중심 주제를 만드세요
-            </div>
+      {isEmpty && (
+        <div className="empty">
+          <div className="title">빈 마인드맵</div>
+          <div className="hint">
+            <kbd>Enter</kbd> 를 눌러 중심 주제를 만드세요
           </div>
-        ))}
+        </div>
+      )}
 
       <div className="toolbar">
         <span className={`map-save${dirty ? ' saving' : ''}`} title={dirty ? '저장 중' : '저장됨'} />

@@ -16,7 +16,7 @@ import { buildAgenda, type AgendaItem, type Agenda } from '../focus/agenda';
 import { dayKey, dailyTotals, fmtDuration } from '../focus/aggregate';
 import { mapStoreById } from '../focus/controller';
 import type { FocusSession } from '../types';
-import { AgendaRow, dayHeader, rowTime, linkOf, makeAgendaActions, type AgendaActions } from '../focus/AgendaRow';
+import { rowTime, linkOf, mapName, makeAgendaActions, type AgendaActions } from '../focus/AgendaRow';
 import { revealNode } from '../note/noteLinks';
 import {
   startOfDay,
@@ -320,6 +320,74 @@ function DaySummary({
   );
 }
 
+const durLabel = (m: number): string =>
+  m < 60 ? `${m}분` : m % 60 === 0 ? `${m / 60}시간` : `${Math.floor(m / 60)}시간 ${m % 60}분`;
+
+/** A rich day-view card: big time badge + full (wrapping) title + meta + an
+ *  always-visible "집중" action. The day view is the app's home for "what do I do
+ *  now" (결정 0011 실행), so the focus action is primary and titles never truncate. */
+function DayCard({
+  it,
+  actions,
+  overdue,
+  isNext,
+}: {
+  it: AgendaItem;
+  actions: AgendaActions;
+  overdue?: boolean;
+  isNext?: boolean;
+}) {
+  const timeLabel = overdue ? `${new Date(it.at).getMonth() + 1}/${new Date(it.at).getDate()}` : rowTime(it);
+  const map = mapName(it);
+  return (
+    <div className={`cal-daycard${it.done ? ' done' : ''}${overdue ? ' over' : ''}${isNext ? ' next' : ''}`}>
+      <button className="cal-daycard-hit" onClick={() => actions.reveal(it)} title="노드로 이동">
+        <span className="cal-daycard-time">{timeLabel}</span>
+        <span className="cal-daycard-main">
+          <span className="cal-daycard-title">{it.text}</span>
+          {(isNext || map || it.durationMin) && (
+            <span className="cal-daycard-meta">
+              {isNext && <span className="cal-daycard-next">다음</span>}
+              {map && <span className="cal-daycard-map">{map}</span>}
+              {it.durationMin ? <span className="cal-daycard-dur">{durLabel(it.durationMin)}</span> : null}
+            </span>
+          )}
+        </span>
+      </button>
+      <span className="cal-daycard-acts">
+        <button className="cal-daycard-focus" onClick={() => actions.startFocus(it)} title="집중 세션 시작">
+          <Icon name="clock" />
+          집중
+        </button>
+        <button className="cal-daycard-check" title="완료 표시" onClick={() => actions.toggleDone(it)}>
+          <Icon name="check" />
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/** Overdue = carried-over work (still actionable today). Collapsed by default so
+ *  the day view leads with *today only*; one click reveals it. */
+function OverdueSection({ items, actions }: { items: AgendaItem[]; actions: AgendaActions }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`cal-overdue${open ? ' open' : ''}`}>
+      <button className="cal-overdue-toggle" onClick={() => setOpen((o) => !o)}>
+        <Icon name="chevronRight" />
+        지남 {items.length}개
+      </button>
+      {open && (
+        <div className="cal-day-list">
+          {items.map((it) => (
+            <DayCard key={it.nodeId} it={it} actions={actions} overdue />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DayPane({
   anchor,
   agenda,
@@ -336,83 +404,56 @@ function DayPane({
   focusByDay: Map<string, number>;
 }) {
   const isToday = anchor === startOfDay(now);
-  const dayAllForSummary = grouped.get(dayKey(anchor)) ?? [];
+  const dayAll = grouped.get(dayKey(anchor)) ?? [];
   const summary = (
     <DaySummary
-      planned={dayAllForSummary.length}
+      planned={dayAll.length}
       focusSec={focusByDay.get(dayKey(anchor)) ?? 0}
-      done={dayAllForSummary.filter((i) => i.done).length}
+      done={dayAll.filter((i) => i.done).length}
     />
   );
 
+  // Today: lead with *today only* (no upcoming days). Overdue sits collapsed above.
   if (isToday && agenda) {
-    const empty = !agenda.overdue.length && !agenda.today.length && !agenda.upcoming.length;
-    if (empty) {
-      const focusSec = focusByDay.get(dayKey(anchor)) ?? 0;
-      return (
-        <div className="cal-day-body">
-          {summary}
-          <div className="cal-empty">
-            오늘 예정된 일정이 없어요.
-            {focusSec === 0 && (
-              <>
-                <br />
-                노드에 날짜·시간을 설정하면 여기 모여요.
-              </>
-            )}
-          </div>
-        </div>
-      );
-    }
+    const nextId = agenda.today.find((it) => it.hasTime && it.at > now)?.nodeId;
+    const nothing = agenda.today.length === 0 && agenda.overdue.length === 0;
     return (
       <div className="cal-day-body">
         {summary}
-        {agenda.overdue.length > 0 && (
-          <div className="today-sec">
-            <div className="today-sec-label over">지남</div>
-            {agenda.overdue.map((it) => (
-              <AgendaRow key={it.nodeId} it={it} overdue actions={actions} />
+        {agenda.overdue.length > 0 && <OverdueSection items={agenda.overdue} actions={actions} />}
+        {agenda.today.length > 0 ? (
+          <div className="cal-day-list">
+            {agenda.today.map((it) => (
+              <DayCard key={it.nodeId} it={it} actions={actions} isNext={it.nodeId === nextId} />
             ))}
           </div>
+        ) : nothing ? (
+          <div className="cal-empty">
+            오늘 예정된 일정이 없어요.
+            <br />
+            노드에 날짜·시간을 설정하면 여기 모여요.
+          </div>
+        ) : (
+          <div className="cal-day-empty">오늘 예정된 일정은 없어요.</div>
         )}
-        <div className="today-sec">
-          <div className="today-sec-label">오늘</div>
-          {agenda.today.length === 0 ? (
-            <div className="cal-day-empty">일정 없음</div>
-          ) : (
-            agenda.today.map((it) => <AgendaRow key={it.nodeId} it={it} actions={actions} />)
-          )}
-        </div>
-        {agenda.upcoming.map((g) => (
-          <div className="today-sec" key={g.day}>
-            <div className="today-sec-label">{dayHeader(g.day, now)}</div>
-            {g.items.map((it) => (
-              <AgendaRow key={it.nodeId} it={it} actions={actions} />
-            ))}
-          </div>
-        ))}
       </div>
     );
   }
 
-  const dayAll = grouped.get(dayKey(anchor)) ?? [];
+  // Other day: only that day's pending items (never future info).
   const pending = dayAll.filter((i) => !i.done);
-  const doneCount = dayAll.length - pending.length;
-
   return (
     <div className="cal-day-body">
       {summary}
-      <div className="today-sec">
-        <div className="today-sec-label">
-          {fmtDay(anchor)}
-          {doneCount > 0 && ` · 완료 ${doneCount}`}
+      {pending.length === 0 ? (
+        <div className="cal-empty">이 날은 예정된 일정이 없어요.</div>
+      ) : (
+        <div className="cal-day-list">
+          {pending.map((it) => (
+            <DayCard key={it.nodeId} it={it} actions={actions} />
+          ))}
         </div>
-        {pending.length === 0 ? (
-          <div className="cal-day-empty">일정 없음</div>
-        ) : (
-          pending.map((it) => <AgendaRow key={it.nodeId} it={it} actions={actions} />)
-        )}
-      </div>
+      )}
     </div>
   );
 }

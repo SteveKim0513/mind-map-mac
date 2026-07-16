@@ -52,9 +52,9 @@ test('오늘 일정이 있으면 일간 뷰에 나타나고, 집중을 시작할
     await page.click('.sb-nav-item:has-text("캘린더")');
     await page.waitForSelector('.cal', { timeout: 5_000 });
 
-    const row = page.locator('.today-row', { hasText: '캘린더 테스트 노드' });
-    await expect(row).toBeVisible();
-    await row.locator('.today-act.focus').click();
+    const card = page.locator('.cal-daycard', { hasText: '캘린더 테스트 노드' });
+    await expect(card).toBeVisible();
+    await card.locator('.cal-daycard-focus').click();
     await page.waitForSelector('.focus-start', { timeout: 3_000 });
   } finally {
     await cleanup();

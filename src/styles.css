@@ -2344,66 +2344,6 @@ button {
   color: var(--ink-secondary);
 }
 
-/* ── First-run coach (empty canvas, first workspace only) ───────────────────── */
-.frc {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  pointer-events: none; /* Enter/Tab pass through to the canvas; only 건너뛰기 is clickable */
-}
-.frc-title {
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.4px;
-  color: var(--ink-secondary);
-}
-.frc-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.frc-steps li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  color: var(--ink-muted);
-}
-.frc-steps kbd,
-.frc-type {
-  flex: none;
-  min-width: 66px;
-  text-align: center;
-  font-family: var(--font);
-  font-size: 13px;
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-sm);
-  padding: 3px 8px;
-  color: var(--ink-secondary);
-}
-.frc-steps kbd { border-bottom-width: 2px; }
-.frc-type { color: var(--primary); }
-.frc-skip {
-  pointer-events: auto;
-  background: none;
-  border: none;
-  color: var(--ink-faint);
-  font-family: var(--font);
-  font-size: 12.5px;
-  cursor: pointer;
-  padding: 4px 8px;
-}
-.frc-skip:hover { color: var(--ink-secondary); }
-
 /* ── Help hint (bottom-left) ────────────────────────────────────────────────── */
 .help {
   position: absolute;
@@ -5663,6 +5603,102 @@ textarea:focus-visible,
 .cal-empty, .cal-day-empty { padding: 56px 24px; text-align: center; color: var(--ink-muted); line-height: 1.8; }
 .cal-day-empty { padding: 10px 4px; text-align: left; font-size: 13px; }
 .cal-day-body { padding: 16px 20px 24px; max-width: 640px; margin: 0 auto; }
+
+/* day view — rich cards (redesigned): the core "오늘" screen. Titles wrap (never
+   truncate); the "집중" action is always visible; the next-up item is highlighted. */
+.cal-day-list { display: flex; flex-direction: column; gap: 8px; }
+.cal-daycard {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  transition: border-color 0.12s;
+}
+.cal-daycard:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--hairline)); }
+.cal-daycard.next {
+  border-color: color-mix(in srgb, var(--state-scheduled) 45%, var(--hairline));
+  background: color-mix(in srgb, var(--state-scheduled) 6%, var(--canvas-soft));
+}
+.cal-daycard.over { background: color-mix(in srgb, var(--state-danger) 6%, var(--canvas-soft)); }
+.cal-daycard.done { opacity: 0.55; }
+.cal-daycard.done .cal-daycard-title { text-decoration: line-through; }
+.cal-daycard-hit {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  padding: 11px 4px 11px 12px;
+}
+.cal-daycard-time {
+  flex: none;
+  width: 52px;
+  padding-top: 1px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.cal-daycard.over .cal-daycard-time { color: var(--state-danger); }
+.cal-daycard-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cal-daycard-title { font-size: 13.5px; line-height: 1.45; color: var(--ink); white-space: normal; overflow-wrap: anywhere; }
+.cal-daycard-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-muted); }
+.cal-daycard-next {
+  font-weight: 600;
+  color: var(--state-scheduled);
+  background: color-mix(in srgb, var(--state-scheduled) 14%, transparent);
+  border-radius: var(--r-full);
+  padding: 1px 7px;
+}
+.cal-daycard-map, .cal-daycard-dur { color: var(--ink-faint); }
+.cal-daycard-acts { display: flex; align-items: center; gap: 4px; padding-right: 8px; }
+.cal-daycard-focus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+.cal-daycard-focus .ic { width: 13px; height: 13px; }
+.cal-daycard-focus:hover {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--hairline));
+  background: color-mix(in srgb, var(--primary) 8%, var(--canvas));
+}
+.cal-daycard-check { display: inline-flex; border: none; background: transparent; color: var(--ink-faint); cursor: pointer; padding: 6px; border-radius: var(--r-sm); }
+.cal-daycard-check .ic { width: 15px; height: 15px; }
+.cal-daycard-check:hover { color: var(--state-done); background: var(--hover); }
+/* overdue — carried-over work, collapsed above today */
+.cal-overdue { margin-bottom: 12px; }
+.cal-overdue-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: color-mix(in srgb, var(--state-danger) 8%, var(--canvas-soft));
+  color: var(--state-danger);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px 5px 8px;
+  border-radius: var(--r-full);
+}
+.cal-overdue-toggle .ic { width: 13px; height: 13px; transition: transform 0.12s; }
+.cal-overdue.open .cal-overdue-toggle .ic { transform: rotate(90deg); }
+.cal-overdue .cal-day-list { margin-top: 8px; }
 
 /* shared drag chip (week all-day strip + month cells) + inline actions */
 .cal-chip {
