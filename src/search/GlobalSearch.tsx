@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace } from '../store/workspaceStore';
-import { deserialize } from '../io/formats';
-import { parseNote } from '../io/noteFormat';
+import { loadMindDoc, loadNote, pruneMindCache, pruneNoteCache, type FileRef } from '../io/scanCache';
 import { revealNode } from '../note/noteLinks';
 import { Icon } from '../ui/Icon';
 import type { TreeNode } from '../../electron/preload';
@@ -12,12 +11,13 @@ type Hit =
   | { kind: 'node'; label: string; sub: string; mapPath: string; mapId: string; nodeId: string }
   | { kind: 'note'; label: string; path: string; body: string; metaText?: string; snippet?: string };
 
-function collectPaths(tree: TreeNode[], mind: string[], md: string[]) {
+/** Collect .mind and .md files with their tree-reported mtime (the cache key). */
+function collectFiles(tree: TreeNode[], mind: FileRef[], md: FileRef[]) {
   for (const n of tree) {
-    if (n.type === 'dir' && n.children) collectPaths(n.children, mind, md);
+    if (n.type === 'dir' && n.children) collectFiles(n.children, mind, md);
     else if (n.type === 'file') {
-      if (n.path.endsWith('.mind')) mind.push(n.path);
-      else if (n.path.endsWith('.md')) md.push(n.path);
+      if (n.path.endsWith('.mind')) mind.push({ path: n.path, mtimeMs: n.mtimeMs });
+      else if (n.path.endsWith('.md')) md.push({ path: n.path, mtimeMs: n.mtimeMs });
     }
   }
 }
@@ -56,36 +56,32 @@ export function GlobalSearch({
   }, []);
   useEffect(() => setIdx(0), [q]);
 
-  // one-time scan of the whole workspace
+  // Scan the whole workspace on open, but reuse the mtime-keyed cache: only files
+  // whose mtime moved are re-parsed, and the cache is shared with the calendar.
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const mind: string[] = [];
-      const md: string[] = [];
-      collectPaths(tree, mind, md);
+      const mind: FileRef[] = [];
+      const md: FileRef[] = [];
+      collectFiles(tree, mind, md);
+      pruneMindCache(mind.map((f) => f.path));
+      pruneNoteCache(md.map((f) => f.path));
       const out: Hit[] = [];
       await Promise.all([
-        ...mind.map(async (path) => {
-          try {
-            const doc = deserialize(await window.api.readFile(path));
-            const map = nameOf(path);
-            for (const n of Object.values(doc.nodes)) {
-              if (!n.text?.trim()) continue;
-              out.push({ kind: 'node', label: n.text, sub: map, mapPath: path, mapId: doc.id ?? '', nodeId: n.id });
-            }
-          } catch {
-            /* unreadable / corrupt → skip */
+        ...mind.map(async ({ path, mtimeMs }) => {
+          const doc = await loadMindDoc(path, mtimeMs);
+          if (!doc) return; // unreadable / corrupt → skip
+          const map = nameOf(path);
+          for (const n of Object.values(doc.nodes)) {
+            if (!n.text?.trim()) continue;
+            out.push({ kind: 'node', label: n.text, sub: map, mapPath: path, mapId: doc.id ?? '', nodeId: n.id });
           }
         }),
-        ...md.map(async (path) => {
-          try {
-            const note = parseNote(await window.api.readFile(path), nameOf(path));
-            if (note.session) return; // focus work-logs are noise here
-            const metaText = note.metaBlocks?.flatMap((b) => Object.values(b.values ?? {})).join(' ') ?? '';
-            out.push({ kind: 'note', label: note.title, path, body: note.body, metaText });
-          } catch {
-            /* skip */
-          }
+        ...md.map(async ({ path, mtimeMs }) => {
+          const note = await loadNote(path, mtimeMs);
+          if (!note || note.session) return; // corrupt, or a focus work-log (noise here)
+          const metaText = note.metaBlocks?.flatMap((b) => Object.values(b.values ?? {})).join(' ') ?? '';
+          out.push({ kind: 'note', label: note.title, path, body: note.body, metaText });
         }),
       ]);
       if (alive) setEntries(out);

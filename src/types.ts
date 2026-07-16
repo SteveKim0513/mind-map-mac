@@ -84,6 +84,7 @@ export interface FocusSession {
   goal?: string; // the "🎯" line from the note body, snapshotted at end (goal vs outcome)
   reflect?: string; // optional one-line reflection (outcome) captured at end
   estimated?: boolean; // end was inferred (abnormal exit), not user-confirmed
+  idleSec?: number; // IF-07 · seconds idle/away during the session; durationSec stays honest wall-clock
 }
 
 /** A standalone note document, stored as a Markdown file (.md) with frontmatter. */

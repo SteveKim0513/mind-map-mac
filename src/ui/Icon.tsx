@@ -28,6 +28,12 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   check: <path d="M4.5 10.5 8 14l7.5-8" />,
+  display: (
+    <>
+      <rect x="3.5" y="4.5" width="13" height="9" rx="1.5" />
+      <path d="M7.5 16.5h5M10 13.5v3" />
+    </>
+  ),
   plus: <path d="M10 4.5v11M4.5 10h11" />,
   chevronRight: <path d="M8 5l5 5-5 5" />,
   chevronDown: <path d="M5 8l5 5 5-5" />,

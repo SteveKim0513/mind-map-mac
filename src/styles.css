@@ -5514,6 +5514,13 @@ textarea:focus-visible,
 }
 .trash-empty { border: none; background: transparent; color: var(--state-danger); font-size: 13px; font-weight: 500; cursor: pointer; padding: 7px 12px; border-radius: var(--r-sm); }
 .trash-empty:hover { background: color-mix(in srgb, var(--state-danger) 12%, transparent); }
+/* IF-06 · trash retention (auto-purge) toggle row */
+.trash-retention {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--hairline);
+}
+.trash-retention-label { font-size: 12.5px; color: var(--ink-secondary); }
+.trash-retention-label small { display: block; font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
 .trash-info.clickable { cursor: pointer; }
 /* Generic search row — reused by the template dropdown menus and the Note Template panel */
 .qsearch-row { display: flex; align-items: center; gap: 7px; padding: 9px 14px; border-bottom: 1px solid var(--hairline); }

@@ -12,6 +12,8 @@ import { ensureMapPersisted, reindexFromNote } from '../note/noteLinks';
 import type { MapStore } from '../store/mapStore';
 import { sanitizeDuration, summary, perNode, nodeStat } from './aggregate';
 import { SESSION_BODY } from './sessionNote';
+import { idleTracker } from './idleTracker';
+import type { SessionWithIdle } from './idle';
 
 const WORK_LOG = 'work-log';
 
@@ -146,8 +148,13 @@ export async function startFocusSession(store: MapStore, nodeId: string, goal?: 
   }
 }
 
-/** Read → patch (end/duration/goal/reflect) → write the session note's frontmatter. */
-async function stampEnd(notePath: string, end: number, reflect?: string): Promise<FocusSession | null> {
+/** Read → patch (end/duration/goal/reflect/idle) → write the session note's frontmatter. */
+async function stampEnd(
+  notePath: string,
+  end: number,
+  reflect?: string,
+  idleSec?: number,
+): Promise<FocusSession | null> {
   let content: string;
   try {
     content = await window.api.readFile(notePath);
@@ -157,14 +164,22 @@ async function stampEnd(notePath: string, end: number, reflect?: string): Promis
   const note = parseNote(content, '집중');
   if (!note.session) return null;
   const { durationSec, suspect } = sanitizeDuration(note.session.start, end);
-  note.session = {
+  // idleSec is additive & optional: it never alters durationSec (the honest
+  // wall-clock), only records how much of it the user was away. Clamp to the
+  // duration and drop a zero so ordinary sessions stay clean in the frontmatter.
+  const prevIdle = (note.session as SessionWithIdle).idleSec ?? 0;
+  const idle =
+    idleSec != null ? Math.min(Math.max(0, Math.round(idleSec)), durationSec) : prevIdle;
+  const patched: SessionWithIdle = {
     ...note.session,
     end,
     durationSec,
     estimated: suspect || undefined,
     // goal was captured up front (structured); the result is the reflection
     reflect: reflect?.trim() || note.session.reflect,
+    idleSec: idle > 0 ? idle : undefined,
   };
+  note.session = patched;
   await window.api.save(notePath, serializeNote(note));
   reindexFromNote(notePath, note);
   syncOpenSessionTab(notePath, note.session);
@@ -186,17 +201,19 @@ export async function endFocusSession(reflect?: string): Promise<void> {
   const ui = useUi.getState();
   const active = ui.activeFocus;
   if (!active) return;
+  const now = Date.now();
+  const idleSec = idleTracker.finish(now); // seal the idle total before disarming
   ui.setActiveFocus(null); // disarm immediately (idempotent against double-clicks)
 
-  const ended = await stampEnd(active.notePath, Date.now(), reflect);
+  const ended = await stampEnd(active.notePath, now, reflect, idleSec);
   await useWorkspace.getState().refresh(); // pick up the stamped frontmatter
 
   const sessions = useWorkspace.getState().sessions();
-  const now = Date.now();
   const sum = summary(sessions, now);
   const agg = perNode(sessions);
   const stat = nodeStat(agg, active.mapId, active.nodeId);
 
+  idleTracker.stashFinished(active.notePath, idleSec); // so the completion card can show real work
   ui.setFocusDone({
     durationSec: ended?.durationSec ?? Math.round((now - active.start) / 1000),
     nodeText: active.nodeText,

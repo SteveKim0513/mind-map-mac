@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 
 type Theme = 'light' | 'dark';
+type ThemeMode = 'light' | 'dark' | 'system';
 
 interface UiState {
-  theme: Theme;
+  theme: Theme; // resolved theme actually applied (data-theme)
+  themeMode: ThemeMode; // user preference — 'system' follows the OS appearance
   setTheme: (t: Theme) => void;
+  setThemeMode: (m: ThemeMode) => void;
   toggleTheme: () => void;
 
   // search highlight
@@ -128,6 +131,11 @@ interface UiState {
   trashOpen: boolean;
   openTrash: () => void;
   closeTrash: () => void;
+  // local version history / "이전 버전" (overlay) — IF-02
+  versionsOpen: boolean;
+  versionsPath: string | null;
+  openVersions: (path: string) => void;
+  closeVersions: () => void;
   // note template library (overlay)
   templatesOpen: boolean;
   openTemplates: () => void;
@@ -185,11 +193,30 @@ export interface FocusDoneCard {
   notePath: string;
 }
 
+// IF-09 · system-theme follow. The renderer reads the OS colour scheme directly
+// via matchMedia (no IPC needed — Electron reflects the system appearance here)
+// and re-applies live when the OS flips, but only while the preference is 'system'.
+const prefersDark =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null; // test/node env has no matchMedia — fall back to light
+function systemTheme(): Theme {
+  return prefersDark?.matches ? 'dark' : 'light';
+}
+function resolveTheme(m: ThemeMode): Theme {
+  return m === 'system' ? systemTheme() : m;
+}
 function applyTheme(t: Theme) {
   document.documentElement.dataset.theme = t;
 }
 
-const initialTheme: Theme = (localStorage.getItem('theme') as Theme) || 'light';
+// Migrate: an explicit legacy 'theme' (only written when the user picked one)
+// becomes an explicit mode; a fresh install with no saved choice follows the
+// system, matching how a native macOS app behaves out of the box.
+const savedMode = localStorage.getItem('themeMode') as ThemeMode | null;
+const legacyTheme = localStorage.getItem('theme') as Theme | null;
+const initialMode: ThemeMode = savedMode ?? legacyTheme ?? 'system';
+const initialTheme: Theme = resolveTheme(initialMode);
 applyTheme(initialTheme);
 
 const initialScale = Number(localStorage.getItem('fontScale')) || 1;
@@ -199,12 +226,15 @@ let toastSeq = 0;
 
 export const useUi = create<UiState>((set, get) => ({
   theme: initialTheme,
-  setTheme: (t) => {
-    localStorage.setItem('theme', t);
-    applyTheme(t);
-    set({ theme: t });
+  themeMode: initialMode,
+  setThemeMode: (m) => {
+    localStorage.setItem('themeMode', m);
+    const resolved = resolveTheme(m);
+    applyTheme(resolved);
+    set({ themeMode: m, theme: resolved });
   },
-  toggleTheme: () => get().setTheme(get().theme === 'light' ? 'dark' : 'light'),
+  setTheme: (t) => get().setThemeMode(t), // explicit light/dark choice
+  toggleTheme: () => get().setThemeMode(get().theme === 'light' ? 'dark' : 'light'),
 
   matchIds: [],
   activeMatchId: null,
@@ -316,6 +346,10 @@ export const useUi = create<UiState>((set, get) => ({
   trashOpen: false,
   openTrash: () => set({ trashOpen: true }),
   closeTrash: () => set({ trashOpen: false }),
+  versionsOpen: false,
+  versionsPath: null,
+  openVersions: (path) => set({ versionsOpen: true, versionsPath: path }),
+  closeVersions: () => set({ versionsOpen: false, versionsPath: null }),
   templatesOpen: false,
   openTemplates: () => set({ templatesOpen: true }),
   closeTemplates: () => set({ templatesOpen: false }),
@@ -339,3 +373,11 @@ export const useUi = create<UiState>((set, get) => ({
   whatsNew: null,
   setWhatsNew: (v) => set({ whatsNew: v }),
 }));
+
+// IF-09 · react to live OS appearance changes while the user is following 'system'.
+prefersDark?.addEventListener('change', () => {
+  if (useUi.getState().themeMode !== 'system') return;
+  const resolved = systemTheme();
+  applyTheme(resolved);
+  useUi.setState({ theme: resolved });
+});

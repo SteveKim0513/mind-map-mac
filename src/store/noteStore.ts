@@ -17,6 +17,7 @@ interface NoteState {
   applySession: (session: FocusSession) => void; // system write (focus end) — never user-editable
   addLink: (link: NoteLink) => void;
   removeLink: (mapId: string, nodeId: string) => void;
+  updateLinkText: (mapId: string, nodeId: string, nodeText: string) => void;
   setMetaBlocks: (blocks: NoteMetaBlock[]) => void;
 }
 
@@ -53,6 +54,19 @@ export function createNoteStore(): NoteStore {
         note: { ...note, links: note.links.filter((l) => !(l.mapId === mapId && l.nodeId === nodeId)) },
         dirty: true,
       });
+    },
+    // IF-05 · refresh the cached chip label after the linked node's text changed.
+    updateLinkText: (mapId, nodeId, nodeText) => {
+      const { note } = get();
+      let changed = false;
+      const links = note.links.map((l) => {
+        if (l.mapId === mapId && l.nodeId === nodeId && l.nodeText !== nodeText) {
+          changed = true;
+          return { ...l, nodeText };
+        }
+        return l;
+      });
+      if (changed) set({ note: { ...note, links }, dirty: true });
     },
     setMetaBlocks: (metaBlocks) =>
       set({ note: { ...get().note, metaBlocks }, dirty: true }),

@@ -25,6 +25,7 @@ export interface CanvasHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   fit: () => void;
+  tidy: () => void;
 }
 
 export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Canvas(
@@ -401,6 +402,49 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
     );
   }, [mapStore, fitBounds]);
 
+  // IF-08 · "겹침 정돈" — push overlapping root subtrees apart. Root boxes include
+  // chip heights (below) and a little pad for section blob ink, so resolving the
+  // boxes clears node/chip/section overlaps in one go.
+  const tidy = useCallback(() => {
+    const PAD = 12;
+    const acc = new Map<
+      string,
+      { minX: number; minY: number; maxX: number; maxY: number; ax: number; ay: number }
+    >();
+    for (const p of result.nodes) {
+      const sz = sizes[p.node.id];
+      const h = sz?.h ?? 34;
+      const below = Math.max(h, sz?.below ?? h);
+      const top = p.y - h / 2;
+      const left = p.x;
+      const right = p.x + p.width;
+      const bottom = top + below;
+      const e = acc.get(p.rootId);
+      if (!e) {
+        acc.set(p.rootId, { minX: left, minY: top, maxX: right, maxY: bottom, ax: 0, ay: 0 });
+      } else {
+        e.minX = Math.min(e.minX, left);
+        e.minY = Math.min(e.minY, top);
+        e.maxX = Math.max(e.maxX, right);
+        e.maxY = Math.max(e.maxY, bottom);
+      }
+      if (p.node.id === p.rootId) {
+        const r = acc.get(p.rootId)!;
+        r.ax = p.x;
+        r.ay = p.y;
+      }
+    }
+    const roots = [...acc.entries()].map(([rootId, e]) => ({
+      rootId,
+      anchorX: e.ax,
+      anchorY: e.ay,
+      box: { id: rootId, x: e.minX - PAD, y: e.minY - PAD, w: e.maxX - e.minX + PAD * 2, h: e.maxY - e.minY + PAD * 2 },
+    }));
+    const moved = mapStore.getState().tidyOverlaps(roots);
+    useUi.getState().toast(moved > 0 ? `겹친 ${moved}개를 정돈했어요` : '겹치는 항목이 없어요');
+    if (moved > 0) requestAnimationFrame(() => fit());
+  }, [result, sizes, mapStore, fit]);
+
   // Re-fit the view whenever a new document is loaded (and on first mount).
   // This keeps the first node centered instead of stranded at the origin (top-left).
   const docEpoch = useMap((s) => s.docEpoch);
@@ -469,8 +513,9 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       zoomIn: () => zoomAtCenter(1.2),
       zoomOut: () => zoomAtCenter(1 / 1.2),
       fit,
+      tidy,
     }),
-    [zoomAtCenter, fit],
+    [zoomAtCenter, fit, tidy],
   );
 
   const rootSet = useMemo(() => new Set(doc.rootIds), [doc.rootIds]);

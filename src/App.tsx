@@ -8,6 +8,7 @@ import { FocusOverlay } from './focus/FocusWidget';
 import { WorkHistory } from './focus/WorkHistory';
 import { CalendarView } from './calendar/CalendarView';
 import { TrashPanel } from './ui/TrashPanel';
+import { VersionHistoryPanel } from './ui/VersionHistoryPanel';
 import { TemplatePanel } from './ui/TemplatePanel';
 import { RecentView } from './ui/RecentView';
 import { FavoritesView } from './ui/FavoritesView';
@@ -27,6 +28,7 @@ import { CommandPalette, type Command } from './ui/CommandPalette';
 import type { TreeNode } from '../electron/preload';
 import { useKeyboard } from './interactions/useKeyboard';
 import { startReminderSync } from './sync/reminderSync';
+import { startNoteLinkSync } from './note/noteLinks';
 import { MapContext, useMap, type MapStore } from './store/mapStore';
 import { useSession, loadSessionSnapshot } from './store/sessionStore';
 import { useWorkspace } from './store/workspaceStore';
@@ -73,6 +75,7 @@ export default function App() {
   const cmdkOpen = useUi((s) => s.cmdkOpen);
   const historyOpen = useUi((s) => s.historyOpen);
   const trashOpen = useUi((s) => s.trashOpen);
+  const versionsOpen = useUi((s) => s.versionsOpen);
   const templatesOpen = useUi((s) => s.templatesOpen);
   const recentOpen = useUi((s) => s.recentOpen);
   const favoritesOpen = useUi((s) => s.favoritesOpen);
@@ -119,9 +122,28 @@ export default function App() {
 
   // Refresh the workspace tree when the window regains focus so external
   // changes made in Finder are reflected without any manual action.
+  // IF-04 · also warn if an open map changed on disk under us (iCloud/Dropbox
+  // sync, another app or device) — offer a one-tap reload, warning once per
+  // distinct external change so it never nags.
+  const externalWarnedRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
     return window.api.onWorkspaceFocus(() => {
       void useWorkspace.getState().refresh();
+      for (const t of useSession.getState().tabs) {
+        if (t.kind !== 'map' || !t.path) continue;
+        const p = t.path;
+        const title = t.title;
+        void window.api.externalChange(p).then(({ changed, mtime }) => {
+          if (!changed || mtime == null) return;
+          if (externalWarnedRef.current.get(p) === mtime) return; // already warned for this change
+          externalWarnedRef.current.set(p, mtime);
+          useUi.getState().toastAction(
+            `"${title}"이(가) 다른 곳에서 바뀌었어요 — 디스크 버전을 불러올까요?`,
+            '불러오기',
+            () => void useSession.getState().reloadIfOpen(p),
+          );
+        });
+      }
     });
   }, []);
 
@@ -315,6 +337,7 @@ export default function App() {
   // Start macOS Reminders two-way sync (no-op off macOS / when unavailable).
   useEffect(() => {
     startReminderSync();
+    startNoteLinkSync(); // IF-05 · node delete → drop dead note links; node rename → refresh label
   }, []);
 
   // Safety net: always clear the tab-drag overlay when a drag ends (or on mount),
@@ -461,7 +484,9 @@ export default function App() {
             hasActive: !!activeStore,
             newMindmap: () => void newMindmap(),
             fit: () => activeControls.current?.fit(),
+            tidy: () => activeControls.current?.tidy(),
             toggleSidebar: () => setSidebarVisible((v) => !v),
+            activeMapPath: activeTab?.kind === 'map' ? (activeTab.path ?? null) : null,
             selectedNode: activeStore && activeTab
               ? (() => {
                   const st = activeStore.getState();
@@ -497,6 +522,7 @@ export default function App() {
       <FocusOverlay sidebarVisible={sidebarVisible} />
       {historyOpen && <WorkHistory />}
       {trashOpen && <TrashPanel />}
+      {versionsOpen && <VersionHistoryPanel />}
       {templatesOpen && <TemplatePanel onOpen={(p) => void openByPath(p)} />}
       {recentOpen && <RecentView onOpen={(p) => void openByPath(p)} />}
       {favoritesOpen && <FavoritesView onOpen={(p) => void openByPath(p)} />}
@@ -514,7 +540,9 @@ function buildCommands(o: {
   hasActive: boolean;
   newMindmap: () => void;
   fit: () => void;
+  tidy: () => void;
   toggleSidebar: () => void;
+  activeMapPath: string | null;
   selectedNode: { id: string; text: string; mapId: string; mapPath: string; store: MapStore } | null;
 }): Command[] {
   const cmds: Command[] = [
@@ -525,6 +553,15 @@ function buildCommands(o: {
     { id: 'recent', icon: 'clock', label: '최근 수정 보기', run: () => useUi.getState().openRecent() },
     { id: 'favorites', icon: 'star', label: '즐겨찾기 보기', run: () => useUi.getState().openFavorites() },
     { id: 'trash', icon: 'trash', label: '휴지통 열기', run: () => useUi.getState().openTrash() },
+    {
+      id: 'versions',
+      icon: 'clock',
+      label: '이전 버전 보기 (되돌리기)',
+      run: () => {
+        if (o.activeMapPath) useUi.getState().openVersions(o.activeMapPath);
+        else useUi.getState().toast('맵을 연 상태에서 이용할 수 있어요');
+      },
+    },
     { id: 'reminders', icon: 'calendar', label: '미리알림 동기화 설정', run: () => useUi.getState().openSettings() },
     { id: 'globalsearch', icon: 'search', label: '전체 검색 (노드·노트)', hint: '⌘⇧F', run: () => useUi.getState().setGlobalSearch(true) },
     { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
@@ -532,6 +569,7 @@ function buildCommands(o: {
     { id: 'sidebar', icon: 'menu', label: '사이드바 토글', run: o.toggleSidebar },
     { id: 'split', icon: 'expand', label: o.split ? '화면 분할 해제' : '화면 분할', run: () => useSession.getState().toggleSplit() },
     { id: 'relayout', icon: 'refresh', label: '새로고침 (재배치)', run: () => useUi.getState().relayout() },
+    { id: 'tidy', icon: 'target', label: '겹침 정돈 (겹친 가지 떨어뜨리기)', run: o.tidy },
   ];
   // 선택된 노드에 대한 동작 — 아이콘을 몰라도, 마우스로 우연히 찾지 못해도
   // "이걸 하고 싶다"고 타이핑해서 도달할 수 있는 통로 (UX-CLARITY-VISION 전략 D).

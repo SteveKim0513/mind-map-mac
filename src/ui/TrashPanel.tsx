@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useUi } from '../store/uiStore';
 import { useTrash } from '../store/trashStore';
 import { useWorkspace } from '../store/workspaceStore';
@@ -37,9 +37,22 @@ export function TrashPanel() {
   const root = useWorkspace((s) => s.root);
   const refreshTree = useWorkspace((s) => s.refresh);
 
+  // IF-06 · trash retention toggle (auto-purge items older than N months)
+  const [autoPurge, setAutoPurge] = useState(false); // default OFF (opt-in) — see main.ts IF-06
+  const [retentionDays, setRetentionDays] = useState(90);
+  const months = Math.max(1, Math.round(retentionDays / 30));
+
   useEffect(() => {
     void refreshTrash();
+    void window.api.trashAutoPurgeGet().then(setAutoPurge);
+    void window.api.trashRetentionDays().then(setRetentionDays);
   }, [refreshTrash]);
+
+  const setPurge = async (v: boolean) => {
+    setAutoPurge(v);
+    await window.api.trashAutoPurgeSet(v);
+    await refreshTrash(); // turning it on may sweep expired items right away
+  };
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
@@ -85,6 +98,29 @@ export function TrashPanel() {
           <button className="wh-close" title="닫기 (Esc)" onClick={close}>
             <Icon name="close" />
           </button>
+        </div>
+
+        <div className="trash-retention">
+          <span className="trash-retention-label">
+            {months}개월 지난 항목 자동 정리
+            <small>{autoPurge ? `${months}개월이 지나면 시스템 휴지통으로 옮겨요` : '직접 비울 때까지 보관해요'}</small>
+          </span>
+          <div className="seg" role="group" aria-label="자동 정리">
+            <button
+              className={`seg-btn${autoPurge ? ' on' : ''}`}
+              aria-pressed={autoPurge}
+              onClick={() => void setPurge(true)}
+            >
+              켜짐
+            </button>
+            <button
+              className={`seg-btn${!autoPurge ? ' on' : ''}`}
+              aria-pressed={!autoPurge}
+              onClick={() => void setPurge(false)}
+            >
+              꺼짐
+            </button>
+          </div>
         </div>
 
         {items.length === 0 ? (

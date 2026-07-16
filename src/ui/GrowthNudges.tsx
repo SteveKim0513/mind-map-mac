@@ -12,6 +12,12 @@ import type { MapStore } from '../store/mapStore';
 const shown = (key: string): boolean => localStorage.getItem(`nudge:${key}:shown`) === '1';
 const markShown = (key: string): void => localStorage.setItem(`nudge:${key}:shown`, '1');
 
+// Nudge trigger thresholds (IF-14) — kept as named constants in one place so
+// they're tunable, rather than magic numbers scattered through the effects.
+const TAB_SPLIT_THRESHOLD = 5; // open tabs → suggest split
+const SIMILAR_NOTE_THRESHOLD = 3; // notes sharing a title prefix → suggest template
+const SCHEDULED_NODE_THRESHOLD = 3; // scheduled nodes in a map → suggest reminder sync
+
 /** Renders nothing. Mounted once at the app root; watches cross-cutting
  *  session/workspace signals and offers a single toast nudge each. */
 export function GrowthNudges() {
@@ -27,7 +33,7 @@ export function GrowthNudges() {
 
   // ── 5개 이상 탭이 열리면 → 화면 분할 제안 ──
   useEffect(() => {
-    if (tabs.length >= 5 && !shown('split')) {
+    if (tabs.length >= TAB_SPLIT_THRESHOLD && !shown('split')) {
       markShown('split');
       useUi.getState().toastAction('탭이 많아졌어요 — 화면을 나눠서 볼까요?', '분할하기', () => {
         useSession.getState().toggleSplit();
@@ -48,7 +54,7 @@ export function GrowthNudges() {
       if (!prefix) continue;
       counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
     }
-    if ([...counts.values()].some((c) => c >= 3)) {
+    if ([...counts.values()].some((c) => c >= SIMILAR_NOTE_THRESHOLD)) {
       markShown('note-template');
       useUi.getState().toastAction(
         '비슷한 노트를 여러 번 쓰고 계시네요 — 템플릿으로 저장해둘까요?',
@@ -67,7 +73,7 @@ function ScheduleNudge({ store }: { store: MapStore }) {
     Object.values(s.doc.nodes).filter((n) => n.scheduled).length,
   );
   useEffect(() => {
-    if (scheduledCount >= 3 && !shown('reminders')) {
+    if (scheduledCount >= SCHEDULED_NODE_THRESHOLD && !shown('reminders')) {
       markShown('reminders');
       useUi.getState().toastAction(
         '일정이 걸린 노드가 늘고 있어요 — 미리알림 앱과 동기화해서 놓치지 않게 할까요?',

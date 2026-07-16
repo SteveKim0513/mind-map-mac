@@ -4,6 +4,9 @@ import { useWorkspace } from '../store/workspaceStore';
 import { Icon } from '../ui/Icon';
 import { fmtDuration } from './aggregate';
 import { endFocusSession, openSessionNote, attachReflection, confirmFocusStart, cancelFocusStart } from './controller';
+import { useIdleTracker } from './useIdleTracker';
+import { idleTracker } from './idleTracker';
+import { realWorkSec } from './idle';
 
 const NUDGE_SEC = 4 * 3600; // gently remind to end after this long (still running)
 
@@ -75,6 +78,7 @@ export function FocusPill({ docked }: { docked?: boolean }) {
 
 /** Mounted globally: the goal prompt + floating pill (sidebar hidden) + completion card. */
 export function FocusOverlay({ sidebarVisible }: { sidebarVisible: boolean }) {
+  useIdleTracker(); // observe activity → idle detection while a session runs (IF-07)
   const done = useUi((s) => s.focusDone);
   const prompt = useUi((s) => s.focusPrompt);
   return (
@@ -124,6 +128,8 @@ function FocusCompletionCard() {
   const done = useUi((s) => s.focusDone)!;
   const close = () => useUi.getState().setFocusDone(null);
   const [reflect, setReflect] = useState('');
+  // idle time this session was away — set right before this card was raised
+  const idleSec = idleTracker.finishedIdleSec(done.notePath);
 
   const finish = () => {
     if (reflect.trim()) {
@@ -144,6 +150,14 @@ function FocusCompletionCard() {
           <Stat label="최근 7일" value={`${done.focusDays7}일 집중`} />
           <Stat label="이 주제 누적" value={fmtDuration(done.nodeRolledSec)} />
         </div>
+        {idleSec > 0 && (
+          <div className="focus-done-goal">
+            <span className="focus-done-goal-k">⏱ 유휴 제외 실작업</span>
+            <span className="focus-done-goal-v">
+              {fmtDuration(realWorkSec(done.durationSec, idleSec))} · 유휴 {fmtDuration(idleSec)} 제외
+            </span>
+          </div>
+        )}
         {done.goal && (
           <div className="focus-done-goal">
             <span className="focus-done-goal-k">🎯 목표였던 것</span>

@@ -4,7 +4,7 @@ import { serialize } from '../io/formats';
 import { useWorkspace } from '../store/workspaceStore';
 import { useSession } from '../store/sessionStore';
 import { useUi } from '../store/uiStore';
-import type { MapStore } from '../store/mapStore';
+import { setNoteLinkDeleteHook, setNoteLinkRenameHook, type MapStore } from '../store/mapStore';
 import type { NoteStore } from '../store/noteStore';
 import { extractWikiTargets } from './wikiLinkText';
 
@@ -144,6 +144,86 @@ export async function removeLinkFromNoteFile(
   note.links = note.links.filter((l) => !(l.mapId === mapId && l.nodeId === nodeId));
   await window.api.save(notePath, serializeNote(note));
   reindexFromNote(notePath, note);
+}
+
+/**
+ * IF-05 · Refresh the cached `nodeText` label on a note link after the linked
+ * node's text changed. The link is keyed by the stable nodeId, so this is a
+ * label-only touch (the link keeps working regardless); we just keep it current.
+ */
+export async function updateLinkLabelInNoteFile(
+  notePath: string,
+  mapId: string,
+  nodeId: string,
+  nodeText: string,
+): Promise<void> {
+  const tab = useSession.getState().tabs.find((t) => t.kind === 'note' && t.path === notePath);
+  if (tab) {
+    const store = tab.store as NoteStore;
+    const before = store.getState().note.links;
+    store.getState().updateLinkText(mapId, nodeId, nodeText);
+    if (store.getState().note.links === before) return; // no change (already current)
+    await useSession.getState().flushSaves(notePath);
+    reindexFromNote(notePath, store.getState().note);
+    return;
+  }
+
+  // closed note → read / modify / write the file directly
+  const content = await window.api.readFile(notePath);
+  const note = parseNote(content, noteName(notePath));
+  let changed = false;
+  note.links = note.links.map((l) => {
+    if (l.mapId === mapId && l.nodeId === nodeId && l.nodeText !== nodeText) {
+      changed = true;
+      return { ...l, nodeText };
+    }
+    return l;
+  });
+  if (!changed) return;
+  await window.api.save(notePath, serializeNote(note));
+  reindexFromNote(notePath, note);
+}
+
+/**
+ * IF-05 · Keep note↔node links healthy as the map changes. Wired once at startup.
+ *
+ *   • delete: when nodes are deleted, drop every note link that pointed at them
+ *     so no note is left with a chip to a node that's gone (dead-link GC).
+ *   • rename: when a node's text changes, refresh the cached label on notes that
+ *     link it.
+ *
+ * Design note: affected notes are resolved through the note INDEX (the reverse
+ * lookup `note.links → node`), NOT by storing note ids on the node. That keeps
+ * `note.links` the single source of truth (no second copy to drift out of sync,
+ * no MindNode schema change) and reuses the file helpers, which handle open tabs
+ * and closed files alike.
+ */
+export function startNoteLinkSync(): void {
+  setNoteLinkDeleteHook((mapId, nodeIds) => {
+    if (!mapId || nodeIds.length === 0) return;
+    const gone = new Set(nodeIds);
+    // snapshot the index now — removeLinkFromNoteFile reindexes as it goes
+    const affected = useWorkspace
+      .getState()
+      .noteIndex.filter((m) => m.links.some((l) => l.mapId === mapId && gone.has(l.nodeId)));
+    for (const note of affected) {
+      for (const l of note.links) {
+        if (l.mapId === mapId && gone.has(l.nodeId)) {
+          void removeLinkFromNoteFile(note.path, mapId, l.nodeId); // fire-and-forget, like the reminder hook
+        }
+      }
+    }
+  });
+
+  setNoteLinkRenameHook((mapId, nodeId, text) => {
+    if (!mapId || !nodeId) return;
+    const affected = useWorkspace
+      .getState()
+      .noteIndex.filter((m) =>
+        m.links.some((l) => l.mapId === mapId && l.nodeId === nodeId && (l.nodeText ?? '') !== text),
+      );
+    for (const note of affected) void updateLinkLabelInNoteFile(note.path, mapId, nodeId, text);
+  });
 }
 
 /** Does this file content belong to the map we're looking for? */

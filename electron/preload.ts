@@ -36,6 +36,12 @@ export interface TemplateSummary {
   updatedAt: string; // ISO timestamp
 }
 
+export interface VersionInfo {
+  stamp: string; // opaque id (also the snapshot filename minus ext)
+  savedAt: string; // ISO timestamp of the snapshot
+  size: number; // bytes
+}
+
 export interface ReminderInfo {
   id: string;
   title: string;
@@ -62,6 +68,9 @@ const api = {
   workspaceTree: (): Promise<{ root: string; tree: TreeNode[] }> =>
     ipcRenderer.invoke('workspace:tree'),
   readFile: (filePath: string): Promise<string> => ipcRenderer.invoke('fs:read', filePath),
+  /** IF-04 · Whether a file changed on disk since we last read/wrote it (cloud/other-app edit). */
+  externalChange: (filePath: string): Promise<{ changed: boolean; mtime: number | null }> =>
+    ipcRenderer.invoke('fs:externalChange', filePath),
   imagesWrite: (args: { notePath: string; filename: string; buffer: number[] }): Promise<string> =>
     ipcRenderer.invoke('images:write', args),
   imagesRead: (args: { notePath: string; filepath: string }): Promise<string> =>
@@ -91,6 +100,12 @@ const api = {
     ipcRenderer.invoke('trash:deleteOne', trashedPath),
   /** Empty the whole trash (each item → OS Trash). */
   trashEmpty: (): Promise<boolean> => ipcRenderer.invoke('trash:empty'),
+  /** IF-06 · Whether trash items older than the retention window are auto-purged (default on). */
+  trashAutoPurgeGet: (): Promise<boolean> => ipcRenderer.invoke('settings:getTrashAutoPurge'),
+  trashAutoPurgeSet: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke('settings:setTrashAutoPurge', enabled),
+  /** Retention window in days (for the UI label). */
+  trashRetentionDays: (): Promise<number> => ipcRenderer.invoke('trash:retentionDays'),
   message: (opts: {
     message: string;
     detail?: string;
@@ -190,6 +205,17 @@ const api = {
     setEnabled: (enabled: boolean): Promise<void> =>
       ipcRenderer.invoke('settings:setTemplatesEnabled', enabled),
     list: (): Promise<TemplateSummary[]> => ipcRenderer.invoke('templates:list'),
+  },
+  // ── Local version history (.history workspace folder) — IF-02 ─────────────
+  history: {
+    /** List saved versions of a file, newest first. */
+    list: (filePath: string): Promise<VersionInfo[]> => ipcRenderer.invoke('history:list', filePath),
+    /** Read the content of one saved version. */
+    read: (filePath: string, stamp: string): Promise<string> =>
+      ipcRenderer.invoke('history:read', { filePath, stamp }),
+    /** Restore a saved version (snapshots the current one first). Returns restored content. */
+    restore: (filePath: string, stamp: string): Promise<string> =>
+      ipcRenderer.invoke('history:restore', { filePath, stamp }),
   },
   // ── Favorites (.pins.json workspace file) ────────────────────────────────
   pins: {

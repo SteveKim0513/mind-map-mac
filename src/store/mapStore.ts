@@ -3,6 +3,15 @@ import { createContext, useContext } from 'react';
 import type { MindMapDoc, MindNode } from '../types';
 import { emptyDoc, newId } from '../io/formats';
 import { parseScheduleText, parseHashtagColor } from './parseNodeText';
+import { resolveOverlaps, type TidyBox } from '../layout/tidyOverlaps';
+
+/** One root's current anchor + subtree bounding box, for overlap resolution. */
+export interface TidyRoot {
+  rootId: string;
+  anchorX: number;
+  anchorY: number;
+  box: TidyBox;
+}
 
 const HISTORY_LIMIT = 100;
 
@@ -33,6 +42,23 @@ let clipboard: ClipNode | null = null;
 let reminderDeleteHook: ((reminderIds: string[]) => void) | null = null;
 export function setReminderDeleteHook(fn: ((reminderIds: string[]) => void) | null) {
   reminderDeleteHook = fn;
+}
+
+// IF-05 · Fired when nodes are deleted so any note that links to them can drop the
+// now-dead link (dead-link GC). Mirrors reminderDeleteHook — an injected hook keeps
+// store/ from importing the note domain. Wired in App to the note index + note files.
+// No-op until wired.
+let noteLinkDeleteHook: ((mapId: string, nodeIds: string[]) => void) | null = null;
+export function setNoteLinkDeleteHook(fn: ((mapId: string, nodeIds: string[]) => void) | null) {
+  noteLinkDeleteHook = fn;
+}
+
+// IF-05 · Fired when a node's text changes so notes linking it can refresh the
+// cached `nodeText` label on their chip (the link itself is keyed by the stable
+// nodeId — this only keeps the displayed label current). No-op until wired.
+let noteLinkRenameHook: ((mapId: string, nodeId: string, text: string) => void) | null = null;
+export function setNoteLinkRenameHook(fn: ((mapId: string, nodeId: string, text: string) => void) | null) {
+  noteLinkRenameHook = fn;
 }
 
 interface MapState {
@@ -103,6 +129,8 @@ interface MapState {
   moveSibling: (id: string, dir: 'up' | 'down') => void;
   reparent: (nodeId: string, newParentId: string | null, index?: number) => void;
   setManualPos: (rootId: string, pos: { x: number; y: number }) => void;
+  /** IF-08 · push overlapping root subtrees apart (down). Returns how many moved. */
+  tidyOverlaps: (roots: TidyRoot[]) => number;
   toggleCollapse: (id: string) => void;
 
   // connections (node-to-node cross links)
@@ -272,6 +300,7 @@ export function createMapStore(): MapStore {
           const trimmed = text.trim();
           n.text = trimmed;
           n.updatedAt = Date.now(); // mark for reminder push
+          if (noteLinkRenameHook) noteLinkRenameHook(d.id ?? '', id, trimmed); // IF-05 · refresh note label
 
           // Natural-language schedule/tag detection (REDESIGN-VISION §3-2) — folded
           // into this same draft mutation so one Enter = one undo step. Only applies
@@ -435,6 +464,7 @@ export function createMapStore(): MapStore {
         toRemove.forEach((nid) => delete d.nodes[nid]);
         pruneRefs(d, new Set(toRemove));
         if (reminders.length && reminderDeleteHook) reminderDeleteHook(reminders);
+        if (noteLinkDeleteHook) noteLinkDeleteHook(d.id ?? '', toRemove); // IF-05 · GC dead note links
       });
       set({ selectedId: nextSel, selectedIds: nextSel ? [nextSel] : [], editingId: null });
     },
@@ -764,6 +794,7 @@ export function createMapStore(): MapStore {
         remove.forEach((id) => delete d.nodes[id]);
         pruneRefs(d, remove);
         if (reminders.length && reminderDeleteHook) reminderDeleteHook(reminders);
+        if (noteLinkDeleteHook) noteLinkDeleteHook(d.id ?? '', [...remove]); // IF-05 · GC dead note links
       });
       set({ selectedId: null, selectedIds: [], editingId: null });
     },
@@ -773,6 +804,24 @@ export function createMapStore(): MapStore {
         const n = d.nodes[rootId];
         if (n) n.manualPos = pos;
       }),
+
+    tidyOverlaps: (roots) => {
+      const shifts = resolveOverlaps(roots.map((r) => r.box));
+      if (shifts.size === 0) return 0;
+      commit((d) => {
+        for (const r of roots) {
+          const dy = shifts.get(r.rootId);
+          if (!dy) continue;
+          const n = d.nodes[r.rootId];
+          if (!n) continue;
+          // pin the moved root at (its current anchor) + the downward shift — a
+          // root without a manualPos gets one at its current spot so the tidy sticks
+          const base = n.manualPos ?? { x: r.anchorX, y: r.anchorY };
+          n.manualPos = { x: base.x, y: base.y + dy };
+        }
+      });
+      return shifts.size;
+    },
 
     toggleCollapse: (id) =>
       commit((d) => {

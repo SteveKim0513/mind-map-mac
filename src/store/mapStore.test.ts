@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createMapStore } from './mapStore';
+import { createMapStore, setNoteLinkDeleteHook, setNoteLinkRenameHook } from './mapStore';
 
 /** Build a root with `n` children and return [rootId, childIds]. */
 function rootWithChildren(s: ReturnType<typeof createMapStore>, n: number): [string, string[]] {
@@ -150,5 +150,49 @@ describe('undo / redo selection consistency (Closes #7)', () => {
     // invariant: every selected id exists, and selectedId is among them (or all empty)
     for (const id of selectedIds) expect(doc.nodes[id]).toBeDefined();
     if (selectedIds.length) expect(selectedIds).toContain(selectedId);
+  });
+});
+
+// IF-05 · dead-link GC — deleting a node must signal note-link cleanup so notes
+// that link to the (now-gone) node can drop the dead link. Reproduction: today
+// deleteNode fires the reminder hook but nothing tells the note side, so notes
+// keep chips pointing at deleted nodes.
+describe('IF-05 · deleting a node signals note-link cleanup (dead-link GC)', () => {
+  it('deleteNode reports the whole removed subtree so linked notes can drop dead links', () => {
+    const reported: string[] = [];
+    setNoteLinkDeleteHook((_mapId, nodeIds) => reported.push(...nodeIds));
+    try {
+      const s = createMapStore();
+      s.getState().addRoot();
+      const root = s.getState().doc.rootIds[0];
+      s.getState().addChild(root);
+      const child = s.getState().selectedId!;
+      s.getState().addChild(child);
+      const grandchild = s.getState().selectedId!;
+
+      s.getState().deleteNode(child); // deletes child + grandchild
+
+      expect(reported.sort()).toEqual([child, grandchild].sort());
+    } finally {
+      setNoteLinkDeleteHook(null);
+    }
+  });
+});
+
+// IF-05 · editing a node's text should signal note-label refresh so linked
+// notes update the cached chip label (the link itself keeps working via nodeId).
+describe('IF-05 · editing a node text signals note-label refresh', () => {
+  it('commitText reports the node id + new text so linked notes refresh the label', () => {
+    const events: { mapId: string; nodeId: string; text: string }[] = [];
+    setNoteLinkRenameHook((mapId, nodeId, text) => events.push({ mapId, nodeId, text }));
+    try {
+      const s = createMapStore();
+      s.getState().addRoot();
+      const root = s.getState().doc.rootIds[0];
+      s.getState().commitText(root, '  주간 회의 준비  '); // trimmed on commit
+      expect(events.some((e) => e.nodeId === root && e.text === '주간 회의 준비')).toBe(true);
+    } finally {
+      setNoteLinkRenameHook(null);
+    }
   });
 });

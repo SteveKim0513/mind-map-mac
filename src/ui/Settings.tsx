@@ -121,7 +121,7 @@ function useAiProviders() {
 export function Settings() {
   const [view, setView] = useState<SettingsView>('main');
   const close = useUi((s) => s.closeSettings);
-  const theme = useUi((s) => s.theme);
+  const themeMode = useUi((s) => s.themeMode);
   const fontScale = useUi((s) => s.fontScale);
   const root = useWorkspace((s) => s.root);
   const choose = useWorkspace((s) => s.choose);
@@ -166,7 +166,7 @@ export function Settings() {
         <div className="settings-body">
           {view === 'main' && (
             <MainView
-              theme={theme}
+              themeMode={themeMode}
               fontScale={fontScale}
               root={root}
               choose={choose}
@@ -191,9 +191,9 @@ export function Settings() {
 }
 
 function MainView({
-  theme, fontScale, root, choose, ai, navigate,
+  themeMode, fontScale, root, choose, ai, navigate,
 }: {
-  theme: string;
+  themeMode: string;
   fontScale: number;
   root: string | null;
   choose: () => Promise<void>;
@@ -212,10 +212,13 @@ function MainView({
       <div className="set-row">
         <span className="set-label">테마</span>
         <div className="seg">
-          <button className={`seg-btn${theme === 'light' ? ' on' : ''}`} onClick={() => useUi.getState().setTheme('light')}>
+          <button className={`seg-btn${themeMode === 'system' ? ' on' : ''}`} onClick={() => useUi.getState().setThemeMode('system')}>
+            <Icon name="display" /> 시스템
+          </button>
+          <button className={`seg-btn${themeMode === 'light' ? ' on' : ''}`} onClick={() => useUi.getState().setThemeMode('light')}>
             <Icon name="sun" /> 라이트
           </button>
-          <button className={`seg-btn${theme === 'dark' ? ' on' : ''}`} onClick={() => useUi.getState().setTheme('dark')}>
+          <button className={`seg-btn${themeMode === 'dark' ? ' on' : ''}`} onClick={() => useUi.getState().setThemeMode('dark')}>
             <Icon name="moon" /> 다크
           </button>
         </div>

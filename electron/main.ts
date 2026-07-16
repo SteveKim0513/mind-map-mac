@@ -3,6 +3,7 @@ import type { MenuItemConstructorOptions } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import dns from 'node:dns/promises';
 import {
   remindersAvailable,
   createReminder,
@@ -21,6 +22,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.MINDMAP_USER_DATA) {
   app.setPath('userData', process.env.MINDMAP_USER_DATA);
 }
+
+// IF-03 · Single-instance lock: a second launch of the same install (same
+// userData) must not open a second window onto the same workspace — two
+// autosave loops would race and silently clobber each other. The second
+// process quits immediately; the first one surfaces its existing window (see
+// the 'second-instance' handler in whenReady). Keyed by userData, so E2E runs
+// (each with its own MINDMAP_USER_DATA) never collide with each other.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) app.quit();
 // Test/E2E isolation: override the workspace directory directly.
 const E2E_WORKSPACE = process.env.MINDMAP_WORKSPACE ?? null;
 // E2E quiet mode: opens windows off-screen so they don't visually pop up over
@@ -154,6 +164,12 @@ function createWindow() {
     ...(E2E_QUIET ? { x: -3000, y: -3000 } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      // IF-12 · Explicit security hardening. These are already Electron's
+      // defaults; pinning them means a future Electron upgrade or a stray option
+      // can't silently weaken the renderer boundary. (sandbox stays at its
+      // default — the .mjs ESM preload is not compatible with sandbox:true.)
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
@@ -208,6 +224,12 @@ function createCaptureWindow(): BrowserWindow {
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      // IF-12 · Explicit security hardening. These are already Electron's
+      // defaults; pinning them means a future Electron upgrade or a stray option
+      // can't silently weaken the renderer boundary. (sandbox stays at its
+      // default — the .mjs ESM preload is not compatible with sandbox:true.)
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   });
   if (VITE_DEV_SERVER_URL) {
@@ -233,12 +255,20 @@ function showCaptureWindow() {
 }
 
 app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return; // a second instance is quitting — set nothing up
   log.info(`[app] start v${app.getVersion()} on ${process.platform}`);
   buildMenu();
   createWindow();
   initAutoUpdate(() => win);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+  // Someone tried to launch a second instance — focus our window instead.
+  app.on('second-instance', () => {
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
   });
   captureShortcutRegistered = globalShortcut.register(CAPTURE_ACCELERATOR, showCaptureWindow);
   if (!captureShortcutRegistered) {
@@ -260,6 +290,152 @@ app.on('window-all-closed', () => {
   win = null;
 });
 
+// ─── Atomic write (IF-01) ────────────────────────────────────────────────────
+// Write to a hidden temp file in the SAME directory, flush it to disk (fsync),
+// then rename it over the target. rename(2) is atomic within one filesystem, so
+// a crash / power loss / disk-full mid-write can never leave a truncated .mind
+// or .md — the target is always either the complete old bytes or the complete
+// new bytes. Every full-file write in this process goes through here. The temp
+// is dot-prefixed so a leftover from a hard crash stays hidden from walk().
+async function atomicWrite(target: string, data: string | Buffer): Promise<void> {
+  await snapshotVersion(target); // IF-02 · preserve the pre-overwrite version first
+  const dir = path.dirname(target);
+  const tmp = path.join(dir, `.${path.basename(target)}.tmp-${process.pid}-${Date.now()}`);
+  let fh: Awaited<ReturnType<typeof fs.open>> | null = null;
+  try {
+    fh = await fs.open(tmp, 'w');
+    await fh.writeFile(data);
+    await fh.sync();
+    await fh.close();
+    fh = null;
+    await fs.rename(tmp, target);
+  } catch (err) {
+    if (fh) await fh.close().catch(() => {});
+    await fs.unlink(tmp).catch(() => {});
+    throw err;
+  }
+  await recordSeen(target); // IF-04 · remember our own write so it's not flagged as external
+}
+
+// IF-04 · External-change (cloud conflict) detection. The main process remembers
+// the mtime of every .mind/.md it reads or writes; if a file's mtime later jumps
+// ahead of that baseline, something ELSE (iCloud/Dropbox sync, another app or
+// device) changed it under us. `fs:externalChange` surfaces that so the renderer
+// can offer to reload — without touching the save path at all.
+const seenMtime = new Map<string, number>();
+async function recordSeen(target: string): Promise<void> {
+  const ext = path.extname(target);
+  if (ext !== '.mind' && ext !== '.md') return;
+  try {
+    const st = await fs.stat(target);
+    seenMtime.set(path.resolve(target), st.mtimeMs);
+  } catch {
+    /* file vanished — nothing to record */
+  }
+}
+
+// ─── Local version history (IF-02) ───────────────────────────────────────────
+// Every overwrite of a .mind/.md file first copies the CURRENT bytes into a
+// hidden <workspace>/.history/<file-key>/<timestamp>.<ext> snapshot, so a user
+// can roll a map or note back to an earlier point — a local, offline, free
+// "time machine" that survives restarts (unlike in-memory undo). Snapshots are
+// throttled (≥5 min apart per file) and capped (newest N kept per file). The
+// folder is dot-prefixed, so walk() already hides it from the sidebar tree.
+const HISTORY_DIR = '.history';
+const HISTORY_KEEP = 40;
+const HISTORY_MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+/** Flatten a workspace-relative path into a single history subfolder name. */
+function historyKey(rel: string): string {
+  return rel.replace(/[\\/]/g, '__');
+}
+
+async function snapshotVersion(target: string): Promise<void> {
+  const ext = path.extname(target);
+  if (ext !== '.mind' && ext !== '.md') return; // only user content is versioned
+  let ws: string;
+  try {
+    ws = await getWorkspace();
+  } catch {
+    return;
+  }
+  const resolved = path.resolve(target);
+  if (resolved !== ws && !resolved.startsWith(ws + path.sep)) return; // outside workspace
+  if (resolved.startsWith(path.join(ws, HISTORY_DIR) + path.sep)) return; // never snapshot snapshots
+  let prev: Buffer;
+  try {
+    prev = await fs.readFile(resolved);
+  } catch {
+    return; // brand-new file — nothing prior to keep
+  }
+  const dir = path.join(ws, HISTORY_DIR, historyKey(path.relative(ws, resolved)));
+  // Throttle: skip if this file was snapshotted within the last few minutes, so
+  // a burst of debounced autosaves doesn't fill history with near-identical copies.
+  try {
+    const recent = (await fs.readdir(dir)).filter((f) => f.endsWith(ext)).sort();
+    if (recent.length) {
+      const st = await fs.stat(path.join(dir, recent[recent.length - 1]));
+      if (Date.now() - st.mtimeMs < HISTORY_MIN_INTERVAL_MS) return;
+    }
+  } catch {
+    /* dir doesn't exist yet — this is the first snapshot */
+  }
+  await fs.mkdir(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  await fs.writeFile(path.join(dir, `${stamp}${ext}`), prev); // plain write — snapshots are throwaway copies
+  // Prune the oldest beyond the cap.
+  try {
+    const all = (await fs.readdir(dir)).filter((f) => f.endsWith(ext)).sort();
+    for (let i = 0; i < all.length - HISTORY_KEEP; i++) {
+      await fs.rm(path.join(dir, all[i]), { force: true });
+    }
+  } catch {
+    /* prune is best-effort */
+  }
+}
+
+/** Resolve a snapshot file path from an (untrusted) timestamp stamp. */
+async function historySnapshotPath(filePath: string, stamp: string): Promise<string> {
+  if (!/^[0-9TZ-]+$/.test(stamp)) throw new Error('Invalid version id');
+  const resolved = await assertInsideWorkspace(filePath);
+  const ws = await getWorkspace();
+  const ext = path.extname(resolved);
+  const snap = path.join(ws, HISTORY_DIR, historyKey(path.relative(ws, resolved)), `${stamp}${ext}`);
+  return assertInsideWorkspace(snap); // keep it inside the workspace no matter what
+}
+
+ipcMain.handle('history:list', async (_e, filePath: string) => {
+  const resolved = await assertInsideWorkspace(filePath);
+  const ws = await getWorkspace();
+  const ext = path.extname(resolved);
+  const dir = path.join(ws, HISTORY_DIR, historyKey(path.relative(ws, resolved)));
+  try {
+    const files = (await fs.readdir(dir)).filter((f) => f.endsWith(ext));
+    const out = await Promise.all(
+      files.map(async (name) => {
+        const st = await fs.stat(path.join(dir, name));
+        return { stamp: name.slice(0, -ext.length), savedAt: st.mtime.toISOString(), size: st.size };
+      }),
+    );
+    return out.sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1)); // newest first
+  } catch {
+    return [];
+  }
+});
+
+ipcMain.handle('history:read', async (_e, args: { filePath: string; stamp: string }) => {
+  const snap = await historySnapshotPath(args.filePath, args.stamp);
+  return fs.readFile(snap, 'utf-8');
+});
+
+ipcMain.handle('history:restore', async (_e, args: { filePath: string; stamp: string }) => {
+  const snap = await historySnapshotPath(args.filePath, args.stamp);
+  const resolved = await assertInsideWorkspace(args.filePath);
+  const content = await fs.readFile(snap, 'utf-8');
+  await atomicWrite(resolved, content); // snapshots the current (pre-restore) version first
+  return content;
+});
+
 // ─── File IPC ────────────────────────────────────────────────────────────────
 
 // Open a .mind file via dialog. Returns { path, content } or null if cancelled.
@@ -271,6 +447,7 @@ ipcMain.handle('dialog:open', async () => {
   if (res.canceled || res.filePaths.length === 0) return null;
   const filePath = res.filePaths[0];
   const content = await fs.readFile(filePath, 'utf-8');
+  await recordSeen(filePath); // IF-04 · external-change baseline
   return { path: filePath, content };
 });
 
@@ -287,7 +464,7 @@ ipcMain.handle('file:save', async (_e, args: { path: string | null; content: str
     target = res.filePath;
   }
   try {
-    await fs.writeFile(target, args.content, 'utf-8');
+    await atomicWrite(target, args.content);
   } catch (err) {
     log.error(`[file] save failed (${path.basename(target)}): ${(err as Error).message}`);
     throw err;
@@ -304,7 +481,7 @@ ipcMain.handle(
       filters: [{ name: args.ext.toUpperCase(), extensions: [args.ext] }],
     });
     if (res.canceled || !res.filePath) return null;
-    await fs.writeFile(res.filePath, args.content, 'utf-8');
+    await atomicWrite(res.filePath, args.content);
     return res.filePath;
   },
 );
@@ -317,6 +494,7 @@ ipcMain.handle('dialog:openAs', async (_e, ext: string) => {
   });
   if (res.canceled || res.filePaths.length === 0) return null;
   const content = await fs.readFile(res.filePaths[0], 'utf-8');
+  await recordSeen(res.filePaths[0]); // IF-04 · external-change baseline
   return { path: res.filePaths[0], content };
 });
 
@@ -333,6 +511,7 @@ function metaTemplatesPath() {
 interface AppSettings {
   workspace?: string;
   templatesEnabled?: boolean;
+  trashAutoPurge?: boolean; // IF-06 · auto-purge trash items older than 3 months (default OFF — opt-in; destructive)
 }
 
 async function readSettings(): Promise<AppSettings> {
@@ -344,7 +523,7 @@ async function readSettings(): Promise<AppSettings> {
 }
 
 async function writeSettings(s: AppSettings) {
-  await fs.writeFile(settingsPath(), JSON.stringify(s, null, 2), 'utf-8');
+  await atomicWrite(settingsPath(), JSON.stringify(s, null, 2));
 }
 
 const TEMPLATES_DIR = '.templates';
@@ -455,7 +634,7 @@ async function relocateAssetsDir(
       const oldRef = `./${found.name}/`;
       const newRef = `./${newName}/`;
       const body = await fs.readFile(notePath, 'utf-8');
-      if (body.includes(oldRef)) await fs.writeFile(notePath, body.split(oldRef).join(newRef), 'utf-8');
+      if (body.includes(oldRef)) await atomicWrite(notePath, body.split(oldRef).join(newRef));
     }
   } catch {
     /* rename failed — leave the assets dir where it was */
@@ -531,7 +710,21 @@ ipcMain.handle('capture:notifyAppended', (_e, targetPath: string) => {
 ipcMain.handle('capture:status', () => ({ registered: captureShortcutRegistered, accelerator: CAPTURE_ACCELERATOR }));
 
 ipcMain.handle('fs:read', async (_e, filePath: string) => {
-  return fs.readFile(filePath, 'utf-8');
+  const content = await fs.readFile(filePath, 'utf-8');
+  await recordSeen(filePath); // IF-04 · establish external-change baseline
+  return content;
+});
+
+// IF-04 · Has this file changed on disk since we last read/wrote it?
+ipcMain.handle('fs:externalChange', async (_e, filePath: string) => {
+  try {
+    const resolved = await assertInsideWorkspace(filePath);
+    const st = await fs.stat(resolved);
+    const base = seenMtime.get(resolved);
+    return { changed: base != null && st.mtimeMs > base + 1, mtime: st.mtimeMs };
+  } catch {
+    return { changed: false, mtime: null };
+  }
 });
 
 ipcMain.handle(
@@ -547,7 +740,7 @@ ipcMain.handle(
     const dirName = existing?.name ?? assetsDirName(base);
     const assetsDir = path.join(dir, dirName);
     await fs.mkdir(assetsDir, { recursive: true });
-    await fs.writeFile(path.join(assetsDir, args.filename), Buffer.from(args.buffer));
+    await atomicWrite(path.join(assetsDir, args.filename), Buffer.from(args.buffer));
     return `./${dirName}/${args.filename}`;
   },
 );
@@ -574,7 +767,7 @@ ipcMain.handle(
     const dir = await assertInsideWorkspace(args.dir);
     await fs.mkdir(dir, { recursive: true }); // auto-create dir (e.g. hidden .notes)
     const full = await assertInsideWorkspace(await uniquePath(dir, args.name, args.ext ?? '.mind'));
-    await fs.writeFile(full, args.content, 'utf-8');
+    await atomicWrite(full, args.content);
     return full;
   },
 );
@@ -676,7 +869,49 @@ async function readTrash(metaFile: string): Promise<TrashEntry[]> {
   }
 }
 async function writeTrash(metaFile: string, items: TrashEntry[]): Promise<void> {
-  await fs.writeFile(metaFile, JSON.stringify(items, null, 2), 'utf-8');
+  await atomicWrite(metaFile, JSON.stringify(items, null, 2));
+}
+
+// IF-06 · Trash retention: when auto-purge is on (default), items sitting in the
+// workspace trash longer than 3 months are swept out on the next trash listing.
+// Swept items go to the OS Trash (recoverable there) — not a hard delete — so the
+// destructive default still has a safety net, same as "empty trash".
+const TRASH_RETENTION_DAYS = 90;
+
+async function purgeExpiredTrash(metaFile: string): Promise<TrashEntry[]> {
+  const s = await readSettings();
+  const items = await readTrash(metaFile);
+  if (s.trashAutoPurge !== true) return items; // default OFF — only sweep when explicitly opted in
+  const cutoff = Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const keep: TrashEntry[] = [];
+  const expired: TrashEntry[] = [];
+  for (const it of items) {
+    const t = Date.parse(it.deletedAt);
+    if (Number.isFinite(t) && t < cutoff) expired.push(it);
+    else keep.push(it);
+  }
+  if (expired.length === 0) return items;
+  for (const it of expired) {
+    try {
+      await shell.trashItem(it.trashedPath);
+    } catch {
+      await fs.rm(it.trashedPath, { recursive: true, force: true });
+    }
+    if (path.extname(it.trashedPath) === '.md') {
+      const stem = path.basename(it.trashedPath, '.md');
+      const found = await findAssetsDir(path.dirname(it.trashedPath), stem);
+      if (found) {
+        try {
+          await shell.trashItem(found.path);
+        } catch {
+          await fs.rm(found.path, { recursive: true, force: true });
+        }
+      }
+    }
+  }
+  await writeTrash(metaFile, keep);
+  log.info(`[trash] auto-purged ${expired.length} item(s) older than ${TRASH_RETENTION_DAYS}d`);
+  return keep;
 }
 
 ipcMain.handle('trash:move', async (_e, target: string) => {
@@ -709,7 +944,7 @@ ipcMain.handle('trash:move', async (_e, target: string) => {
 
 ipcMain.handle('trash:list', async () => {
   const { metaFile } = await trashLoc();
-  const items = await readTrash(metaFile);
+  const items = await purgeExpiredTrash(metaFile); // IF-06 · sweep expired items first
   const alive: TrashEntry[] = [];
   for (const it of items) {
     try {
@@ -876,25 +1111,74 @@ ipcMain.handle('update:check', () => checkForUpdatesManually());
 ipcMain.handle('update:install', () => installUpdate());
 
 // ─── Web fetch (for "URL → note") — runs in main so there's no CORS ──────────
+// IF-12 · SSRF guard. This handler fetches an arbitrary user-supplied URL from
+// the main process, so it must not be usable to reach the loopback interface,
+// the LAN, or the cloud metadata endpoint (169.254.169.254). We resolve every
+// host (including each redirect hop) and refuse private/loopback/link-local
+// targets before connecting.
+function isPrivateIp(ip: string): boolean {
+  const v4 = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    if (a === 10 || a === 127 || a === 0) return true; // private / loopback / this-host
+    if (a === 169 && b === 254) return true; // link-local incl. 169.254.169.254 metadata
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12
+    if (a === 192 && b === 168) return true; // 192.168/16
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
+    return false;
+  }
+  const v6 = ip.toLowerCase();
+  if (v6 === '::1' || v6 === '::') return true; // loopback / unspecified
+  if (v6.startsWith('fe80')) return true; // link-local
+  if (v6.startsWith('fc') || v6.startsWith('fd')) return true; // unique-local fc00::/7
+  const mapped = v6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); // IPv4-mapped
+  if (mapped) return isPrivateIp(mapped[1]);
+  return false;
+}
+async function assertPublicHost(hostname: string): Promise<void> {
+  const lower = hostname.toLowerCase();
+  if (lower === 'localhost' || lower.endsWith('.localhost')) throw new Error('요청이 차단되었습니다 (내부 주소)');
+  const addrs = await dns.lookup(hostname, { all: true });
+  if (addrs.some((a) => isPrivateIp(a.address))) throw new Error('요청이 차단되었습니다 (내부 주소)');
+}
+
 ipcMain.handle('web:fetch', async (_e, rawUrl: string) => {
   let url = (rawUrl ?? '').trim();
   if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      redirect: 'follow',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 MindMap/1.0',
-        Accept: 'text/html,application/xhtml+xml,*/*',
-      },
-    });
+    let current = url;
+    let res: Awaited<ReturnType<typeof fetch>> | null = null;
+    // Follow redirects manually so each hop's host is re-checked (a public URL
+    // can 30x to an internal one — the classic SSRF bypass).
+    for (let hop = 0; hop < 6; hop++) {
+      const parsed = new URL(current);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+        throw new Error('지원하지 않는 프로토콜입니다');
+      await assertPublicHost(parsed.hostname);
+      res = await fetch(current, {
+        signal: ctrl.signal,
+        redirect: 'manual',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 MindMap/1.0',
+          Accept: 'text/html,application/xhtml+xml,*/*',
+        },
+      });
+      const loc = res.headers.get('location');
+      if (res.status >= 300 && res.status < 400 && loc) {
+        current = new URL(loc, current).toString();
+        continue;
+      }
+      break;
+    }
+    if (!res) throw new Error('응답 없음');
     const html = await res.text();
-    return { ok: true as const, finalUrl: res.url || url, status: res.status, html };
+    return { ok: true as const, finalUrl: res.url || current, status: res.status, html };
   } catch (err) {
-    log.warn(`[web] fetch failed (${url}): ${(err as Error).message}`);
+    log.warn(`[web] fetch failed: ${(err as Error).message}`);
     return { ok: false as const, error: (err as Error).message };
   } finally {
     clearTimeout(timer);
@@ -913,7 +1197,7 @@ function maskKey(key: string): string {
 
 ipcMain.handle('ai:setKey', async (_e, key: string) => {
   const buf = safeStorage.encryptString(key);
-  await fs.writeFile(AI_KEY_PATH, buf);
+  await atomicWrite(AI_KEY_PATH, buf);
 });
 
 ipcMain.handle('ai:hasKey', async () => {
@@ -950,7 +1234,7 @@ function maskOpenAiKey(key: string): string {
 
 ipcMain.handle('ai:openai:setKey', async (_e, key: string) => {
   const buf = safeStorage.encryptString(key);
-  await fs.writeFile(OPENAI_KEY_PATH, buf);
+  await atomicWrite(OPENAI_KEY_PATH, buf);
 });
 
 ipcMain.handle('ai:openai:getMasked', async () => {
@@ -983,7 +1267,7 @@ ipcMain.handle('ai:getActive', async () => {
 });
 
 ipcMain.handle('ai:setActive', async (_e, provider: 'claude' | 'openai') => {
-  await fs.writeFile(ACTIVE_PROVIDER_PATH, JSON.stringify({ provider }));
+  await atomicWrite(ACTIVE_PROVIDER_PATH, JSON.stringify({ provider }));
 });
 
 // ─── Shell ────────────────────────────────────────────────────────────────
@@ -1019,7 +1303,7 @@ async function readPins(): Promise<string[]> {
   }
 }
 async function writePins(paths: string[]): Promise<void> {
-  await fs.writeFile(await pinsPath(), JSON.stringify(paths, null, 2), 'utf-8');
+  await atomicWrite(await pinsPath(), JSON.stringify(paths, null, 2));
 }
 
 ipcMain.handle('pins:list', async () => {
@@ -1046,7 +1330,7 @@ ipcMain.handle('pins:toggle', async (_e, target: string) => {
 });
 
 ipcMain.handle('meta:saveTemplates', async (_e, templates: unknown) => {
-  await fs.writeFile(metaTemplatesPath(), JSON.stringify(templates, null, 2), 'utf-8');
+  await atomicWrite(metaTemplatesPath(), JSON.stringify(templates, null, 2));
 });
 
 // ─── Note templates ─────────────────────────────────────────────────────────
@@ -1064,6 +1348,20 @@ ipcMain.handle('settings:setTemplatesEnabled', async (_e, enabled: boolean) => {
   await writeSettings({ ...s, templatesEnabled: enabled });
   if (enabled) await ensureTemplatesDir(await getWorkspace());
 });
+
+// ─── Trash retention (IF-06) ────────────────────────────────────────────────
+ipcMain.handle('settings:getTrashAutoPurge', async () => {
+  const s = await readSettings();
+  return s.trashAutoPurge === true; // default OFF — destructive, must be opt-in (기획서 §6, 결정: 파괴적 기본값 금지)
+});
+
+ipcMain.handle('settings:setTrashAutoPurge', async (_e, enabled: boolean) => {
+  const s = await readSettings();
+  await writeSettings({ ...s, trashAutoPurge: enabled });
+});
+
+/** Retention window (days) — surfaced to the renderer for its "3개월" label. */
+ipcMain.handle('trash:retentionDays', () => TRASH_RETENTION_DAYS);
 
 ipcMain.handle('templates:list', async () => {
   const dir = path.join(await getWorkspace(), TEMPLATES_DIR);

@@ -11,7 +11,7 @@ import { useUi } from '../store/uiStore';
 import { useSession } from '../store/sessionStore';
 import type { MapStore } from '../store/mapStore';
 import { useWorkspace } from '../store/workspaceStore';
-import { collectAgenda } from '../focus/collectAgenda';
+import { collectAgendaCached } from './collectAgendaCached';
 import { buildAgenda, type AgendaItem, type Agenda } from '../focus/agenda';
 import { dayKey, dailyTotals, fmtDuration } from '../focus/aggregate';
 import { mapStoreById } from '../focus/controller';
@@ -93,7 +93,7 @@ export function CalendarView() {
   const [items, setItems] = useState<AgendaItem[] | null>(null);
   const now = Date.now();
 
-  const reload = () => void collectAgenda().then(setItems);
+  const reload = () => void collectAgendaCached().then(setItems);
   useEffect(() => {
     reload();
   }, []);
