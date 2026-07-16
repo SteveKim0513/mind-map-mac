@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { startOfDay, addDays, startOfWeek, weekDays, monthGridCells, groupItemsByDay } from './calendarMath';
+import {
+  startOfDay,
+  addDays,
+  startOfWeek,
+  weekDays,
+  monthGridCells,
+  groupItemsByDay,
+  isoDate,
+  rescheduleToDay,
+  rescheduleToMinute,
+  gridTopMinutes,
+  blockSpanMinutes,
+  layoutDayBlocks,
+  DEFAULT_BLOCK_MIN,
+  WEEK_GRID_START_HOUR,
+  WEEK_GRID_MINUTES,
+} from './calendarMath';
 import type { AgendaItem } from '../focus/agenda';
 
 const item = (over: Partial<AgendaItem>): AgendaItem => ({
@@ -114,5 +130,104 @@ describe('groupItemsByDay', () => {
   it('skips items with an unparseable (NaN) schedule', () => {
     const grouped = groupItemsByDay([item({ at: NaN })]);
     expect(grouped.size).toBe(0);
+  });
+});
+
+describe('rescheduleToDay', () => {
+  it('moves the date but keeps the time-of-day', () => {
+    const target = new Date(2026, 6, 20).getTime(); // Jul 20 2026 local midnight
+    expect(rescheduleToDay('2026-06-15T09:30:00', target)).toBe('2026-07-20T09:30:00');
+  });
+
+  it('keeps an all-day schedule all-day on the new date', () => {
+    const target = new Date(2026, 0, 3).getTime();
+    expect(rescheduleToDay('2026-06-15T00:00:00', target)).toBe('2026-01-03T00:00:00');
+  });
+
+  it('isoDate zero-pads month and day', () => {
+    expect(isoDate(new Date(2026, 2, 5).getTime())).toBe('2026-03-05');
+  });
+});
+
+describe('rescheduleToMinute', () => {
+  it('sets the time on the existing date and turns a chip into a timed event', () => {
+    expect(rescheduleToMinute('2026-06-15T00:00:00', 9 * 60 + 15)).toBe('2026-06-15T09:15:00');
+  });
+
+  it('clamps out-of-range minutes into the day', () => {
+    expect(rescheduleToMinute('2026-06-15T10:00:00', -30)).toBe('2026-06-15T00:00:00');
+    expect(rescheduleToMinute('2026-06-15T10:00:00', 99_999)).toBe('2026-06-15T23:59:00');
+  });
+});
+
+describe('gridTopMinutes', () => {
+  it('returns null for all-day items', () => {
+    const at = new Date(2026, 6, 15, 0, 0).getTime();
+    expect(gridTopMinutes(at, false)).toBeNull();
+  });
+
+  it('positions a timed item by minutes from the grid start hour', () => {
+    const at = new Date(2026, 6, 15, WEEK_GRID_START_HOUR + 2, 30).getTime();
+    expect(gridTopMinutes(at, true)).toBe(2 * 60 + 30);
+  });
+
+  it('returns null when the item falls outside the visible window', () => {
+    const early = new Date(2026, 6, 15, WEEK_GRID_START_HOUR - 1, 0).getTime();
+    expect(gridTopMinutes(early, true)).toBeNull();
+    const late = new Date(2026, 6, 15, 23, 59).getTime();
+    // 23:59 is within [start, start+span) only if span reaches it; assert consistency
+    const min = gridTopMinutes(late, true);
+    expect(min === null || (min >= 0 && min < WEEK_GRID_MINUTES)).toBe(true);
+  });
+});
+
+describe('blockSpanMinutes', () => {
+  it('uses the duration when set', () => {
+    expect(blockSpanMinutes(90)).toBe(90);
+  });
+  it('falls back to a legible default for point events', () => {
+    expect(blockSpanMinutes(undefined)).toBe(DEFAULT_BLOCK_MIN);
+    expect(blockSpanMinutes(0)).toBe(DEFAULT_BLOCK_MIN);
+  });
+});
+
+describe('layoutDayBlocks', () => {
+  it('gives non-overlapping blocks a single full-width column each', () => {
+    const out = layoutDayBlocks([
+      { nodeId: 'a', startMin: 0, endMin: 30 },
+      { nodeId: 'b', startMin: 60, endMin: 90 },
+    ]);
+    expect(out.every((b) => b.cols === 1 && b.col === 0)).toBe(true);
+  });
+
+  it('splits two overlapping blocks into two side-by-side columns', () => {
+    const out = layoutDayBlocks([
+      { nodeId: 'a', startMin: 0, endMin: 60 },
+      { nodeId: 'b', startMin: 30, endMin: 90 },
+    ]);
+    const a = out.find((b) => b.nodeId === 'a')!;
+    const b = out.find((b) => b.nodeId === 'b')!;
+    expect(a.cols).toBe(2);
+    expect(b.cols).toBe(2);
+    expect(new Set([a.col, b.col])).toEqual(new Set([0, 1]));
+  });
+
+  it('reuses a freed column when a later block no longer overlaps', () => {
+    // a and b overlap (2 cols); c starts after both end → new cluster, 1 col.
+    const out = layoutDayBlocks([
+      { nodeId: 'a', startMin: 0, endMin: 60 },
+      { nodeId: 'b', startMin: 10, endMin: 60 },
+      { nodeId: 'c', startMin: 120, endMin: 150 },
+    ]);
+    expect(out.find((b) => b.nodeId === 'c')!.cols).toBe(1);
+    expect(out.find((b) => b.nodeId === 'a')!.cols).toBe(2);
+  });
+
+  it('touching blocks (end == next start) do not count as overlapping', () => {
+    const out = layoutDayBlocks([
+      { nodeId: 'a', startMin: 0, endMin: 30 },
+      { nodeId: 'b', startMin: 30, endMin: 60 },
+    ]);
+    expect(out.every((b) => b.cols === 1)).toBe(true);
   });
 });

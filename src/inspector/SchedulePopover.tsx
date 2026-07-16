@@ -45,6 +45,7 @@ function preview(date: string, time: string): string {
 export function SchedulePopover({ id, onClose }: Props) {
   const node = useMap((s) => s.doc.nodes[id]);
   const setScheduleAt = useMap((s) => s.setScheduleAt);
+  const setDuration = useMap((s) => s.setDuration);
   const setReminderOn = useMap((s) => s.setReminderOn);
   const syncStatus = useUi((s) => s.syncStatus);
   const mapStore = useMapStore();
@@ -79,6 +80,14 @@ export function SchedulePopover({ id, onClose }: Props) {
     { label: '저녁', sub: '18:00', val: '18:00' },
     { label: '밤', sub: '21:00', val: '21:00' },
   ];
+  const durationChips = [
+    { label: '없음', min: 0 },
+    { label: '15분', min: 15 },
+    { label: '30분', min: 30 },
+    { label: '1시간', min: 60 },
+    { label: '2시간', min: 120 },
+  ];
+  const hasTime = !!time && time !== '00:00';
 
   const pos = useNodeAnchoredPosition(id, 300, { height: 360 });
 
@@ -166,6 +175,24 @@ export function SchedulePopover({ id, onClose }: Props) {
           </button>
         ))}
       </div>
+
+      {/* 소요 시간 — only for timed events (time-block on the calendar grid) */}
+      {hasTime && (
+        <div className="sched-dur">
+          <span className="sched-dur-lbl">소요 시간</span>
+          <div className="sched-chips">
+            {durationChips.map((c) => (
+              <button
+                key={c.label}
+                className={`sched-chip${(node.durationMin ?? 0) === c.min ? ' on' : ''}`}
+                onClick={() => setDuration(id, c.min || undefined)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* reminder sync — iOS-style switch */}
       <div className="sched-toggle-row">

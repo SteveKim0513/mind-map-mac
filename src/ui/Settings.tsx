@@ -264,6 +264,8 @@ function MainView({
         </div>
       </div>
 
+      <ReminderSyncRow />
+
       <button
         className="set-advanced-toggle"
         onClick={() => setAdvancedOpen((o) => !o)}
@@ -336,13 +338,64 @@ function CaptureStatusRow() {
   return (
     <div className="set-row">
       <div>
-        <span className="set-label">전역 캡처</span>
+        <span className="set-label">빠른 메모</span>
         <p className="set-desc">
           {status.registered
             ? `${status.accelerator} — 어디서든 빠르게 생각을 적어요`
             : `${status.accelerator}를 다른 앱이 사용 중이라 꺼져 있어요`}
         </p>
       </div>
+    </div>
+  );
+}
+
+/** 미리알림(macOS Reminders) 동기화 상태 — 핵심 차별 기능인데 지금까지 SchedulePopover
+ *  토글로만 도달 가능해 사실상 안 보였다. 설정에 상시 상태 행으로 끌어올린다(카피 감사 §4-1).
+ *  상태는 uiStore.syncStatus 실시간 구독 — 새 IPC 불필요. remindersAvailable()는 권한
+ *  다이얼로그를 띄우므로 사용자가 "연결 확인"을 명시적으로 눌렀을 때만 호출한다. */
+function ReminderSyncRow() {
+  const status = useUi((s) => s.syncStatus);
+  const [checking, setChecking] = useState(false);
+  const recheck = async () => {
+    setChecking(true);
+    try {
+      await window.api.remindersAvailable();
+    } finally {
+      setChecking(false);
+    }
+  };
+  const desc =
+    status === 'ok'
+      ? '미리알림과 양방향으로 동기화되고 있어요'
+      : status === 'syncing'
+        ? '동기화하는 중…'
+        : status === 'denied'
+          ? '권한이 필요해요 — 설정 › 개인정보 보호 및 보안 › 자동화'
+          : status === 'down'
+            ? '동기화가 잠시 멈췄어요 — 자동으로 다시 시도 중'
+            : '노드에 일정을 걸면 macOS 미리알림과 자동으로 이어져요';
+  return (
+    <div className="set-row">
+      <div>
+        <span className="set-label">미리알림 동기화</span>
+        <p className="set-desc">{desc}</p>
+      </div>
+      {status === 'denied' ? (
+        <button
+          className="set-act"
+          onClick={() =>
+            void window.api.shell.openExternal(
+              'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation',
+            )
+          }
+        >
+          설정 열기
+        </button>
+      ) : (
+        <button className="set-act" disabled={checking} onClick={() => void recheck()}>
+          {checking ? '확인 중…' : '연결 확인'}
+        </button>
+      )}
     </div>
   );
 }

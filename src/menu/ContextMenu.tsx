@@ -41,7 +41,6 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
         onPointerDown={(e) => e.stopPropagation()}
       >
         <div className="ctx-head">{sel.length}개 선택됨</div>
-        <div className="ctx-group-label">구조</div>
         {sel.length === 2 && (
           <button className="ctx-item" onClick={run(() => map.addConnection(sel[0], sel[1]))}>
             <span>두 노드 연결</span>
@@ -52,7 +51,6 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
         </button>
         <div className="ctx-sep" />
 
-        <div className="ctx-group-label">속성</div>
         {/* 색상 — 선택 전체에 한 번에 적용 */}
         <div className="ctx-colors">
           <ColorSwatchGrid value={uniformColor} onChange={(c) => run(() => map.setColorSelected(c))()} />
@@ -79,8 +77,7 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       style={{ left: pos.left, top: pos.top }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      {/* 구조 — 노드 자체의 뼈대 (축 무관, 결정 0011) */}
-      <div className="ctx-group-label">구조</div>
+      {/* 구조 — 노드 자체의 뼈대 (축 무관, 결정 0011). 축 순서는 유지하되 라벨은 노출하지 않는다 (카피 감사 2026-07-15) */}
       <button className="ctx-item" onClick={run(() => map.addChild(id))}>
         <span>자식 추가</span>
         <kbd>Tab</kbd>
@@ -108,7 +105,6 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       <div className="ctx-sep" />
 
       {/* 정리 — 생각을 포착·구조화(색·아이콘·메모·링크) */}
-      <div className="ctx-group-label">정리</div>
       <div className="ctx-colors">
         <ColorSwatchGrid value={node.color} onChange={(c) => run(() => map.setColor(id, c))()} />
       </div>
@@ -128,7 +124,6 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       <div className="ctx-sep" />
 
       {/* 실행 — 완료→일정→집중이 하나의 흐름(결정 0011) */}
-      <div className="ctx-group-label">실행</div>
       <button className="ctx-item" onClick={run(() => map.toggleDone(id))}>
         <span>{node.done ? '완료 해제' : '완료 표시'}</span>
         <kbd>⌘↵</kbd>
@@ -152,16 +147,15 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
         disabled={!node.scheduled}
         title={node.scheduled ? undefined : '일정 설정 후 이용 가능'}
         onClick={run(() => {
-          if (focusing) useUi.getState().toast('집중 세션이 이미 진행 중입니다');
+          if (focusing) useUi.getState().toast('집중이 이미 진행 중입니다');
           else requestFocusStart(mapStore, id);
         })}
       >
-        <span>{focusing ? '집중 세션 진행 중…' : '집중 세션 시작'}</span>
+        <span>{focusing ? '집중 중…' : '집중 시작'}</span>
       </button>
       <div className="ctx-sep" />
 
       {/* 통찰 — 더 깊이 쓰고 되짚어 이해(결정 0011) */}
-      <div className="ctx-group-label">통찰</div>
       <button className="ctx-item" onClick={run(() => map.setFocus(id))}>
         <span>이 노드만 보기</span>
       </button>

@@ -43,6 +43,22 @@ export function useKeyboard() {
         return;
       }
 
+      // ⌘L — 선택 노드에 노트 연결. note↔node 통합(PRODUCT-DEFINITION 핵심경험 #2)을
+      // 우클릭 메뉴 최하단이 아니라 키보드로 바로 도달하게 한다. 선택 없으면 무동작.
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+        e.preventDefault();
+        const node = sel ? s.doc.nodes[sel] : null;
+        if (sel && node) {
+          useUi.getState().openLinkNote({
+            mapId: s.doc.id ?? '',
+            nodeId: sel,
+            nodeText: node.text,
+            mapPath: s.filePath ?? '',
+          });
+        }
+        return;
+      }
+
       switch (e.key) {
         case 'Tab':
           e.preventDefault();

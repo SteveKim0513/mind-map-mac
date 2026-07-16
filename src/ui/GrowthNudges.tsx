@@ -61,7 +61,7 @@ export function GrowthNudges() {
   return activeTab?.kind === 'map' ? <ScheduleNudge store={activeTab.store as MapStore} /> : null;
 }
 
-/** 열려 있는 맵 하나에 일정이 걸린 노드가 3개 이상 쌓이면 → 리마인더 동기화 제안. */
+/** 열려 있는 맵 하나에 일정이 걸린 노드가 3개 이상 쌓이면 → 미리알림 동기화 제안. */
 function ScheduleNudge({ store }: { store: MapStore }) {
   const scheduledCount = useStore(store, (s) =>
     Object.values(s.doc.nodes).filter((n) => n.scheduled).length,
@@ -70,7 +70,7 @@ function ScheduleNudge({ store }: { store: MapStore }) {
     if (scheduledCount >= 3 && !shown('reminders')) {
       markShown('reminders');
       useUi.getState().toastAction(
-        '일정이 걸린 노드가 늘고 있어요 — 리마인더 앱과 동기화해서 놓치지 않게 할까요?',
+        '일정이 걸린 노드가 늘고 있어요 — 미리알림 앱과 동기화해서 놓치지 않게 할까요?',
         '설정 열기',
         () => useUi.getState().openSettings(),
       );

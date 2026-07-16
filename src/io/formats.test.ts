@@ -39,6 +39,38 @@ describe('serialize / deserialize', () => {
     expect(back.nodes.a.scheduleAt).toBe('2026-06-15T09:00:00');
   });
 
+  it('round-trips durationMin without bumping the schema version (decision 0012)', () => {
+    const doc = docWith(
+      {
+        a: {
+          id: 'a',
+          text: 'time-blocked',
+          parentId: null,
+          children: [],
+          collapsed: false,
+          scheduled: true,
+          scheduleAt: '2026-06-15T09:00:00',
+          durationMin: 90,
+        },
+      },
+      ['a'],
+    );
+    const back = deserialize(serialize(doc));
+    expect(back.nodes.a.durationMin).toBe(90);
+    expect(back.version).toBe(1); // additive optional field — no migration, version stays 1
+  });
+
+  it('loads a legacy doc that predates durationMin (field simply absent)', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      rootIds: ['a'],
+      nodes: { a: { id: 'a', text: 'old', parentId: null, children: [], collapsed: false } },
+    });
+    const doc = deserialize(raw);
+    expect(doc.nodes.a.durationMin).toBeUndefined();
+    expect(doc.version).toBe(1);
+  });
+
   it('throws a clear error on corrupt JSON instead of leaking a SyntaxError', () => {
     expect(() => deserialize('{ not valid json')).toThrow(/손상된/);
   });

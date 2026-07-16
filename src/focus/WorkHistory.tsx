@@ -170,7 +170,7 @@ export function WorkHistory() {
         {counted.length === 0 ? (
           <div className="wh-empty">
             아직 집중 기록이 없어요.<br />
-            노드에서 <b>“집중 세션 시작”</b>으로 첫 기록을 남겨보세요.
+            노드에서 <b>“집중 시작”</b>으로 첫 기록을 남겨보세요.
           </div>
         ) : (
           <div className="wh-body">

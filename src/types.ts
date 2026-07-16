@@ -14,6 +14,10 @@ export interface MindNode {
   // ── Schedule / Reminders sync ──
   scheduled?: boolean; // marked as a schedule node (shows date + reminder options)
   scheduleAt?: string; // local-time ISO ("2026-06-15T09:00:00"); date/time of the schedule
+  // Time-block length in minutes (calendar time-grid). Optional & additive — the
+  // schema `version` stays 1 (decision 0012). Local-only: NOT synced to Reminders
+  // (they have no duration concept); only meaningful for timed (hasTime) events.
+  durationMin?: number;
   reminderOn?: boolean; // user wants this node mirrored to macOS Reminders
   reminderId?: string; // external Reminders id once created (sync key)
   reminderSyncedAt?: number; // ms — reminder's modification date at last reconcile

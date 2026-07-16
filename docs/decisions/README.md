@@ -29,3 +29,4 @@
 - [0009 — 노드에서 만든 노트는 그 노드 맵과 같은 폴더에 (숨김 .notes/ 폐기)](0009-node-note-location.md)
 - [0010 — 노트 이미지 첨부 폴더를 진짜 숨김 폴더로 (`notename.assets/` → `.notename.assets/`)](0010-note-image-assets-hidden-folder.md)
 - [0011 — 기능의 3가지 축: 정리·실행·통찰 (0007 G3 보강)](0011-three-axis-thinking-model.md)
+- [0012 — 노드 지속시간 필드(durationMin) — version 범프 없는 선택 필드](0012-node-duration-field.md)

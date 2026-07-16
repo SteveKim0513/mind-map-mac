@@ -200,6 +200,9 @@ export default function App() {
         case 'new':
           await newMindmap();
           break;
+        case 'new-note':
+          await newNote();
+          break;
         case 'open': {
           const res = await window.api.open();
           if (res) sess.openPath(res.path, res.content);
@@ -516,12 +519,13 @@ function buildCommands(o: {
 }): Command[] {
   const cmds: Command[] = [
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
-    { id: 'capture', icon: 'bulb', label: '빠른 캡처 열기', hint: '⌥Space', run: () => void window.api.capture.show() },
+    { id: 'capture', icon: 'bulb', label: '빠른 메모 열기', hint: '⌥Space', run: () => void window.api.capture.show() },
     { id: 'calendar', icon: 'calendar', label: '캘린더 열기', run: () => useSession.getState().openCalendar() },
-    { id: 'history', icon: 'clock', label: '돌아보기 열기', run: () => useUi.getState().openHistory() },
+    { id: 'history', icon: 'clock', label: '집중 기록 열기', run: () => useUi.getState().openHistory() },
     { id: 'recent', icon: 'clock', label: '최근 수정 보기', run: () => useUi.getState().openRecent() },
     { id: 'favorites', icon: 'star', label: '즐겨찾기 보기', run: () => useUi.getState().openFavorites() },
     { id: 'trash', icon: 'trash', label: '휴지통 열기', run: () => useUi.getState().openTrash() },
+    { id: 'reminders', icon: 'calendar', label: '미리알림 동기화 설정', run: () => useUi.getState().openSettings() },
     { id: 'globalsearch', icon: 'search', label: '전체 검색 (노드·노트)', hint: '⌘⇧F', run: () => useUi.getState().setGlobalSearch(true) },
     { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
     { id: 'theme', icon: 'moon', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },
@@ -542,7 +546,7 @@ function buildCommands(o: {
         label: '선택 노드: 노트 연결',
         run: () => useUi.getState().openLinkNote({ mapId: sel.mapId, nodeId: sel.id, nodeText: sel.text, mapPath: sel.mapPath }),
       },
-      { id: 'node-focus', icon: 'clock', label: '선택 노드: 집중 세션 시작', run: () => requestFocusStart(sel.store, sel.id) },
+      { id: 'node-focus', icon: 'clock', label: '선택 노드: 집중 시작', run: () => requestFocusStart(sel.store, sel.id) },
       ...TAG_KEYS.map((c) => ({
         id: `node-color-${c}`,
         icon: 'paint' as const,

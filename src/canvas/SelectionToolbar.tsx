@@ -63,9 +63,9 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
       {node.scheduled && (
         <button
           className={`st-btn${focusing ? ' on' : ''}`}
-          title={focusing ? '집중 세션 진행 중 (클릭하면 안내)' : '집중 세션 시작'}
+          title={focusing ? '집중 중 (클릭하면 안내)' : '집중 시작'}
           onClick={() => {
-            if (focusing) useUi.getState().toast('집중 세션이 이미 진행 중입니다. 세션을 먼저 종료하세요.');
+            if (focusing) useUi.getState().toast('집중이 이미 진행 중입니다. 먼저 종료하세요.');
             else requestFocusStart(mapStore, nodeId);
           }}
         >

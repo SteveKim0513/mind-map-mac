@@ -94,7 +94,7 @@ export function AgendaRow({ it, overdue, actions }: AgendaRowProps) {
         {mapName(it) && <span className="today-map">{mapName(it)}</span>}
       </button>
       <span className="today-acts">
-        <button className="today-act focus" onClick={() => actions.startFocus(it)} title="집중 세션 시작">
+        <button className="today-act focus" onClick={() => actions.startFocus(it)} title="집중 시작">
           <Icon name="clock" />
         </button>
         <button className="today-act" onClick={() => actions.toggleDone(it)} title="완료 표시">

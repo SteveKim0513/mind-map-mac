@@ -18,6 +18,8 @@
 - [2026-07-09-note-templates.md](2026-07-09-note-templates.md) — 노트 템플릿 v1
 - [2026-06-12-today-view.md](2026-06-12-today-view.md) — "오늘" 뷰 (→ 2026-07-15-calendar-view.md로 승격, 오버레이 자체는 퇴역)
 - [2026-07-15-calendar-view.md](2026-07-15-calendar-view.md) — 캘린더 뷰 ("오늘" 뷰를 일/주/월 탭으로 승격)
+- [2026-07-15-calendar-execute-insight.md](2026-07-15-calendar-execute-insight.md) — 캘린더 강화 Phase 1+2: 드래그 리스케줄·주간 시간그리드·빈슬롯 캡처 + 계획↔실행 오버레이
+- [2026-07-15-calendar-timeblocking.md](2026-07-15-calendar-timeblocking.md) — 캘린더 강화 Phase 3: 타임블로킹(`durationMin` 선택 필드, 블록 높이·겹침·리사이즈), [decisions/0012](../../decisions/0012-node-duration-field.md)
 
 ## 명세만 완료 · 구현 예정 / 아이디어 단계
 

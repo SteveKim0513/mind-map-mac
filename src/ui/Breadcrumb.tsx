@@ -11,7 +11,7 @@ export function Breadcrumb() {
 
   return (
     <div className="breadcrumb">
-      <button className="bc-exit" onClick={() => setFocus(null)} title="포커스 해제 (Esc)">
+      <button className="bc-exit" onClick={() => setFocus(null)} title="전체 보기 (Esc)">
         <Icon name="home" />
         전체
       </button>

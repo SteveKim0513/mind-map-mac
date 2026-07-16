@@ -426,7 +426,7 @@ function SessionMetaBanner({ session }: { session: FocusSession }) {
     <div className={`session-banner${running ? ' running' : ''}`}>
       <div className="session-banner-main">
         <Icon name="clock" />
-        <span className="session-banner-title">집중 세션</span>
+        <span className="session-banner-title">집중</span>
         <span className="session-banner-time">
           {running ? fmtClock(elapsed) : fmtDuration(session.durationSec)}
         </span>

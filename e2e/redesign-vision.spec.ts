@@ -56,7 +56,7 @@ test('집중 세션 위젯은 사이드바 독킹 시 기본으로 접혀 있고
 
     await page.click('.node');
     await page.waitForSelector('.sel-toolbar', { timeout: 3_000 });
-    await page.click('.st-btn[title="집중 세션 시작"]');
+    await page.click('.st-btn[title="집중 시작"]');
     await page.waitForSelector('.focus-start', { timeout: 3_000 });
     await page.keyboard.press('Enter');
 

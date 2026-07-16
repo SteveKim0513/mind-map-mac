@@ -8,7 +8,7 @@ import { launchApp } from './helpers';
 //
 // Playwright can't press a real OS-level global accelerator, so these tests
 // drive the same code path through the capture:show IPC channel (exposed as
-// the ⌘K "빠른 캡처 열기" command) instead of the ⌥Space shortcut itself.
+// the ⌘K "빠른 메모 열기" command) instead of the ⌥Space shortcut itself.
 // The end-to-end write path (capture window -> capture:targetPath -> save)
 // is identical either way.
 

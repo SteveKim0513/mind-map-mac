@@ -58,7 +58,7 @@ let pendingStart: { store: MapStore; nodeId: string } | null = null;
 export function requestFocusStart(store: MapStore, nodeId: string): void {
   const ui = useUi.getState();
   if (ui.activeFocus) {
-    ui.toast(`이미 「${ui.activeFocus.nodeText}」 집중 세션이 진행 중이에요 — 먼저 종료해 주세요`);
+    ui.toast(`이미 「${ui.activeFocus.nodeText}」 집중이 진행 중이에요 — 먼저 종료해 주세요`);
     return;
   }
   const node = store.getState().doc.nodes[nodeId];
@@ -91,7 +91,7 @@ export function cancelFocusStart(): void {
 export async function startFocusSession(store: MapStore, nodeId: string, goal?: string): Promise<void> {
   const ui = useUi.getState();
   if (ui.activeFocus) {
-    ui.toast(`이미 「${ui.activeFocus.nodeText}」 집중 세션이 진행 중이에요 — 먼저 종료해 주세요`);
+    ui.toast(`이미 「${ui.activeFocus.nodeText}」 집중이 진행 중이에요 — 먼저 종료해 주세요`);
     return;
   }
 
@@ -139,7 +139,7 @@ export async function startFocusSession(store: MapStore, nodeId: string, goal?: 
   try {
     if (!localStorage.getItem('focusCoachShown')) {
       localStorage.setItem('focusCoachShown', '1');
-      ui.toast('집중 세션 시작 — 이 노트에 과정을 기록하고, 끝나면 “종료”를 누르세요');
+      ui.toast('집중 시작 — 이 노트에 과정을 기록하고, 끝나면 “종료”를 누르세요');
     }
   } catch {
     /* localStorage unavailable — skip the hint */
@@ -154,7 +154,7 @@ async function stampEnd(notePath: string, end: number, reflect?: string): Promis
   } catch {
     return null; // note gone — nothing to stamp
   }
-  const note = parseNote(content, '집중 세션');
+  const note = parseNote(content, '집중');
   if (!note.session) return null;
   const { durationSec, suspect } = sanitizeDuration(note.session.start, end);
   note.session = {
@@ -213,7 +213,7 @@ export async function attachReflection(notePath: string, reflect: string): Promi
   if (!reflect.trim()) return;
   try {
     const content = await window.api.readFile(notePath);
-    const note = parseNote(content, '집중 세션');
+    const note = parseNote(content, '집중');
     if (!note.session) return;
     note.session = { ...note.session, reflect: reflect.trim() };
     await window.api.save(notePath, serializeNote(note));

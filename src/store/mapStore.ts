@@ -78,6 +78,7 @@ interface MapState {
   // structure mutations (history-tracked)
   addRoot: () => void;
   addRootAt: (x: number, y: number) => void;
+  captureScheduled: (text: string, iso: string) => string; // calendar quick-capture: new scheduled root node
   addChild: (parentId: string) => void;
   addSibling: (id: string) => void;
   duplicateNode: (id: string) => void;
@@ -96,6 +97,7 @@ interface MapState {
   // schedule / reminders
   setScheduled: (id: string, on: boolean) => void; // applies to the node + all descendants
   setScheduleAt: (id: string, iso: string | undefined) => void;
+  setDuration: (id: string, minutes: number | undefined) => void; // time-block length (local-only)
   setReminderOn: (id: string, on: boolean) => void;
   applyReminderPatch: (id: string, fields: Partial<MindNode>) => void; // no history; used by sync
   moveSibling: (id: string, dir: 'up' | 'down') => void;
@@ -316,6 +318,28 @@ export function createMapStore(): MapStore {
       set({ selectedId: id, selectedIds: [id], editingId: id });
     },
 
+    // Calendar quick-capture: a scheduled root node with text + date already set.
+    // No editing mode (the title comes from the calendar input, not the canvas).
+    // reminderOn is left off — the user opts into Reminders from the SchedulePopover.
+    captureScheduled: (text, iso) => {
+      const id = newId();
+      commit((d) => {
+        d.nodes[id] = {
+          id,
+          text: text.trim(),
+          parentId: null,
+          children: [],
+          collapsed: false,
+          scheduled: true,
+          scheduleAt: iso,
+          updatedAt: Date.now(),
+        };
+        d.rootIds.push(id);
+      });
+      set({ selectedId: id, selectedIds: [id] });
+      return id;
+    },
+
     duplicateNode: (id) => {
       const src = get().doc.nodes[id];
       if (!src) return;
@@ -522,6 +546,15 @@ export function createMapStore(): MapStore {
       });
       if (removedReminders.length && reminderDeleteHook) reminderDeleteHook(removedReminders);
     },
+
+    // Time-block length. Local-only (decision 0012): not a reminder-synced field,
+    // so no updatedAt bump and no reminder detach — just persisted with the doc.
+    setDuration: (id, minutes) =>
+      commit((d) => {
+        const n = d.nodes[id];
+        if (!n) return;
+        n.durationMin = minutes && minutes > 0 ? minutes : undefined;
+      }),
 
     setReminderOn: (id, on) =>
       commit((d) => {

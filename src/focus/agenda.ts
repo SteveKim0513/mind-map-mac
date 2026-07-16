@@ -14,6 +14,7 @@ export interface AgendaItem {
   at: number; // epoch ms (parsed)
   hasTime: boolean; // false for date-only chips (treated as all-day)
   done: boolean;
+  durationMin?: number; // time-block length (calendar grid); local-only
   mapPath?: string;
 }
 

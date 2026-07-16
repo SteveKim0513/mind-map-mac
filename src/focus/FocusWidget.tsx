@@ -95,7 +95,7 @@ function FocusStartCard({ nodeText }: { nodeText: string }) {
     <div className="focus-done-backdrop" onMouseDown={cancelFocusStart}>
       <div className="focus-start" onMouseDown={(e) => e.stopPropagation()}>
         <div className="focus-start-head">
-          <span className="focus-start-title">집중 세션</span>
+          <span className="focus-start-title">집중</span>
           <span className="focus-start-sub">「{nodeText}」</span>
         </div>
         <input

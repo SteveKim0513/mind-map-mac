@@ -69,6 +69,7 @@ function buildMenu() {
       label: '파일',
       submenu: [
         { label: '새로 만들기', accelerator: 'CmdOrCtrl+N', click: () => send('menu', 'new') },
+        { label: '새 노트', accelerator: 'CmdOrCtrl+Shift+N', click: () => send('menu', 'new-note') },
         { label: '열기…', accelerator: 'CmdOrCtrl+O', click: () => send('menu', 'open') },
         { type: 'separator' },
         { label: '저장', accelerator: 'CmdOrCtrl+S', click: () => send('menu', 'save') },
