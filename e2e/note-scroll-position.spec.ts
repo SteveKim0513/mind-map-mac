@@ -11,7 +11,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // group (key={tab.id}), so NoteEditor fully unmounts on every tab switch —
 // any scroll position living only in that unmounted DOM node was lost.
 
-test('탭을 왔다 갔다 해도 노트의 스크롤 위치가 유지된다', async () => {
+test('탭을 왔다 갔다 해도 노트의 스크롤 위치가 유지된다', { tag: ['@note'] }, async () => {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
   const longBody = Array.from({ length: 120 }, (_, i) => `문단 ${i + 1} — 스크롤 테스트용 내용입니다.`).join('\n\n');

@@ -13,7 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // enough in practice to fix: even just viewing the map marks it dirty via
 // setView, so opening it to check a capture worked was enough to trigger this).
 
-test('캡처 대상 맵이 열려 있어도 캡처한 노드가 지워지지 않는다', async () => {
+test('캡처 대상 맵이 열려 있어도 캡처한 노드가 지워지지 않는다', { tag: ['@capture'] }, async () => {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
   const targetPath = join(workspace, '오늘의 생각.mind');

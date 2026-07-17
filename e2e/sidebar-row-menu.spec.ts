@@ -5,7 +5,7 @@ import { launchApp, createNoteFromMenu, getSidebarLabels } from './helpers';
 // 사이드바 파일/폴더 행만 우클릭에 아무 반응이 없었다 — 호버해야 나오는 아이콘
 // (즐겨찾기·이름 변경·삭제)뿐이었다. 이제 사이드바 행도 우클릭 메뉴를 갖는다.
 
-test('사이드바 파일 행 우클릭 — 메뉴가 뜨고, "삭제"를 누르면 정말 삭제된다', async () => {
+test('사이드바 파일 행 우클릭 — 메뉴가 뜨고, "삭제"를 누르면 정말 삭제된다', { tag: ['@nav', '@command'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);
@@ -32,7 +32,7 @@ test('사이드바 파일 행 우클릭 — 메뉴가 뜨고, "삭제"를 누르
   }
 });
 
-test('사이드바 행 우클릭 메뉴에서 즐겨찾기 토글이 실제로 반영된다', async () => {
+test('사이드바 행 우클릭 메뉴에서 즐겨찾기 토글이 실제로 반영된다', { tag: ['@nav', '@command'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);

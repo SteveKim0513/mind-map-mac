@@ -6,7 +6,7 @@ import { launchApp, createNoteFromMenu } from './helpers';
 // 학습이 탭에서는 배신당했다. 공유 훅(useDismissablePosition)으로 통일한 뒤,
 // 실제로 Escape가 먹는지 확인한다.
 
-test('탭 우클릭 메뉴는 Escape로 닫힌다', async () => {
+test('탭 우클릭 메뉴는 Escape로 닫힌다', { tag: ['@nav', '@command'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);
@@ -22,7 +22,7 @@ test('탭 우클릭 메뉴는 Escape로 닫힌다', async () => {
   }
 });
 
-test('탭 우클릭 메뉴에서 "닫기"를 누르면 해당 탭이 닫힌다(회귀 방지)', async () => {
+test('탭 우클릭 메뉴에서 "닫기"를 누르면 해당 탭이 닫힌다(회귀 방지)', { tag: ['@nav', '@command'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);

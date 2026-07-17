@@ -13,7 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // .md-tb-btn / .meta-add-wrap / .qo-name-txt / .meta-block-title /
 // .set-meta-name in src/styles.css.
 
-test('노트 에디터 툴바의 "양식+" 버튼은 좁은 폭에서도 한 줄을 유지한다', async () => {
+test('노트 에디터 툴바의 "양식+" 버튼은 좁은 폭에서도 한 줄을 유지한다', { tag: ['@view'] }, async () => {
   // The originally reported bug: .meta-add-wrap (the "양식+" button) only
   // renders when at least one meta template exists, so it must be pre-seeded —
   // the other toolbar buttons (H1/B/I/…) were never affected, they already
@@ -63,7 +63,7 @@ test('노트 에디터 툴바의 "양식+" 버튼은 좁은 폭에서도 한 줄
   }
 });
 
-test('메타 블록 제목과 설정의 템플릿 이름은 좁은 폭에서 줄바꿈 대신 말줄임으로 표시된다', async () => {
+test('메타 블록 제목과 설정의 템플릿 이름은 좁은 폭에서 줄바꿈 대신 말줄임으로 표시된다', { tag: ['@view'] }, async () => {
   const TEMPLATE_ID = 'tmpl-resp-001';
   const TEMPLATE_NAME = '회의록 - 매우 긴 이름의 주간 스프린트 리뷰 템플릿';
   const FIELD_KEY = 'author';
@@ -122,7 +122,7 @@ test('메타 블록 제목과 설정의 템플릿 이름은 좁은 폭에서 줄
   }
 });
 
-test('Quick Open / 전체 검색 / 명령 팔레트의 항목 이름은 좁은 폭에서 말줄임으로 표시된다', async () => {
+test('Quick Open / 전체 검색 / 명령 팔레트의 항목 이름은 좁은 폭에서 말줄임으로 표시된다', { tag: ['@view'] }, async () => {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
   // A long title is required to force the wrap in the unfixed markup —

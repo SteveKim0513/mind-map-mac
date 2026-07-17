@@ -15,7 +15,7 @@ const MIND = (topic: string) =>
     view: { zoom: 1, pan: { x: 0, y: 0 } },
   });
 
-test('IF-06 · trash retention toggle (default OFF / opt-in / 3 months) persists', async () => {
+test('IF-06 · trash retention toggle (default OFF / opt-in / 3 months) persists', { tag: ['@view'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.locator('.sb-foot-btn[title^="휴지통"]').click();
@@ -38,7 +38,7 @@ test('IF-06 · trash retention toggle (default OFF / opt-in / 3 months) persists
   }
 });
 
-test('IF-09 · theme offers a system option and follows it', async () => {
+test('IF-09 · theme offers a system option and follows it', { tag: ['@view'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.locator('.sb-foot-btn[title^="설정"]').click();
@@ -63,7 +63,8 @@ test('IF-09 · theme offers a system option and follows it', async () => {
   }
 });
 
-test('IF-04 · warns when an open map is changed on disk externally', async () => {
+// @serial: win.focus()로 외부 디스크 변경 감지를 트리거 (frontmost 의존). 직렬 꼬리.
+test('IF-04 · warns when an open map is changed on disk externally', { tag: ['@view', '@serial'] }, async () => {
   const { app, page, workspace, cleanup } = await launchApp();
   try {
     // Seed a map file, surface it in the sidebar, then open it (records a baseline).
@@ -90,7 +91,8 @@ test('IF-04 · warns when an open map is changed on disk externally', async () =
   }
 });
 
-test('IF-05 · deleting a node drops the dead link from a note that pointed at it', async () => {
+// @serial: win.focus()로 외부 변경 새로고침을 트리거 (frontmost 의존). 직렬 꼬리.
+test('IF-05 · deleting a node drops the dead link from a note that pointed at it', { tag: ['@view', '@serial'] }, async () => {
   const { app, page, workspace, cleanup } = await launchApp();
   try {
     // A map with one node, and a (closed) note whose frontmatter links to it.
@@ -139,7 +141,8 @@ test('IF-05 · deleting a node drops the dead link from a note that pointed at i
   }
 });
 
-test('IF-05 · editing a node text refreshes the cached label in a linked note', async () => {
+// @serial: win.focus()로 외부 변경 새로고침을 트리거 (frontmost 의존). 직렬 꼬리.
+test('IF-05 · editing a node text refreshes the cached label in a linked note', { tag: ['@view', '@serial'] }, async () => {
   const { app, page, workspace, cleanup } = await launchApp();
   try {
     writeExternalFile(
@@ -185,7 +188,8 @@ test('IF-05 · editing a node text refreshes the cached label in a linked note',
   }
 });
 
-test('IF-08 · "겹침 정돈" pushes overlapping root subtrees apart', async () => {
+// @serial: win.focus()로 외부 변경 새로고침을 트리거 (frontmost 의존). 직렬 꼬리.
+test('IF-08 · "겹침 정돈" pushes overlapping root subtrees apart', { tag: ['@view', '@serial'] }, async () => {
   const { app, page, workspace, cleanup } = await launchApp();
   try {
     // Two roots dropped almost on top of each other (overlapping manualPos).

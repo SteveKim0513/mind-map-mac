@@ -5,7 +5,7 @@ import { launchApp } from './helpers';
 // ⌘K auto-learns a quick key (⌥1-9) for repeatedly-run commands and bubbles
 // them to the top of the empty-query list.
 
-test('반복 실행한 명령은 목록 맨 위로 올라오고 ⌥ 단축키를 얻는다', async () => {
+test('반복 실행한 명령은 목록 맨 위로 올라오고 ⌥ 단축키를 얻는다', { tag: ['@command'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     // "사이드바 토글" 명령을 두 번 실행 — usage threshold(2)를 채운다.

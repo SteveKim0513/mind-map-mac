@@ -4,7 +4,7 @@ import { join } from 'path';
 import { launchApp, createNoteFromMenu, getTabTitles, getSidebarLabels, writeExternalFile } from './helpers';
 
 // ── App launch ─────────────────────────────────────────────────────────────
-test('app launches and shows an empty workspace', async () => {
+test('app launches and shows an empty workspace', { tag: ['@nav', '@note'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await expect(page.locator('.sidebar')).toBeVisible();
@@ -16,7 +16,7 @@ test('app launches and shows an empty workspace', async () => {
 });
 
 // ── Create note ─────────────────────────────────────────────────────────────
-test('creating a note opens a tab and adds an entry to the sidebar', async () => {
+test('creating a note opens a tab and adds an entry to the sidebar', { tag: ['@nav', '@note'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);
@@ -34,7 +34,7 @@ test('creating a note opens a tab and adds an entry to the sidebar', async () =>
 });
 
 // ── Delete note ─────────────────────────────────────────────────────────────
-test('deleting a note closes its tab and removes it from the sidebar', async () => {
+test('deleting a note closes its tab and removes it from the sidebar', { tag: ['@nav', '@note'] }, async () => {
   test.setTimeout(25_000); // 4 s toast timer + buffer, well within 25 s
   const { page, cleanup } = await launchApp();
   try {
@@ -57,7 +57,7 @@ test('deleting a note closes its tab and removes it from the sidebar', async () 
 });
 
 // ── Trash: delete → restore ─────────────────────────────────────────────────
-test('a deleted file lands in the trash panel and restores from it', async () => {
+test('a deleted file lands in the trash panel and restores from it', { tag: ['@nav', '@note'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);
@@ -88,7 +88,7 @@ test('a deleted file lands in the trash panel and restores from it', async () =>
 });
 
 // ── Code block: syntax highlighting + markdown round-trip ────────────────────
-test('a note code block highlights by language and round-trips to markdown', async () => {
+test('a note code block highlights by language and round-trips to markdown', { tag: ['@nav', '@note'] }, async () => {
   const { page, workspace, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);
@@ -119,7 +119,9 @@ test('a note code block highlights by language and round-trips to markdown', asy
 });
 
 // ── External file change (focus refresh) ───────────────────────────────────
-test('sidebar updates when a file is added externally and the window regains focus', async () => {
+// @serial: win.focus()로 외부변경 새로고침을 트리거 — 병렬 인스턴스가 macOS
+// frontmost를 두고 경쟁하면 포커스가 실제로 안 잡혀 깨진다. workers=1 직렬 꼬리로 실행.
+test('sidebar updates when a file is added externally and the window regains focus', { tag: ['@nav', '@note', '@serial'] }, async () => {
   const { app, page, workspace, cleanup } = await launchApp();
   try {
     // Confirm empty start
@@ -154,7 +156,7 @@ test('sidebar updates when a file is added externally and the window regains foc
 });
 
 // ── Rename note ─────────────────────────────────────────────────────────────
-test('renaming a note title updates the tab title and sidebar label', async () => {
+test('renaming a note title updates the tab title and sidebar label', { tag: ['@nav', '@note'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);

@@ -52,15 +52,19 @@ docs/                    → 아래 참조
 ## 필수 개발 명령
 
 ```bash
-make setup       # npm ci (최초 또는 package.json 변경 후)
-make dev-safe    # Electron + Vite 개발 서버 (격리된 임시 환경)
-make verify      # typecheck + unit test (완료 전 필수)
-make verify-full # typecheck + unit test + build (PR 전 필수)
-make pre-release # verify-full + E2E (배포 전 필수 — make bump 전에 실행)
-make test        # 단위 테스트만
-make typecheck   # 타입 검사만
-make harness-check # 아키텍처 + 문서 무결성 검사
+make setup                    # npm ci (최초 또는 package.json 변경 후)
+make dev-safe                 # Electron + Vite 개발 서버 (격리된 임시 환경)
+make verify                   # typecheck + unit test (완료 전 필수)
+make verify-feature tag=@x    # verify + 해당 도메인 E2E만 (기능 단위 검증 — 개발 루프)
+make verify-full              # typecheck + unit test + build (PR 전 필수)
+make pre-release              # verify-full + 전체 E2E (배포 전 필수 — make bump 전에 실행)
+make test                     # 단위 테스트만
+make typecheck                # 타입 검사만
+make e2e-tag tag=@x           # 도메인 태그로 E2E 부분 실행
+make harness-check            # 아키텍처 + 문서 + E2E 태그 무결성 검사
 ```
+
+**테스트 계층**: 매 기능 완료는 `make verify-feature tag=@<domain>`(부분 E2E), 배포 지시를 받으면 `make pre-release`(전체 E2E)로 게이트. 도메인 태그 어휘·규칙은 `.claude/rules/testing.md`.
 
 ## 변경 전후 검증 절차
 

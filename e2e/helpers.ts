@@ -13,11 +13,22 @@ export interface AppHandle {
   cleanup: () => Promise<void>;
 }
 
+export interface LaunchOptions {
+  /**
+   * Register the OS-global capture shortcut (Alt+Space) on this instance.
+   * Off by default: the accelerator is a single global registration, so under
+   * parallel workers every instance would fight over it and only the first would
+   * win. Only the one test that asserts registration needs this. See
+   * electron/main.ts MINDMAP_DISABLE_GLOBAL_SHORTCUT.
+   */
+  globalShortcut?: boolean;
+}
+
 /**
  * Launch the Electron app with fully isolated userData + workspace directories.
  * Returns handles and a cleanup function that quits the app and removes the temp dirs.
  */
-export async function launchApp(): Promise<AppHandle> {
+export async function launchApp(opts: LaunchOptions = {}): Promise<AppHandle> {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
 
@@ -30,6 +41,13 @@ export async function launchApp(): Promise<AppHandle> {
     MINDMAP_WORKSPACE: workspace,
     MINDMAP_E2E_QUIET: '1',
   };
+  // Skip the OS-global capture shortcut so parallel instances don't contend
+  // over the single Alt+Space registration (opt in per test when needed).
+  if (opts.globalShortcut) {
+    delete env.MINDMAP_DISABLE_GLOBAL_SHORTCUT;
+  } else {
+    env.MINDMAP_DISABLE_GLOBAL_SHORTCUT = '1';
+  }
   // VSCode sets ELECTRON_RUN_AS_NODE=1 which makes Electron behave as plain Node.
   // Remove it so the child process starts as a real Electron browser process.
   delete env.ELECTRON_RUN_AS_NODE;

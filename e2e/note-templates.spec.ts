@@ -23,7 +23,7 @@ links: []
 
 `;
 
-test('노트 템플릿 — 삽입, 사이드바 패널, 설정 토글로 숨기기', async () => {
+test('노트 템플릿 — 삽입, 사이드바 패널, 설정 토글로 숨기기', { tag: ['@note'] }, async () => {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
 

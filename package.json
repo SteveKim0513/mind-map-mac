@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "npm run build && playwright test",
+    "test:e2e": "npm run build && node scripts/e2e-run.mjs",
     "test:all": "vitest run && playwright test"
   },
   "dependencies": {

@@ -15,7 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // to the hidden ".<stem>.assets" convention, not just carry the old visible
 // name forward under the new stem.
 
-test('renaming a note rewrites its embedded image references to the new (hidden) assets folder', async () => {
+test('renaming a note rewrites its embedded image references to the new (hidden) assets folder', { tag: ['@note'] }, async () => {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
   const oldStem = '제목 없음';
@@ -66,7 +66,7 @@ test('renaming a note rewrites its embedded image references to the new (hidden)
   }
 });
 
-test('a brand-new note gets a hidden (dot-prefixed) assets folder for its first image', async () => {
+test('a brand-new note gets a hidden (dot-prefixed) assets folder for its first image', { tag: ['@note'] }, async () => {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
   const stem = '제목 없음';

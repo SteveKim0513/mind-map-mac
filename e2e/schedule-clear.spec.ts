@@ -7,7 +7,7 @@ import { launchApp } from './helpers';
 // label, so the chip never actually disappeared. From the user's side this
 // looked exactly like "there's no way to remove a schedule".
 
-test('일정 팝오버의 "스케줄 지우기"를 누르면 일정 칩이 완전히 사라진다', async () => {
+test('일정 팝오버의 "스케줄 지우기"를 누르면 일정 칩이 완전히 사라진다', { tag: ['@schedule'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 마인드맵"]');

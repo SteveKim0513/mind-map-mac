@@ -7,7 +7,7 @@ import { launchApp } from './helpers';
 // logic — UX-CLARITY-VISION 전략 A). These two popovers had no prior E2E
 // coverage at all.
 
-test('아이콘 팝오버 — 우클릭 메뉴로 열고, 아이콘을 고르고, Escape로 닫힌다', async () => {
+test('아이콘 팝오버 — 우클릭 메뉴로 열고, 아이콘을 고르고, Escape로 닫힌다', { tag: ['@map'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 마인드맵"]');
@@ -35,7 +35,7 @@ test('아이콘 팝오버 — 우클릭 메뉴로 열고, 아이콘을 고르고
   }
 });
 
-test('링크 추가 팝오버 — 우클릭 메뉴로 열고, URL을 넣으면 링크 칩이 생긴다', async () => {
+test('링크 추가 팝오버 — 우클릭 메뉴로 열고, URL을 넣으면 링크 칩이 생긴다', { tag: ['@map'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 마인드맵"]');

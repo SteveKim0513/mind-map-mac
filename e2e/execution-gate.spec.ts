@@ -3,7 +3,7 @@ import { launchApp } from './helpers';
 
 // 실행(일정·집중)은 할 일(todo) 노드에서만 — ⌘K 명령 팔레트도 툴바·메뉴와 같은 게이트를
 // 지켜야 한다(누수 수정, 결정 0014). 일반 노드엔 "할 일로 전환"만.
-test('⌘K: 일반 노드엔 집중·일정 명령이 없고 "할 일로 전환"만, 할 일 노드엔 뜬다', async () => {
+test('⌘K: 일반 노드엔 집중·일정 명령이 없고 "할 일로 전환"만, 할 일 노드엔 뜬다', { tag: ['@todo', '@command'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 마인드맵"]');

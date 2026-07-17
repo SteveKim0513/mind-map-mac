@@ -270,9 +270,19 @@ app.whenReady().then(() => {
     win.show();
     win.focus();
   });
-  captureShortcutRegistered = globalShortcut.register(CAPTURE_ACCELERATOR, showCaptureWindow);
-  if (!captureShortcutRegistered) {
-    log.warn(`[capture] ${CAPTURE_ACCELERATOR} already in use by another app — quick capture disabled`);
+  // The capture accelerator is an OS-global registration — only one process can
+  // hold it at a time. Parallel E2E instances would all try to grab it and only
+  // the first would win, so tests skip registration by default
+  // (MINDMAP_DISABLE_GLOBAL_SHORTCUT=1, set by e2e/helpers.ts). The single test
+  // that asserts registration opts back in via launchApp({ globalShortcut: true }).
+  // Never set outside E2E → production always registers normally.
+  if (process.env.MINDMAP_DISABLE_GLOBAL_SHORTCUT === '1') {
+    log.info('[capture] global shortcut registration skipped (E2E isolation)');
+  } else {
+    captureShortcutRegistered = globalShortcut.register(CAPTURE_ACCELERATOR, showCaptureWindow);
+    if (!captureShortcutRegistered) {
+      log.warn(`[capture] ${CAPTURE_ACCELERATOR} already in use by another app — quick capture disabled`);
+    }
   }
 });
 

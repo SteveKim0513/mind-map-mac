@@ -6,7 +6,7 @@ import { launchApp, createNoteFromMenu } from './helpers';
 // 최근 수정은 결정 0011 §4-4에 따라 사이드바 상단 nav에서 설정(⌘,) 내부로
 // 옮겨졌다 — 즐겨찾기만 1차 내비게이션에 남는다.
 
-test('설정에 최근 수정 진입점이 있고 클릭하면 빈 상태를 보여준다', async () => {
+test('설정에 최근 수정 진입점이 있고 클릭하면 빈 상태를 보여준다', { tag: ['@view', '@nav'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await expect(page.locator('.sb-nav-item:has-text("즐겨찾기")')).toBeVisible();
@@ -31,7 +31,7 @@ test('설정에 최근 수정 진입점이 있고 클릭하면 빈 상태를 보
   }
 });
 
-test('파일을 만들면 최근 수정에 나타나고, 열어서 클릭하면 이동한다', async () => {
+test('파일을 만들면 최근 수정에 나타나고, 열어서 클릭하면 이동한다', { tag: ['@view', '@nav'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);
@@ -49,7 +49,7 @@ test('파일을 만들면 최근 수정에 나타나고, 열어서 클릭하면 
   }
 });
 
-test('사이드바 행의 별표로 즐겨찾기를 추가·해제할 수 있고 목록에 반영된다', async () => {
+test('사이드바 행의 별표로 즐겨찾기를 추가·해제할 수 있고 목록에 반영된다', { tag: ['@view', '@nav'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await createNoteFromMenu(page);

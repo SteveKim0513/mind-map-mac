@@ -7,7 +7,7 @@ import { launchApp } from './helpers';
 // ColorSwatchGrid로 통합한 뒤에도 두 진입점 모두 색을 정확히 적용하고, 현재
 // 색을 "on" 상태로 보여주는지 확인한다.
 
-test('선택 툴바의 색상 스와치는 적용한 색을 켜진 상태로 보여준다', async () => {
+test('선택 툴바의 색상 스와치는 적용한 색을 켜진 상태로 보여준다', { tag: ['@map'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 마인드맵"]');
@@ -40,7 +40,7 @@ test('선택 툴바의 색상 스와치는 적용한 색을 켜진 상태로 보
   }
 });
 
-test('컨텍스트 메뉴의 색상 스와치도 같은 컴포넌트를 공유한다', async () => {
+test('컨텍스트 메뉴의 색상 스와치도 같은 컴포넌트를 공유한다', { tag: ['@map'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 마인드맵"]');

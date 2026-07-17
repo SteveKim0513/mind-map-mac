@@ -6,7 +6,7 @@ import { launchApp } from './helpers';
 //않았다 — 우클릭 메뉴에서 배운 "Escape는 항상 닫는다"는 기대가 여기서만
 // 배신당했다.
 
-test('"템플릿 추가" 드롭다운은 Escape로 닫힌다', async () => {
+test('"템플릿 추가" 드롭다운은 Escape로 닫힌다', { tag: ['@command', '@note'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 노트"]');

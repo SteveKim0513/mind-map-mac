@@ -12,8 +12,10 @@ import { launchApp } from './helpers';
 // The end-to-end write path (capture window -> capture:targetPath -> save)
 // is identical either way.
 
-test('전역 단축키(⌥Space)가 등록된다', async () => {
-  const { app, cleanup } = await launchApp();
+test('전역 단축키(⌥Space)가 등록된다', { tag: ['@capture'] }, async () => {
+  // Opt into real global-shortcut registration — the only test that needs it.
+  // Every other instance skips it so parallel workers don't contend over Alt+Space.
+  const { app, cleanup } = await launchApp({ globalShortcut: true });
   try {
     const registered = await app.evaluate(({ globalShortcut }) =>
       globalShortcut.isRegistered('Alt+Space'),
@@ -24,7 +26,7 @@ test('전역 단축키(⌥Space)가 등록된다', async () => {
   }
 });
 
-test('캡처 창에 텍스트를 입력하고 Enter를 누르면 "오늘의 생각" 맵에 루트 노드로 쌓인다', async () => {
+test('캡처 창에 텍스트를 입력하고 Enter를 누르면 "오늘의 생각" 맵에 루트 노드로 쌓인다', { tag: ['@capture'] }, async () => {
   const { app, page, workspace, cleanup } = await launchApp();
   try {
     const [capturePage] = await Promise.all([
@@ -71,7 +73,7 @@ test('캡처 창에 텍스트를 입력하고 Enter를 누르면 "오늘의 생�
   }
 });
 
-test('Esc를 누르면 저장하지 않고 캡처 창이 숨겨진다', async () => {
+test('Esc를 누르면 저장하지 않고 캡처 창이 숨겨진다', { tag: ['@capture'] }, async () => {
   const { app, page, workspace, cleanup } = await launchApp();
   try {
     const [capturePage] = await Promise.all([

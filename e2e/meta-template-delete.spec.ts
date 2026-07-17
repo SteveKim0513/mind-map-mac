@@ -28,7 +28,7 @@ _meta: [{"templateId":"${TEMPLATE_ID}","values":{"${FIELD_KEY}":"홍길동"}}]
 노트 본문입니다.
 `;
 
-test('템플릿 삭제 시 노트의 메타 블록이 즉시 사라지고 파일에서도 제거된다', async () => {
+test('템플릿 삭제 시 노트의 메타 블록이 즉시 사라지고 파일에서도 제거된다', { tag: ['@note'] }, async () => {
   // ── 격리된 환경 세팅 ─────────────────────────────────────────────────────
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
@@ -107,7 +107,7 @@ test('템플릿 삭제 시 노트의 메타 블록이 즉시 사라지고 파일
   }
 });
 
-test('취소하면 양식과 메타 블록이 그대로 남는다', async () => {
+test('취소하면 양식과 메타 블록이 그대로 남는다', { tag: ['@note'] }, async () => {
   const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
   const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
   const notePath = join(workspace, '테스트 노트.md');
