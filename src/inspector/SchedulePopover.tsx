@@ -48,6 +48,7 @@ export function SchedulePopover({ id, onClose }: Props) {
   const setDuration = useMap((s) => s.setDuration);
   const setReminderOn = useMap((s) => s.setReminderOn);
   const syncStatus = useUi((s) => s.syncStatus);
+  const timePresets = useUi((s) => s.timePresets);
   const mapStore = useMapStore();
 
   const ref = useRef<HTMLDivElement>(null);
@@ -79,12 +80,13 @@ export function SchedulePopover({ id, onClose }: Props) {
     { label: '주말', get: () => nextWeekend() },
     { label: '다음 주', get: () => relDate(7) },
   ];
-  const timeChips = [
-    { label: '아침', sub: '9:00', val: '09:00' },
-    { label: '점심', sub: '13:00', val: '13:00' },
-    { label: '저녁', sub: '18:00', val: '18:00' },
-    { label: '밤', sub: '21:00', val: '21:00' },
-  ];
+  // one-tap times are user-configurable in Settings (uiStore); the precise time
+  // field above always covers anything not in the presets.
+  const timeChips = timePresets.map((p) => ({
+    label: p.label,
+    sub: p.time.replace(/^0/, ''), // "09:00" → "9:00" for a lighter look
+    val: p.time,
+  }));
   const durationChips = [
     { label: '없음', min: 0 },
     { label: '15분', min: 15 },
@@ -166,20 +168,22 @@ export function SchedulePopover({ id, onClose }: Props) {
         </label>
       </div>
 
-      {/* one-tap times */}
-      <div className="sched-chips times">
-        {timeChips.map((c) => (
-          <button
-            key={c.val}
-            className={`sched-time-chip${time === c.val ? ' on' : ''}`}
-            disabled={!date}
-            onClick={() => apply(date, c.val)}
-          >
-            <span className="sched-time-lbl">{c.label}</span>
-            <span className="sched-time-sub">{c.sub}</span>
-          </button>
-        ))}
-      </div>
+      {/* one-tap times (configurable in Settings) */}
+      {timeChips.length > 0 && (
+        <div className="sched-chips times">
+          {timeChips.map((c) => (
+            <button
+              key={c.val}
+              className={`sched-time-chip${time === c.val ? ' on' : ''}`}
+              disabled={!date}
+              onClick={() => apply(date, c.val)}
+            >
+              <span className="sched-time-lbl">{c.label}</span>
+              <span className="sched-time-sub">{c.sub}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 소요 시간 — only for timed events (time-block on the calendar grid) */}
       {hasTime && (

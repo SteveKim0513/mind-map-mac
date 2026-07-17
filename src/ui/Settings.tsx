@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
-import { useUi } from '../store/uiStore';
+import { useUi, DEFAULT_TIME_PRESETS, type TimePreset } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { useMetaStore } from '../store/metaStore';
 import { useTemplates } from '../store/templateStore';
@@ -207,6 +207,15 @@ function MainView({
   // REDESIGN-VISION §3-4. 안 없앤다, 접을 뿐 — AI 기능은 여기 그대로 있다.
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  // schedule time presets — a local editing draft (may hold an in-progress empty row);
+  // the store keeps only valid rows (drives the chips). Draft re-inits on each open.
+  const setTimePresets = useUi((s) => s.setTimePresets);
+  const [presetDraft, setPresetDraft] = useState<TimePreset[]>(() => useUi.getState().timePresets);
+  const applyPresets = (rows: TimePreset[]) => {
+    setPresetDraft(rows);
+    setTimePresets(rows);
+  };
+
   return (
     <>
       <div className="set-row">
@@ -297,6 +306,58 @@ function MainView({
           </button>
 
           <CaptureStatusRow />
+
+          <div className="set-sep" />
+
+          <div className="set-presets-block">
+            <div>
+              <span className="set-label">일정 시간 프리셋</span>
+              <p className="set-desc">노드 일정의 원탭 시간 버튼. 정밀한 시각은 시간 필드로 입력할 수 있어요.</p>
+            </div>
+            <div className="set-presets">
+              {presetDraft.map((p, i) => (
+                <div key={i} className="set-preset-row">
+                  <input
+                    className="set-preset-lbl"
+                    value={p.label}
+                    maxLength={8}
+                    placeholder="이름"
+                    onChange={(e) =>
+                      applyPresets(presetDraft.map((q, j) => (j === i ? { ...q, label: e.target.value } : q)))
+                    }
+                  />
+                  <input
+                    type="time"
+                    className="set-preset-time"
+                    value={p.time}
+                    onChange={(e) =>
+                      applyPresets(presetDraft.map((q, j) => (j === i ? { ...q, time: e.target.value } : q)))
+                    }
+                  />
+                  <button
+                    className="set-preset-del"
+                    title="삭제"
+                    onClick={() => applyPresets(presetDraft.filter((_, j) => j !== i))}
+                  >
+                    <Icon name="close" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="set-preset-actions">
+              {presetDraft.length < 6 && (
+                <button
+                  className="set-preset-add"
+                  onClick={() => applyPresets([...presetDraft, { label: '', time: '12:00' }])}
+                >
+                  <Icon name="plus" /> 추가
+                </button>
+              )}
+              <button className="set-preset-reset" onClick={() => applyPresets(DEFAULT_TIME_PRESETS)}>
+                기본값으로
+              </button>
+            </div>
+          </div>
 
           <div className="set-sep" />
 

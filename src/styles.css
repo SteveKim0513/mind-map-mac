@@ -792,6 +792,67 @@ button {
 .set-act:disabled { opacity: 0.5; cursor: default; }
 .set-sep { height: 1px; background: var(--hairline); margin: 8px 0; }
 
+/* ── Settings: 일정 시간 프리셋 편집기 ─────────────────────────────────────── */
+.set-presets-block { padding: 11px 0; }
+.set-presets { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.set-preset-row { display: flex; align-items: center; gap: 6px; }
+.set-preset-lbl,
+.set-preset-time {
+  border: 1px solid var(--hairline);
+  background: var(--canvas-soft, var(--bg));
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 12.5px;
+  border-radius: var(--r-sm);
+  padding: 5px 8px;
+}
+.set-preset-lbl { flex: 1; min-width: 0; }
+.set-preset-time { flex: none; font-variant-numeric: tabular-nums; }
+.set-preset-lbl:focus,
+.set-preset-time:focus { outline: none; border-color: var(--primary); }
+.set-preset-del {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-faint);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+/* danger hover uses the allow-listed 위험 빨강 (#ff3b30) per UI-DESIGN-PRINCIPLES */
+.set-preset-del:hover { border-color: color-mix(in srgb, #ff3b30 40%, var(--hairline)); color: #ff3b30; }
+.set-preset-del .ic { width: 12px; height: 12px; }
+.set-preset-actions { display: flex; gap: 8px; margin-top: 8px; }
+.set-preset-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--font);
+  font-size: 12px;
+  border-radius: var(--r-sm);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.set-preset-add:hover { border-color: color-mix(in srgb, var(--primary) 35%, var(--hairline)); color: var(--primary); }
+.set-preset-add .ic { width: 12px; height: 12px; }
+.set-preset-reset {
+  border: none;
+  background: none;
+  color: var(--primary);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 5px 4px;
+}
+.set-preset-reset:hover { text-decoration: underline; }
+
 /* ── Settings: AI 섹션 ───────────────────────────────────────────────────── */
 .set-ai-section { padding: 10px 0 6px; display: flex; flex-direction: column; gap: 8px; }
 .set-ai-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }

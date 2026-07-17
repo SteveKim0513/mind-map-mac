@@ -3,6 +3,46 @@ import { create } from 'zustand';
 type Theme = 'light' | 'dark';
 type ThemeMode = 'light' | 'dark' | 'system';
 
+/** One one-tap time button in the SchedulePopover (user-configurable, §schedule). */
+export interface TimePreset {
+  label: string; // short chip label, e.g. "아침"
+  time: string; // 24h "HH:MM"
+}
+export const DEFAULT_TIME_PRESETS: TimePreset[] = [
+  { label: '아침', time: '09:00' },
+  { label: '점심', time: '13:00' },
+  { label: '저녁', time: '18:00' },
+  { label: '밤', time: '21:00' },
+];
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const MAX_PRESETS = 6;
+/** Keep valid rows only (non-empty label + HH:MM), trim label, cap the count. */
+export function cleanPresets(list: unknown): TimePreset[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(
+      (p): p is TimePreset =>
+        !!p &&
+        typeof (p as TimePreset).label === 'string' &&
+        typeof (p as TimePreset).time === 'string' &&
+        (p as TimePreset).label.trim() !== '' &&
+        TIME_RE.test((p as TimePreset).time),
+    )
+    .map((p) => ({ label: p.label.trim().slice(0, 8), time: p.time }))
+    .slice(0, MAX_PRESETS);
+}
+/** Read persisted presets; fall back to defaults only when nothing valid is stored
+ *  (an explicit empty list — the user cleared them all — is respected). */
+function readTimePresets(): TimePreset[] {
+  try {
+    const raw = localStorage.getItem('schedTimePresets');
+    if (raw == null) return DEFAULT_TIME_PRESETS;
+    return cleanPresets(JSON.parse(raw));
+  } catch {
+    return DEFAULT_TIME_PRESETS;
+  }
+}
+
 interface UiState {
   theme: Theme; // resolved theme actually applied (data-theme)
   themeMode: ThemeMode; // user preference — 'system' follows the OS appearance
@@ -111,6 +151,10 @@ interface UiState {
   // node text scale (persisted)
   fontScale: number;
   setFontScale: (s: number) => void;
+
+  // schedule time presets — the one-tap time chips in SchedulePopover (persisted)
+  timePresets: TimePreset[];
+  setTimePresets: (presets: TimePreset[]) => void;
 
   // ── focus session (only one active at a time) ──
   // goal prompt shown before a session starts (captures the goal as structured
@@ -230,6 +274,8 @@ if (hasDOM) applyTheme(initialTheme);
 const initialScale = hasDOM ? Number(localStorage.getItem('fontScale')) || 1 : 1;
 if (hasDOM) document.documentElement.style.setProperty('--font-scale', String(initialScale));
 
+const initialPresets = hasDOM ? readTimePresets() : DEFAULT_TIME_PRESETS;
+
 let toastSeq = 0;
 
 export const useUi = create<UiState>((set, get) => ({
@@ -328,6 +374,13 @@ export const useUi = create<UiState>((set, get) => ({
     localStorage.setItem('fontScale', String(clamped));
     document.documentElement.style.setProperty('--font-scale', String(clamped));
     set({ fontScale: clamped });
+  },
+
+  timePresets: initialPresets,
+  setTimePresets: (presets) => {
+    const clean = cleanPresets(presets);
+    localStorage.setItem('schedTimePresets', JSON.stringify(clean));
+    set({ timePresets: clean });
   },
 
   focusPrompt: null,
