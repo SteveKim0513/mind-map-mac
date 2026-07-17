@@ -5854,20 +5854,29 @@ textarea:focus-visible,
 .cal-wk-hour { height: 40px; position: relative; }
 .cal-wk-hour span { position: absolute; top: -7px; right: 5px; font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 .cal-wk-col { position: relative; border-left: 1px solid var(--hairline); min-width: 0; cursor: pointer; }
-/* hover hint: an empty time slot is clickable to add a schedule (§3.3) */
-.cal-wk-col:hover::before {
-  content: '+ 일정';
+/* follow-cursor hint: a dashed guide at the hovered time + "+ 일정 HH:MM" pill, so
+   the affordance tracks the cursor and shows exactly what a click captures (§3.3) */
+.cal-wk-addhint {
   position: absolute;
-  top: 3px;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--state-scheduled) 60%, transparent);
+  pointer-events: none;
+  z-index: 3;
+}
+.cal-wk-addhint-label {
+  position: absolute;
+  top: -9px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--state-scheduled);
   background: color-mix(in srgb, var(--state-scheduled) 14%, var(--canvas));
   border-radius: var(--r-sm);
   padding: 1px 6px;
-  pointer-events: none;
-  z-index: 3;
 }
 .cal-wk-col.today { background: color-mix(in srgb, var(--state-scheduled) 5%, transparent); }
 .cal-wk-col.drop { background: color-mix(in srgb, var(--state-scheduled) 12%, transparent); }

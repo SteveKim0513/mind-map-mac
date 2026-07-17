@@ -819,6 +819,13 @@ function WeekPane({
   const todayMs = startOfDay(now);
   const hours = gridHourLabels();
 
+  // Follow-cursor "+ 일정" affordance: track the hovered column + snapped minute so
+  // the hint sits at the cursor's time (not pinned to the top) and shows that time,
+  // matching exactly what a click captures (§3.3).
+  const [addHint, setAddHint] = useState<{ key: string; min: number } | null>(null);
+  const fmtMin = (min: number) =>
+    `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+
   /** Clicked-Y within a day column → minute-of-day, snapped to 15 min. Uses the
    *  fixed px scale (not column height) so the captured time matches the visual
    *  gridline even when the pane is taller than the grid content (§3.8). */
@@ -902,6 +909,11 @@ function WeekPane({
               data-day={key}
               className={`cal-wk-col${isToday ? ' today' : ''}${drag.dragOverKey === key ? ' drop' : ''}`}
               onClick={(e) => picker.openAt(ms, minuteFromClick(e))}
+              onMouseMove={(e) => {
+                const min = minuteFromClick(e);
+                setAddHint((h) => (h && h.key === key && h.min === min ? h : { key, min }));
+              }}
+              onMouseLeave={() => setAddHint((h) => (h?.key === key ? null : h))}
               onDragOver={(e) => {
                 e.preventDefault();
                 drag.onOverDay(key);
@@ -911,6 +923,14 @@ function WeekPane({
               {hours.map((h) => (
                 <div key={h} className="cal-wk-slot" />
               ))}
+              {addHint?.key === key && (
+                <div
+                  className="cal-wk-addhint"
+                  style={{ top: minutesToPx(addHint.min - WEEK_GRID_START_HOUR * 60) }}
+                >
+                  <span className="cal-wk-addhint-label">+ 일정 {fmtMin(addHint.min)}</span>
+                </div>
+              )}
               {layout.map((b) => (
                 <WeekBlock
                   key={b.nodeId}
