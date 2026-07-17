@@ -138,7 +138,36 @@ export function CalendarView() {
 
   const reload = () => void collectAgendaCached().then(setItems);
   useEffect(() => {
+    // Live-update the agenda when an open map's scheduled nodes change. Critical in
+    // split view: the calendar stays mounted beside a map pane, so a schedule set on
+    // the map must appear here without re-opening the tab. (Tab switches remount and
+    // reload anyway.) Debounced so typing/pan/zoom on a map doesn't thrash the scan.
+    // Mirrors the store-subscription pattern in sync/reminderSync.ts.
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const reloadSoon = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(reload, 200);
+    };
+    let unsubMaps: Array<() => void> = [];
+    const resubscribe = () => {
+      unsubMaps.forEach((u) => u());
+      unsubMaps = useSession
+        .getState()
+        .tabs.filter((t) => t.kind === 'map' && t.store)
+        .map((t) => (t.store as MapStore).subscribe(reloadSoon));
+    };
     reload();
+    resubscribe();
+    // opening/closing/splitting tabs changes the open-map set → re-subscribe + reload
+    const unsubSession = useSession.subscribe(() => {
+      resubscribe();
+      reloadSoon();
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubMaps.forEach((u) => u());
+      unsubSession();
+    };
   }, []);
 
   const actions: AgendaActions = useMemo(() => makeAgendaActions(reload), [items]);
