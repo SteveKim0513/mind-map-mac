@@ -525,17 +525,24 @@ export const useSession = create<SessionState>((set, get) => {
     },
 
     renamePath: (oldPath, newPath) => {
+      // Anchor the replacement to the path prefix — a plain String.replace would
+      // rewrite the first match anywhere in the path.
+      const rewrite = (p: string) => newPath + p.slice(oldPath.length);
+      const affects = (p: string) => p === oldPath || p.startsWith(oldPath + '/');
       set((s) => ({
         tabs: s.tabs.map((t) => {
-          if (t.path === oldPath || t.path.startsWith(oldPath + '/')) {
-            // Anchor the replacement to the path prefix — a plain String.replace
-            // would rewrite the first match anywhere in the path.
-            const np = newPath + t.path.slice(oldPath.length);
+          if (affects(t.path)) {
+            const np = rewrite(t.path);
             t.store?.getState().setFilePath(np);
             return { ...t, path: np, title: base(np) };
           }
           return t;
         }),
+        // Recents must follow the rename too — otherwise "최근 파일" keeps the old
+        // path and clicking it errors (ENOENT) while the renamed file never shows.
+        recent: s.recent.map((r) =>
+          affects(r.path) ? { ...r, path: rewrite(r.path), name: base(rewrite(r.path)) } : r,
+        ),
       }));
       persist();
     },
@@ -558,11 +565,21 @@ export const useSession = create<SessionState>((set, get) => {
     // if the tab has of its own unsaved edits — accepted for a low-stakes
     // capture scratch file, since skipping the reload just reopens the race.
     reloadIfOpen: async (path) => {
-      const tab = get().tabs.find((t) => t.path === path && t.kind === 'map');
-      if (!tab) return;
+      const tab = get().tabs.find(
+        (t) => t.path === path && (t.kind === 'map' || t.kind === 'note'),
+      );
+      if (!tab || !tab.store) return;
       try {
         const content = await window.api.readFile(path);
-        (tab.store as MapStore).getState().loadDoc(deserialize(content), path);
+        if (tab.kind === 'note') {
+          // Re-read the .md and replace the open note's in-memory state, mirroring
+          // the map branch — used by the external-change reload (D2) so a note
+          // edited by another app/device refreshes instead of being clobbered by
+          // this tab's stale autosave.
+          (tab.store as NoteStore).getState().loadNote(parseNote(content, base(path)), path);
+        } else {
+          (tab.store as MapStore).getState().loadDoc(deserialize(content), path);
+        }
       } catch {
         /* file missing/unreadable — nothing to reload */
       }

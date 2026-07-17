@@ -31,6 +31,13 @@ describe('report periods', () => {
     expect(weekPeriod(NOW, -1).to).toBe(wk.from);
   });
 
+  it('starts the week on Sunday to match the calendar view', () => {
+    // NOW = Wed 2026-06-10 → the containing week starts Sunday 2026-06-07.
+    const wk = weekPeriod(NOW, 0);
+    expect(new Date(wk.from).getDay()).toBe(0); // Sunday
+    expect(new Date(wk.from).getDate()).toBe(7);
+  });
+
   it('periodSessions filters by the period window', () => {
     const sessions = [S(NOW, 30), S(NOW - 8 * DAY, 30)]; // this week + last week
     expect(periodSessions(sessions, weekPeriod(NOW, 0))).toHaveLength(1);

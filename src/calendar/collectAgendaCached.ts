@@ -37,23 +37,33 @@ export async function collectAgendaCached(): Promise<AgendaItem[]> {
     scheduleAt: string,
     done: boolean,
     durationMin: number | undefined,
+    allDay: boolean | undefined,
     mapPath?: string,
   ) => {
     const k = `${mapId} ${nodeId}`;
     if (seen.has(k)) return;
     seen.add(k);
-    const { at, hasTime } = parseSchedule(scheduleAt);
+    const { at, hasTime } = parseSchedule(scheduleAt, allDay);
     out.push({ mapId, nodeId, text: text || '(이름 없음)', scheduleAt, at, hasTime, done: !!done, durationMin, mapPath });
   };
 
-  // Open maps first — their live state wins the dedup over the on-disk copy.
+  // Open maps are AUTHORITATIVE for their own nodes — record their path + doc id so
+  // we don't also read the on-disk copy. The per-node dedup below can't protect a
+  // node the open pass intentionally OMITS: e.g. a schedule just cleared in the live
+  // map isn't added here, so a stale/unsaved on-disk copy (still `scheduled`) would
+  // re-add it and the item would linger on the calendar. Skipping the whole file for
+  // any open map fixes that.
+  const openPaths = new Set<string>();
+  const openMapIds = new Set<string>();
   for (const st of openMaps()) {
     const s = st.getState();
     const doc = s.doc;
+    if (s.filePath) openPaths.add(s.filePath);
+    if (doc.id) openMapIds.add(doc.id);
     for (const id in doc.nodes) {
       const n = doc.nodes[id];
       if (n.scheduled && n.scheduleAt)
-        add(doc.id ?? '', id, n.text, n.scheduleAt, !!n.done, n.durationMin, s.filePath ?? undefined);
+        add(doc.id ?? '', id, n.text, n.scheduleAt, !!n.done, n.durationMin, n.allDay, s.filePath ?? undefined);
     }
   }
 
@@ -61,11 +71,13 @@ export async function collectAgendaCached(): Promise<AgendaItem[]> {
   const files = collectMindFiles(useWorkspace.getState().tree);
   pruneMindCache(files.map((f) => f.path));
   for (const f of files) {
+    if (openPaths.has(f.path)) continue; // this map is open → live state already used
     const doc = await loadMindDoc(f.path, f.mtimeMs);
     if (!doc) continue; // unreadable / corrupt → skip (same as before)
+    if (doc.id && openMapIds.has(doc.id)) continue; // same open map via a different path
     for (const id in doc.nodes) {
       const n = doc.nodes[id];
-      if (n.scheduled && n.scheduleAt) add(doc.id ?? '', id, n.text, n.scheduleAt, !!n.done, n.durationMin, f.path);
+      if (n.scheduled && n.scheduleAt) add(doc.id ?? '', id, n.text, n.scheduleAt, !!n.done, n.durationMin, n.allDay, f.path);
     }
   }
   return out;

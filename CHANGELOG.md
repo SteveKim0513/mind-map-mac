@@ -4,6 +4,47 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.11.2] - 2026-07-17
+
+e2e 미커버 journey 탐색 QA에서 발견한 47건 수정 + 이월 2건(allDay·이미지 경로) 완전 해소.
+실행계획: `docs/exec-plans/active/2026-07-17-e2e-gap-qa-fixes.md`.
+
+### 수정 — 데이터 손실/무결성
+- **버전 복원 시 현재 작업 유실** — 복원 직전 현재 내용을 무조건 스냅샷(5분 스로틀 우회, `snapshotVersion({force})`).
+- **표 셀의 `|`가 리로드 시 표 전체 파괴** — 셀 직렬화에서 파이프 이스케이프(`state.out` 슬라이스, 인자 없는 write 크래시 회피).
+- **열린 노트 외부 변경 무단 덮어쓰기** — 노트 탭도 외부변경 감지 + `reloadIfOpen`가 노트 리로드.
+- **포커스 유지 중 외부 변경 clobber** — 덮어쓰기 전 외부 버전 강제 스냅샷(복구 가능).
+- **이름변경 시 `.history` 고아** — 히스토리 폴더 동반 이동.
+- **워크스페이스 전환이 설정 초기화** — `writeSettings` 병합.
+- **이름변경 후 최근파일 stale 경로(ENOENT)** — `renamePath`가 recent 갱신.
+- **복제가 리마인더 4필드 미제거 → 중복 예약** — 복사와 동일하게 전부 제거 (ADR 0016).
+
+### 수정 — 버그
+- `@내일 3시간` → 03:00 오파싱 (`(?!간)` 룩어헤드).
+- `@오전 12시`가 종일로 강등 — `allDay` 필드로 명시적 자정 유지 (ADR 0017).
+- 표 안에서 Tab이 셀 이동 불가 — 표에선 ProseMirror keymap에 위임.
+- 서브트리 집중 + 색상 필터가 스코프 무시.
+- 휠 팬/핀치줌 stale-closure 입력 유실 — `getState()`로 fresh view.
+- 드래그 팬이 선택 해제(휠 팬과 불일치), 색상필터 상위/하위 토글이 clear 후 잔존.
+- 위키링크 칩 클릭 시 `[[` 자동완성이 peek 위에 겹침.
+- 일정 해제해도 캘린더에 잔존(open-map dedup) — 열린 맵 파일은 캐시 수집에서 제외.
+- URL 가져오기 catch 부재로 무한 로딩, 빈 markdown import 무경고, 폴더 다중선택 불가.
+
+### 개선
+- 붙여넣기가 `todo`·`durationMin` 유지; Delete 후 이웃 선택; 노드 생성=단일 undo; 접기 시 숨은 선택 이동.
+- 전역검색이 노드 메모·링크도 검색; 학습된 ⌥숫자 퀵키 안정화; 내보내기 손실 경고; Manual 단축키 정확화.
+- Z 줌 경계, 극단 줌아웃 시 선택 툴바 숨김, "화면 다시 맞춤" 라벨.
+- "이번 주" 기준을 캘린더(일요일 시작)와 집중 대시보드 일치; "주말" 칩 토/일 off-by-one.
+
+### 이월 완전 해소 (사용자 승인)
+- **E5** 명시적 자정 vs 종일 — `MindNode.allDay?` 선택 가산 필드, `parseSchedule(scheduleAt, allDay?)` 하위호환 폴백 (무 version 범프, ADR 0017).
+- **C6** 이미지 참조 표준 뷰어 이식 — 멱등 URL 인코딩(공백·괄호·#) + `images:read` 중앙 디코딩 + 이름변경 이중 매칭.
+
+### 테스트
+- e2e 신규: `clipboard-reminder-invariant`, `table-editing`, `version-restore`, `note-external-change`, `note-image-portable`.
+- 단위: `mapStore.qafixes`, `tableMarkdown`, parseSchedule/parseNodeText allDay, commandUsage 안정 배정 등.
+- `uiStore` 모듈 로드 시 DOM 접근을 `typeof window` 가드(node 테스트 임포트 안전).
+
 ## [0.11.1] - 2026-07-17
 
 ### 수정 — 집중 세션 데이터 안정화

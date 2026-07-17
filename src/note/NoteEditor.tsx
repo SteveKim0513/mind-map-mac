@@ -35,6 +35,28 @@ import { openLightbox } from './ImageLightbox';
 // survive an app restart, only a tab switch within this session.
 const scrollPositions = new Map<string, number>();
 
+// On-disk image refs live as "./.<stem>.assets/img.png". A raw space (or "(", ")",
+// "#") in that path renders fine in our custom in-app reader but breaks STANDARD
+// markdown viewers (Obsidian/GitHub/Typora), which need those chars percent-encoded.
+// So we serialize the ref encoded. Must be IDEMPOTENT: the mount reader re-populates
+// imagePathMap with the ref it read from the (already-encoded) body, so a later
+// re-serialize would double-encode ("%2520") unless we decode first. Keep "/"
+// separators and non-ASCII (Korean) chars readable — only escape the chars that
+// break markdown link syntax. Keep this in sync with electron/main.ts's decode.
+function encodeAssetRef(fp: string): string {
+  let s = fp;
+  try {
+    s = decodeURIComponent(fp);
+  } catch {
+    /* malformed percent-escape — encode the raw string as-is */
+  }
+  return s
+    .replace(/ /g, '%20')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+    .replace(/#/g, '%23');
+}
+
 interface Props {
   /** Initial Markdown body. The editor owns the document after mount; the parent
    *  remounts (via React key) when a different note loads. */
@@ -128,6 +150,11 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
     active: 0,
     from: 0,
   });
+  // Suppress the "[[" autocomplete from (re)opening for a beat after a wiki-link
+  // chip is clicked. The click drops the caret inside the "[[Title]]" text, whose
+  // selection update would otherwise pop the link menu on top of the peek popup.
+  // Holds a timestamp (ms); recompute() ignores link matches until then.
+  const suppressLinkUntil = useRef(0);
   const closeLink = () => {
     if (!lm.current.open) return;
     lm.current = { open: false, items: [], active: 0, from: 0 };
@@ -242,6 +269,9 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
     const wl = /\[\[([^[\]\n]*)$/.exec(before);
     if (wl) {
       close();
+      // just clicked a wiki-link chip → the caret landed inside its [[Title]] text;
+      // don't reopen the autocomplete over the peek that click just opened
+      if (Date.now() < suppressLinkUntil.current) return closeLink();
       const raw = wl[1].trim();
       const q = raw.toLowerCase();
       const items: LinkItem[] = useWorkspace
@@ -310,6 +340,17 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
     editorProps: {
       // accessible name for the contenteditable surface (axe aria-input-field-name)
       attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': scaffold ? '작업 기록' : '노트 본문' },
+      handleDOMEvents: {
+        // Arm the "[[" suppression *before* the click moves the caret: mousedown
+        // fires ahead of the selection change that would otherwise reopen the link
+        // menu inside the chip. handleClick then opens the peek. (See recompute.)
+        mousedown: (_view, event) => {
+          if ((event.target as HTMLElement)?.closest?.('[data-wikilink]')) {
+            suppressLinkUntil.current = Date.now() + 500;
+          }
+          return false;
+        },
+      },
       handlePaste: (_view, event) => insertImages(imageFilesFrom(event.clipboardData)),
       handleDrop: (_view, event) => insertImages(imageFilesFrom(event.dataTransfer)),
       // Cmd/Ctrl-click a link to open it externally (plain click keeps editing).
@@ -324,6 +365,9 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
         // not navigate). "열기" inside the peek opens it in the opposite pane.
         const wl = (event.target as HTMLElement)?.closest('[data-wikilink]') as HTMLElement | null;
         if (wl) {
+          // opening a peek from a chip must never leave the "[[" autocomplete up
+          suppressLinkUntil.current = Date.now() + 500;
+          closeLink();
           const title = wl.getAttribute('data-wikilink') ?? '';
           const meta = useWorkspace.getState().noteByTitle(title);
           const sg = useSession.getState().activeGroup;
@@ -377,20 +421,26 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
           if (event.key === 'Escape') { close(); return true; }
           return false;
         }
-        // Tab/Shift-Tab: always consume to prevent browser focus navigation to toolbar.
-        // In a list item: indent/dedent. Elsewhere: swallow silently.
+        // Tab/Shift-Tab: in a list item → indent/dedent; in a table cell → let
+        // ProseMirror's table keymap (goToNextCell) run; elsewhere → swallow so
+        // focus doesn't jump to the toolbar. Walk from the caret outward and act
+        // on whichever we hit first, so a list nested in a cell still indents.
         if (event.key === 'Tab') {
-          event.preventDefault();
           const { state } = _view;
           const { $from } = state.selection;
           for (let d = $from.depth; d > 0; d--) {
             const nodeType = $from.node(d).type;
             if (nodeType.name === 'listItem' || nodeType.name === 'taskItem') {
+              event.preventDefault();
               const cmd = event.shiftKey ? outdentListItem(nodeType) : sinkListItem(nodeType);
               cmd(state, _view.dispatch);
-              break;
+              return true;
             }
+            // in a table cell: don't consume — the table keymap moves cell-to-cell
+            if (nodeType.name === 'tableCell' || nodeType.name === 'tableHeader') return false;
           }
+          // not in a list or a table cell: swallow to keep focus in the editor
+          event.preventDefault();
           return true;
         }
         return false;
@@ -403,7 +453,8 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
         imap.size > 0
           ? md.replace(/!\[([^\]]*)\]\((data:image\/[^)]+)\)/g, (match, alt, dataUrl) => {
               const fp = imap.get(dataUrl);
-              return fp ? `![${alt}](${fp})` : match;
+              // Encode the on-disk ref so it's portable to standard markdown viewers.
+              return fp ? `![${alt}](${encodeAssetRef(fp)})` : match;
             })
           : md;
       const clean = withRefs

@@ -3,6 +3,10 @@ import { TAG_KEYS, type TagKey } from '../theme/palette';
 export interface ScheduleParseResult {
   matched: boolean;
   scheduleAt?: string; // local-time ISO "YYYY-MM-DDTHH:mm:00"
+  // false only when the user typed an explicit midnight time (e.g. "@오전 12시"):
+  // "...T00:00:00" would otherwise be read as all-day. undefined otherwise so the
+  // agenda layer derives all-day/timed from the time component as before.
+  allDay?: boolean;
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']; // index = Date#getDay()
@@ -55,7 +59,10 @@ export function parseScheduleText(text: string, now: number = Date.now()): Sched
 
   let hour = 9;
   let minute = 0;
-  const timeMatch = text.match(/(오전|오후)?\s?(\d{1,2})시(\s?(\d{1,2})분)?/);
+  let hadTime = false; // did the user type an explicit time token?
+  // (?!간) — "3시간"(소요 시간)의 "3시"를 시각으로 오인하지 않도록. "@내일 3시간 작업"은
+  // 시각 없음으로 보고 09:00 기본값을 쓴다. "@내일 3시"(다음 문자가 '간'이 아님)는 그대로 매칭.
+  const timeMatch = text.match(/(오전|오후)?\s?(\d{1,2})시(?!간)(\s?(\d{1,2})분)?/);
   if (timeMatch) {
     const h = parseInt(timeMatch[2], 10);
     if (h <= 23) {
@@ -64,10 +71,14 @@ export function parseScheduleText(text: string, now: number = Date.now()): Sched
       if (timeMatch[1] === '오전' && h === 12) resolved = 0;
       hour = resolved;
       minute = timeMatch[4] ? parseInt(timeMatch[4], 10) : 0;
+      hadTime = true;
     }
   }
 
-  return { matched: true, scheduleAt: `${dateStr(target)}T${pad(hour)}:${pad(minute)}:00` };
+  // An explicit "오전 12시" resolves to 00:00, which would otherwise read as all-day
+  // — pin it as timed. Non-midnight times derive correctly, so leave allDay unset.
+  const allDay = hadTime && hour === 0 && minute === 0 ? false : undefined;
+  return { matched: true, scheduleAt: `${dateStr(target)}T${pad(hour)}:${pad(minute)}:00`, allDay };
 }
 
 const KOREAN_TO_TAG_KEY: Record<string, TagKey> = {

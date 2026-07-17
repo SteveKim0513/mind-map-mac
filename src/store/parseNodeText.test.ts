@@ -54,6 +54,27 @@ describe('parseScheduleText', () => {
   it('ignores an out-of-range hour and falls back to the 09:00 default', () => {
     expect(parseScheduleText('@내일 25시 도착', NOW).scheduleAt).toBe('2026-07-09T09:00:00');
   });
+
+  it('does not read "N시간"(소요 시간) as a time — "@내일 3시간 작업" uses the 09:00 default', () => {
+    // "3시" inside "3시간" must not schedule at 03:00.
+    expect(parseScheduleText('@내일 3시간 작업', NOW).scheduleAt).toBe('2026-07-09T09:00:00');
+  });
+});
+
+describe('parseScheduleText — allDay (explicit midnight)', () => {
+  it('pins an explicit "오전 12시" as timed (allDay:false), not all-day', () => {
+    const r = parseScheduleText('@내일 오전 12시 심야회의', NOW);
+    expect(r.scheduleAt).toBe('2026-07-09T00:00:00');
+    expect(r.allDay).toBe(false);
+  });
+
+  it('leaves allDay undefined for a normal timed input (derives fine)', () => {
+    expect(parseScheduleText('@내일 오후 3시 미팅', NOW).allDay).toBeUndefined();
+  });
+
+  it('leaves allDay undefined when no time is typed (defaults to 09:00)', () => {
+    expect(parseScheduleText('@내일 회의', NOW).allDay).toBeUndefined();
+  });
 });
 
 describe('parseHashtagColor', () => {

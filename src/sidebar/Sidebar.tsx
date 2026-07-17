@@ -241,6 +241,12 @@ export function Sidebar({
     setSelected({ path: notePath, type: 'file' });
     onOpenFile(notePath);
     setUrlImport(null);
+    } catch (err) {
+      // Anything after a successful fetch (extractArticle / createFile / refresh)
+      // could throw — without this the modal stays stuck on "가져오는 중…" and the
+      // rejection goes unhandled. Clear busy + show the error in the modal.
+      window.api?.log?.('warn', 'web', `url import failed: ${err instanceof Error ? err.message : String(err)}`);
+      setUrlImport({ busy: false, error: '노트를 만들지 못했습니다. 다시 시도해 주세요.' });
     } finally {
       importingRef.current = false;
     }
@@ -482,8 +488,14 @@ export function Sidebar({
             }
             onClick={(e) => {
               if (node.type === 'dir') {
-                setSelected({ path: node.path, type: 'dir' });
-                toggle(node.path);
+                if (e.metaKey || e.ctrlKey) {
+                  // ⌘/Ctrl+click a folder → add it to the multi-selection so bulk
+                  // delete/move can include folders; a plain click still expands.
+                  toggleMark(node.path);
+                } else {
+                  setSelected({ path: node.path, type: 'dir' });
+                  toggle(node.path);
+                }
               } else if (e.metaKey || e.ctrlKey) {
                 // ⌘/Ctrl+click → toggle multi-selection (don't open)
                 toggleMark(node.path);

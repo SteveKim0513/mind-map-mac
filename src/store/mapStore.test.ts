@@ -46,6 +46,32 @@ describe('tree mutations', () => {
     expect(s.getState().doc.nodes[c].parentId).toBe(root);
   });
 
+  it('reparentMany moves ALL selected roots under a target and clears their manualPos', () => {
+    // 여러 부모(루트) 노드를 한 번에 다른 노드의 자식으로 — "오늘의 생각"에 쌓인
+    // 루트들을 선택해 한꺼번에 옮기는 시나리오. 이전엔 하나만 옮겨졌다.
+    const s = createMapStore();
+    const newRoot = (): string => {
+      const before = new Set(s.getState().doc.rootIds);
+      s.getState().addRoot();
+      return s.getState().doc.rootIds.find((id) => !before.has(id))!;
+    };
+    const r1 = newRoot();
+    const r2 = newRoot();
+    const r3 = newRoot();
+    s.getState().setManualPos(r2, { x: 100, y: 100 }); // free-placed on canvas
+    s.getState().setManualPos(r3, { x: 200, y: 200 });
+
+    s.getState().reparentMany([r2, r3], r1);
+
+    const { nodes, rootIds } = s.getState().doc;
+    expect(nodes[r2].parentId).toBe(r1);
+    expect(nodes[r3].parentId).toBe(r1);
+    expect(nodes[r1].children).toEqual(expect.arrayContaining([r2, r3]));
+    expect(rootIds).toEqual([r1]); // r2·r3 are no longer roots
+    expect(nodes[r2].manualPos).toBeUndefined(); // laid out by the tree now
+    expect(nodes[r3].manualPos).toBeUndefined();
+  });
+
   it('copy-paste keeps content (links, schedule) but never reminder identity (decisions/0005)', () => {
     const s = createMapStore();
     const [root, [c]] = rootWithChildren(s, 1);
@@ -78,12 +104,17 @@ describe('tree mutations', () => {
 });
 
 describe('schedule + reminder', () => {
-  it('setScheduled applies to the node and all descendants', () => {
+  it('setScheduled propagates the target date to the node and all descendants (E2)', () => {
     const s = createMapStore();
     const [root, kids] = rootWithChildren(s, 2);
+    s.getState().setScheduleAt(root, '2026-07-01T09:00:00'); // give the target a date first
     s.getState().setScheduled(root, true);
     expect(s.getState().doc.nodes[root].scheduled).toBe(true);
-    for (const k of kids) expect(s.getState().doc.nodes[k].scheduled).toBe(true);
+    for (const k of kids) {
+      expect(s.getState().doc.nodes[k].scheduled).toBe(true);
+      // descendants inherit the target's date — no dateless "일정" chips (E2)
+      expect(s.getState().doc.nodes[k].scheduleAt).toBe('2026-07-01T09:00:00');
+    }
   });
 
   it('un-scheduling clears the date and reminder fields across the subtree', () => {
@@ -119,17 +150,23 @@ describe('schedule + reminder', () => {
     expect(s.getState().doc.nodes[c].reminderId).toBeUndefined();
   });
 
-  it('duplicateNode does not copy the reminder id (Closes #6/#10)', () => {
+  it('duplicateNode strips ALL reminder fields (ADR 0016; Closes #6/#10)', () => {
     const s = createMapStore();
     const [, [c]] = rootWithChildren(s, 1);
-    s.getState().applyReminderPatch(c, { reminderOn: true, reminderId: 'rem-1', reminderSyncedAt: 5 });
+    s.getState().applyReminderPatch(c, {
+      reminderOn: true,
+      reminderId: 'rem-1',
+      reminderSyncedAt: 5,
+      reminderBase: { title: 'x', due: null, done: false },
+    });
     s.getState().duplicateNode(c);
-    const clone = Object.values(s.getState().doc.nodes).find(
-      (n) => n.id !== c && n.reminderOn,
-    );
-    expect(clone).toBeDefined();
-    expect(clone!.reminderId).toBeUndefined();
-    expect(clone!.reminderSyncedAt).toBeUndefined();
+    // duplicateNode selects the clone — a reminder-free copy (matches copy/paste)
+    const clone = s.getState().doc.nodes[s.getState().selectedId!];
+    expect(clone.id).not.toBe(c);
+    expect(clone.reminderOn).toBeUndefined();
+    expect(clone.reminderId).toBeUndefined();
+    expect(clone.reminderSyncedAt).toBeUndefined();
+    expect(clone.reminderBase).toBeUndefined();
   });
 
   it('toggleDone stamps updatedAt for reminder push', () => {

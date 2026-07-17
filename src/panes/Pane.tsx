@@ -149,7 +149,7 @@ function PaneBody({
         </button>
         <button
           className="tool-btn icon"
-          title="새로고침 (재배치)"
+          title="화면 다시 맞춤"
           onClick={() => useUi.getState().relayout()}
         >
           <Icon name="refresh" />

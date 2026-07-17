@@ -308,7 +308,13 @@ app.on('window-all-closed', () => {
 // new bytes. Every full-file write in this process goes through here. The temp
 // is dot-prefixed so a leftover from a hard crash stays hidden from walk().
 async function atomicWrite(target: string, data: string | Buffer): Promise<void> {
-  await snapshotVersion(target); // IF-02 · preserve the pre-overwrite version first
+  // IF-02 · preserve the pre-overwrite version first. D6 · when the file changed on
+  // disk since we last read/wrote it (an iCloud/Dropbox sync or another device that
+  // landed while our window stayed focused — external-change detection only runs on
+  // renderer focus, so a sync arriving while focused is otherwise clobbered here with
+  // no recovery point), force past the snapshot time-throttle so those unseen bytes
+  // stay recoverable from history. Converts silent loss into recoverable loss.
+  await snapshotVersion(target, { force: await changedSinceSeen(target) });
   const dir = path.dirname(target);
   const tmp = path.join(dir, `.${path.basename(target)}.tmp-${process.pid}-${Date.now()}`);
   let fh: Awaited<ReturnType<typeof fs.open>> | null = null;
@@ -344,6 +350,20 @@ async function recordSeen(target: string): Promise<void> {
   }
 }
 
+// IF-04 / D6 · Did `target` change on disk since we last read/wrote it? Mirrors the
+// mtime comparison in `fs:externalChange` (`st.mtimeMs > base + 1`). Only .mind/.md
+// files have a baseline in `seenMtime`, so this returns false for everything else.
+async function changedSinceSeen(target: string): Promise<boolean> {
+  const base = seenMtime.get(path.resolve(target));
+  if (base == null) return false;
+  try {
+    const st = await fs.stat(target);
+    return st.mtimeMs > base + 1;
+  } catch {
+    return false; // target missing — nothing external to preserve
+  }
+}
+
 // ─── Local version history (IF-02) ───────────────────────────────────────────
 // Every overwrite of a .mind/.md file first copies the CURRENT bytes into a
 // hidden <workspace>/.history/<file-key>/<timestamp>.<ext> snapshot, so a user
@@ -360,7 +380,7 @@ function historyKey(rel: string): string {
   return rel.replace(/[\\/]/g, '__');
 }
 
-async function snapshotVersion(target: string): Promise<void> {
+async function snapshotVersion(target: string, opts?: { force?: boolean }): Promise<void> {
   const ext = path.extname(target);
   if (ext !== '.mind' && ext !== '.md') return; // only user content is versioned
   let ws: string;
@@ -381,14 +401,20 @@ async function snapshotVersion(target: string): Promise<void> {
   const dir = path.join(ws, HISTORY_DIR, historyKey(path.relative(ws, resolved)));
   // Throttle: skip if this file was snapshotted within the last few minutes, so
   // a burst of debounced autosaves doesn't fill history with near-identical copies.
-  try {
-    const recent = (await fs.readdir(dir)).filter((f) => f.endsWith(ext)).sort();
-    if (recent.length) {
-      const st = await fs.stat(path.join(dir, recent[recent.length - 1]));
-      if (Date.now() - st.mtimeMs < HISTORY_MIN_INTERVAL_MS) return;
+  // `force` (an explicit restore, or preserving an unseen external edit before an
+  // overwrite) bypasses ONLY this time-throttle — the "never snapshot snapshots"
+  // and "brand-new file" guards above still apply, and restores are infrequent so
+  // there is no burst concern.
+  if (!opts?.force) {
+    try {
+      const recent = (await fs.readdir(dir)).filter((f) => f.endsWith(ext)).sort();
+      if (recent.length) {
+        const st = await fs.stat(path.join(dir, recent[recent.length - 1]));
+        if (Date.now() - st.mtimeMs < HISTORY_MIN_INTERVAL_MS) return;
+      }
+    } catch {
+      /* dir doesn't exist yet — this is the first snapshot */
     }
-  } catch {
-    /* dir doesn't exist yet — this is the first snapshot */
   }
   await fs.mkdir(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -442,7 +468,13 @@ ipcMain.handle('history:restore', async (_e, args: { filePath: string; stamp: st
   const snap = await historySnapshotPath(args.filePath, args.stamp);
   const resolved = await assertInsideWorkspace(args.filePath);
   const content = await fs.readFile(snap, 'utf-8');
-  await atomicWrite(resolved, content); // snapshots the current (pre-restore) version first
+  // D1 · ALWAYS keep a recovery point of the CURRENT on-disk bytes before restoring.
+  // A restore is explicit and infrequent, but the user almost always just edited, so
+  // a throttled snapshot would be skipped (one exists <5min old) and the current work
+  // would vanish — contradicting the restore dialog's promise. Force past the throttle.
+  // The throttled snapshot inside atomicWrite below then no-ops (a fresh one exists).
+  await snapshotVersion(resolved, { force: true });
+  await atomicWrite(resolved, content);
   return content;
 });
 
@@ -612,6 +644,17 @@ function assetsDirName(stem: string): string {
 function legacyAssetsDirName(stem: string): string {
   return `${stem}.assets`;
 }
+/** URL-encode an asset-folder name so a rewritten body ref matches what the editor
+ *  serializes (portable to standard markdown viewers). Mirrors NoteEditor's
+ *  encodeAssetRef for a single path segment — kept in sync manually since the
+ *  main and renderer processes can't share a module. Input is a raw on-disk name. */
+function encodeAssetName(name: string): string {
+  return name
+    .replace(/ /g, '%20')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+    .replace(/#/g, '%23');
+}
 /** Find a note's companion image-assets folder under either naming convention. */
 async function findAssetsDir(dir: string, stem: string): Promise<{ path: string; name: string } | null> {
   for (const name of [assetsDirName(stem), legacyAssetsDirName(stem)]) {
@@ -640,12 +683,21 @@ async function relocateAssetsDir(
   if (found.path === dest) return;
   try {
     await fs.rename(found.path, dest);
-    if (found.name !== newName) {
-      const oldRef = `./${found.name}/`;
-      const newRef = `./${newName}/`;
-      const body = await fs.readFile(notePath, 'utf-8');
-      if (body.includes(oldRef)) await atomicWrite(notePath, body.split(oldRef).join(newRef));
+    // Rewrite the body's image refs to the new folder in the ENCODED form the
+    // editor now writes. A note on disk may carry the old ref RAW (pre-R7 or
+    // legacy visible folder) or ENCODED (saved by a newer build), so replace
+    // both. The final `next !== body` guard skips a no-op write (e.g. the ref
+    // was already the encoded new name).
+    const newRefEnc = `./${encodeAssetName(newName)}/`;
+    const oldRefRaw = `./${found.name}/`;
+    const oldRefEnc = `./${encodeAssetName(found.name)}/`;
+    const body = await fs.readFile(notePath, 'utf-8');
+    let next = body;
+    if (next.includes(oldRefRaw)) next = next.split(oldRefRaw).join(newRefEnc);
+    if (oldRefEnc !== oldRefRaw && next.includes(oldRefEnc)) {
+      next = next.split(oldRefEnc).join(newRefEnc);
     }
+    if (next !== body) await atomicWrite(notePath, next);
   } catch {
     /* rename failed — leave the assets dir where it was */
   }
@@ -688,7 +740,10 @@ ipcMain.handle('workspace:choose', async () => {
   });
   if (res.canceled || res.filePaths.length === 0) return null;
   const ws = res.filePaths[0];
-  await writeSettings({ workspace: ws });
+  // D4 · merge into existing settings — a bare { workspace } would drop
+  // templatesEnabled / trashAutoPurge / etc. (mirrors getWorkspace's spread).
+  const current = await readSettings();
+  await writeSettings({ ...current, workspace: ws });
   return ws;
 });
 
@@ -758,11 +813,20 @@ ipcMain.handle(
 ipcMain.handle(
   'images:read',
   async (_e, args: { notePath: string; filepath: string }) => {
+    // Body refs are URL-encoded (spaces → %20, etc.) so they're portable to
+    // standard markdown viewers; decode back to the real on-disk path. Fall back
+    // to the raw value if it isn't a valid percent-escape (older raw refs).
+    let rel = args.filepath;
+    try {
+      rel = decodeURIComponent(args.filepath);
+    } catch {
+      /* malformed escape — resolve the raw ref as written */
+    }
     const resolved = await assertInsideWorkspace(
-      path.join(path.dirname(args.notePath), args.filepath),
+      path.join(path.dirname(args.notePath), rel),
     );
     const buf = await fs.readFile(resolved);
-    const ext = path.extname(args.filepath).toLowerCase().slice(1);
+    const ext = path.extname(rel).toLowerCase().slice(1);
     const mime: Record<string, string> = {
       jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
       gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
@@ -823,6 +887,38 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
     }
   }
   await fs.rename(src, next);
+
+  // D3 · Move the file's version-history folder alongside it so a rename doesn't
+  // orphan prior snapshots. History lives at <ws>/.history/<historyKey(relpath)>/,
+  // keyed on the workspace-relative path (same derivation as snapshotVersion /
+  // history:list), so a rename changes the key. Best-effort — a missing history
+  // dir or any relocation error must never fail the rename itself.
+  try {
+    const ws = await getWorkspace();
+    const oldHist = path.join(ws, HISTORY_DIR, historyKey(path.relative(ws, src)));
+    const newHist = path.join(ws, HISTORY_DIR, historyKey(path.relative(ws, next)));
+    if (oldHist !== newHist) {
+      try {
+        await fs.access(oldHist); // throws if the old name had no history — then skip
+        try {
+          await fs.rename(oldHist, newHist); // destination free (or empty) → straight move
+        } catch {
+          // Destination already has history (a prior file reused this name) — merge
+          // the old snapshots in, then drop the emptied old dir. Colliding stamps are
+          // rare (ISO-ms) and best-effort; overwriting one lost snapshot is acceptable.
+          await fs.mkdir(newHist, { recursive: true });
+          for (const f of await fs.readdir(oldHist)) {
+            await fs.rename(path.join(oldHist, f), path.join(newHist, f)).catch(() => {});
+          }
+          await fs.rm(oldHist, { recursive: true, force: true }).catch(() => {});
+        }
+      } catch {
+        /* no history dir for the old name — nothing to move */
+      }
+    }
+  } catch {
+    /* history relocation is best-effort — never fail the rename over it */
+  }
 
   // Keep the companion image-assets directory in sync with the renamed note
   // (also upgrades a pre-0.8.3 visible folder to the hidden naming convention).

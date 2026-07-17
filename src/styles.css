@@ -5589,7 +5589,9 @@ textarea:focus-visible,
 
 /* ── calendar tab — "오늘" 뷰를 일/주/월로 승격 (결정 0011 §4-4) ─────────── */
 .cal-pane { display: flex; flex-direction: column; background: var(--canvas); }
-.cal { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+/* container-type so the header can respond to the PANE width (a split pane is
+   narrow even on a wide monitor — viewport media queries wouldn't fire). */
+.cal { display: flex; flex-direction: column; height: 100%; overflow: hidden; container-type: inline-size; }
 
 .cal-head {
   display: flex;
@@ -5618,7 +5620,7 @@ textarea:focus-visible,
 .cal-nav { display: flex; align-items: center; gap: 4px; }
 .cal-nav-btn { border: none; background: transparent; cursor: pointer; color: var(--ink-muted); padding: 5px; border-radius: var(--r-sm); display: inline-flex; }
 .cal-nav-btn:hover { background: var(--hover); color: var(--ink); }
-.cal-nav-label { font-size: 13px; font-weight: 500; color: var(--ink); min-width: 132px; text-align: center; }
+.cal-nav-label { font-size: 13px; font-weight: 500; color: var(--ink); min-width: 132px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .cal-today-btn {
   border: 1px solid var(--hairline);
@@ -5654,6 +5656,22 @@ textarea:focus-visible,
 
 .cal-grow { flex: 1; }
 .cal-history-btn { border: none; background: transparent; cursor: pointer; color: var(--ink-muted); padding: 6px; border-radius: var(--r-sm); display: inline-flex; }
+
+/* Narrow pane (split / vertical monitor): shed non-essential chrome progressively
+   so the header never wraps or clips — the controls (뷰 토글·이동·추가) stay whole. */
+.cal-head { flex-wrap: nowrap; min-width: 0; }
+@container (max-width: 640px) {
+  .cal-head { gap: 8px; padding: 10px 12px; }
+  .cal-title-text { display: none; }        /* 제목 텍스트 생략 — 아이콘만 */
+  .cal-add-btn-text { display: none; }       /* "일정 추가" → 아이콘만 */
+  .cal-add-btn { padding: 5px 8px; margin-left: 0; }
+  .cal-nav-label { min-width: 0; font-size: 12.5px; }
+}
+@container (max-width: 470px) {
+  .cal-head { gap: 6px; padding: 10px; }
+  .cal-today-btn { display: none; }          /* 이동 화살표(◀▶)로 대체 가능 → 생략 */
+  .cal-title { display: none; }              /* 아이콘도 생략, 토글부터 시작 */
+}
 .cal-history-btn:hover { background: var(--hover); color: var(--ink); }
 
 .cal-body { flex: 1; overflow-y: auto; }

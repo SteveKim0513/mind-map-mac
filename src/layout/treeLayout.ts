@@ -41,20 +41,39 @@ export function layout(
 ): LayoutResult {
   const W = (id: string) => sizes[id]?.w ?? DEFAULT_WIDTH;
 
+  // ── focus scope: when focused on a subtree, everything below (including the
+  //    color filter) is confined to that subtree, so filter composes with focus
+  //    (filter *within* the focused branch) instead of surfacing matches from the
+  //    whole document — the breadcrumb promises "이 노드만". ────────────────────
+  let subtreeSet: Set<string> | null = null;
+  if (focusRootId && doc.nodes[focusRootId]) {
+    const sub = new Set<string>();
+    const addSub = (id: string) => {
+      if (sub.has(id)) return; // guard against a cyclic parent/child graph
+      sub.add(id);
+      doc.nodes[id]?.children.forEach(addSub);
+    };
+    addSub(focusRootId);
+    subtreeSet = sub;
+  }
+  const inScope = (id: string) => !subtreeSet || subtreeSet.has(id);
+
   // ── color filter: matched nodes only by default; optionally pull in
   //    ancestors and/or descendants. Visible nodes whose parent isn't visible
-  //    become roots, so matched nodes show even without their ancestors. ──────
+  //    become roots, so matched nodes show even without their ancestors. When
+  //    focused, matches/ancestors are clamped to the focused subtree. ──────────
   let visibleSet: Set<string> | null = null;
   if (colorFilter) {
     const vis = new Set<string>();
     const matches = Object.values(doc.nodes)
-      .filter((n) => n.color === colorFilter)
+      .filter((n) => n.color === colorFilter && inScope(n.id))
       .map((n) => n.id);
     matches.forEach((id) => vis.add(id));
     if (filterAncestors) {
       matches.forEach((id) => {
         let p = doc.nodes[id]?.parentId ?? null;
-        while (p) {
+        // stop at the focus boundary so ancestors above the focused root stay hidden
+        while (p && inScope(p)) {
           vis.add(p);
           p = doc.nodes[p]?.parentId ?? null;
         }
@@ -105,9 +124,12 @@ export function layout(
   let stackTop = 0;
 
   // Determine the roots to lay out:
-  //  - color filter on → every visible node whose parent isn't visible (a forest)
+  //  - color filter on → every visible node whose parent isn't visible (a forest);
+  //    when also focused, the walk starts at the focused root so out-of-scope
+  //    matches never surface
   //  - focus mode → just the focused subtree
   //  - otherwise → the document's roots
+  const focusRoots = focusRootId && doc.nodes[focusRootId] ? [focusRootId] : doc.rootIds;
   let roots: string[];
   if (visibleSet) {
     roots = [];
@@ -117,9 +139,9 @@ export function layout(
       if (visibleSet!.has(id) && (!n.parentId || !visibleSet!.has(n.parentId))) roots.push(id);
       n.children.forEach(visit);
     };
-    doc.rootIds.forEach(visit);
+    focusRoots.forEach(visit);
   } else {
-    roots = focusRootId && doc.nodes[focusRootId] ? [focusRootId] : doc.rootIds;
+    roots = focusRoots;
   }
 
   // visible children of a node (respecting collapse + the color filter)

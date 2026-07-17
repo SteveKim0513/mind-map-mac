@@ -6,7 +6,8 @@ import type { NoteStore } from './noteStore';
 
 // ── window.api stub (IPC isn't available in tests) ─────────────────────────
 const mockSave = vi.fn().mockResolvedValue('/saved.md');
-vi.stubGlobal('api', { save: mockSave });
+const mockReadFile = vi.fn(); // per-test: reloadIfOpen re-reads a file from disk
+vi.stubGlobal('api', { save: mockSave, readFile: mockReadFile });
 
 // sessionStore uses localStorage — jsdom provides it.
 // Import AFTER stubbing so the module closure captures the mock.
@@ -28,6 +29,7 @@ function reset() {
     recent: [],
   });
   mockSave.mockClear();
+  mockReadFile.mockReset();
 }
 
 // ── openPath ───────────────────────────────────────────────────────────────
@@ -184,6 +186,64 @@ describe('renamePath', () => {
     useSession.getState().openPath('/other/c.md', noteContent());
     useSession.getState().renamePath('/notes/old.md', '/notes/new.md');
     expect(useSession.getState().tabs[0].path).toBe('/other/c.md');
+  });
+
+  // D5: recents used to keep the OLD path after a rename → clicking errored
+  // (ENOENT) and the renamed file never reappeared in "최근 파일".
+  it('rewrites a recent entry whose path matches the renamed file', () => {
+    useSession.getState().openPath('/notes/old.md', noteContent()); // openPath pushes recent
+    expect(useSession.getState().recent.some((r) => r.path === '/notes/old.md')).toBe(true);
+    useSession.getState().renamePath('/notes/old.md', '/notes/new.md');
+    const recent = useSession.getState().recent;
+    expect(recent.some((r) => r.path === '/notes/old.md')).toBe(false);
+    const moved = recent.find((r) => r.path === '/notes/new.md');
+    expect(moved).toBeDefined();
+    expect(moved!.name).toBe('new');
+  });
+
+  it('rewrites recents for files under a renamed folder', () => {
+    useSession.getState().openPath('/folder/a.md', noteContent());
+    useSession.getState().renamePath('/folder', '/renamed');
+    expect(useSession.getState().recent.some((r) => r.path === '/renamed/a.md')).toBe(true);
+    expect(useSession.getState().recent.some((r) => r.path === '/folder/a.md')).toBe(false);
+  });
+
+  it('does not touch recents for unrelated paths', () => {
+    useSession.getState().openPath('/other/c.md', noteContent());
+    useSession.getState().renamePath('/notes/old.md', '/notes/new.md');
+    expect(useSession.getState().recent.some((r) => r.path === '/other/c.md')).toBe(true);
+  });
+});
+
+// ── reloadIfOpen — external-change reload (D11) ──────────────────────────────
+describe('reloadIfOpen', () => {
+  beforeEach(reset);
+
+  // D11: reloadIfOpen only refreshed map tabs — an open NOTE never got the
+  // disk version, so D2's external-change reload couldn't refresh it.
+  it('re-reads an open note tab from disk and replaces its in-memory note', async () => {
+    useSession.getState().openPath('/notes/a.md', noteContent()); // title '테스트 노트'
+    const tab = useSession.getState().tabs[0];
+    expect((tab.store as NoteStore).getState().note.title).toBe('테스트 노트');
+
+    mockReadFile.mockResolvedValueOnce(serializeNote(emptyNote('디스크에서 바뀜')));
+    await useSession.getState().reloadIfOpen('/notes/a.md');
+
+    expect(mockReadFile).toHaveBeenCalledWith('/notes/a.md');
+    expect((tab.store as NoteStore).getState().note.title).toBe('디스크에서 바뀜');
+    expect((tab.store as NoteStore).getState().dirty).toBe(false);
+  });
+
+  it('re-reads an open map tab from disk (unchanged behaviour)', async () => {
+    useSession.getState().openPath('/maps/a.mind', mindContent());
+    mockReadFile.mockResolvedValueOnce(mindContent());
+    await useSession.getState().reloadIfOpen('/maps/a.mind');
+    expect(mockReadFile).toHaveBeenCalledWith('/maps/a.mind');
+  });
+
+  it('is a no-op for a path that is not open', async () => {
+    await useSession.getState().reloadIfOpen('/notes/missing.md');
+    expect(mockReadFile).not.toHaveBeenCalled();
   });
 });
 

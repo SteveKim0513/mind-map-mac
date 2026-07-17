@@ -64,7 +64,12 @@ export function SchedulePopover({ id, onClose }: Props) {
   };
   const nextWeekend = () => {
     const d = new Date();
-    const delta = (6 - d.getDay() + 7) % 7 || 7; // upcoming Saturday
+    const dow = d.getDay(); // Sun=0 … Sat=6
+    // "주말" = the upcoming Saturday — but if today IS already the weekend
+    // (Sat or Sun) it means TODAY (delta 0). Weekday (Mon–Fri, 1–5): (6 - dow)
+    // days ahead lands on this week's Saturday. (Old `|| 7` sent Saturday a full
+    // week out and Sunday 6 days out.) Time-of-day is applied by the caller.
+    const delta = dow === 0 || dow === 6 ? 0 : 6 - dow;
     d.setDate(d.getDate() + delta);
     return dateStr(d);
   };

@@ -55,7 +55,10 @@ test('renaming a note rewrites its embedded image references to the new (hidden)
       .toBe(true);
 
     const body = readFileSync(join(workspace, '시장 리서치.md'), 'utf-8');
-    expect(body).toContain('./.시장 리서치.assets/img.png');
+    // The rewritten ref is URL-encoded (space → %20) so it's portable to standard
+    // markdown viewers (Obsidian/GitHub/Typora); in-app rendering decodes it back.
+    expect(body).toContain('./.시장%20리서치.assets/img.png');
+    expect(body).not.toContain('./.시장 리서치.assets/img.png');
     expect(body).not.toContain(`./${oldStem}.assets/`);
     expect(existsSync(join(workspace, '.시장 리서치.assets', 'img.png'))).toBe(true);
     expect(existsSync(join(workspace, '시장 리서치.assets'))).toBe(false);

@@ -8,7 +8,17 @@ import type { TreeNode } from '../../electron/preload';
 const nameOf = (p: string) => (p.split('/').pop() ?? p).replace(/\.(mind|md)$/, '');
 
 type Hit =
-  | { kind: 'node'; label: string; sub: string; mapPath: string; mapId: string; nodeId: string }
+  | {
+      kind: 'node';
+      label: string;
+      sub: string;
+      haystack: string; // lowercased text + memo + link(s), the searchable field
+      memoText: string; // raw memo + link(s), for a "where it hit" snippet
+      snippet?: string;
+      mapPath: string;
+      mapId: string;
+      nodeId: string;
+    }
   | { kind: 'note'; label: string; path: string; body: string; metaText?: string; snippet?: string };
 
 /** Collect .mind and .md files with their tree-reported mtime (the cache key). */
@@ -73,8 +83,20 @@ export function GlobalSearch({
           if (!doc) return; // unreadable / corrupt → skip
           const map = nameOf(path);
           for (const n of Object.values(doc.nodes)) {
-            if (!n.text?.trim()) continue;
-            out.push({ kind: 'node', label: n.text, sub: map, mapPath: path, mapId: doc.id ?? '', nodeId: n.id });
+            // A node earns an entry if it has visible text OR any searchable
+            // attachment (memo/link) — ⌘F on the canvas matches those too.
+            const memoText = [n.note, n.link, ...(n.links ?? [])].filter(Boolean).join('  ');
+            if (!n.text?.trim() && !memoText) continue;
+            out.push({
+              kind: 'node',
+              label: n.text,
+              sub: map,
+              haystack: `${n.text ?? ''}\n${memoText}`.toLowerCase(),
+              memoText,
+              mapPath: path,
+              mapId: doc.id ?? '',
+              nodeId: n.id,
+            });
           }
         }),
         ...md.map(async ({ path, mtimeMs }) => {
@@ -103,7 +125,14 @@ export function GlobalSearch({
     const out: Hit[] = [];
     for (const e of entries) {
       if (e.kind === 'node') {
-        if (e.label.toLowerCase().includes(s)) out.push(e);
+        if (e.haystack.includes(s)) {
+          // When the hit lives only in the memo/link (not the visible text),
+          // show a snippet so it's clear WHY the node matched (parity with ⌘F).
+          const inText = e.label.toLowerCase().includes(s);
+          const at = inText ? -1 : e.memoText.toLowerCase().indexOf(s);
+          const snippet = at >= 0 ? snippetAround(e.memoText, at, s.length) : undefined;
+          out.push(snippet ? { ...e, snippet } : e);
+        }
       } else {
         const inTitle = e.label.toLowerCase().includes(s);
         const b = e.body.toLowerCase().indexOf(s);
@@ -176,7 +205,7 @@ export function GlobalSearch({
                   <span className="qo-name-txt">{h.label || '제목 없음'}</span>
                 </span>
                 <span className="qo-folder">
-                  {h.kind === 'node' ? h.sub : h.snippet || '노트'}
+                  {h.kind === 'node' ? h.snippet || h.sub : h.snippet || '노트'}
                 </span>
               </button>
             ))

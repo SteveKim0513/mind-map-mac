@@ -49,4 +49,14 @@ describe('buildAgenda', () => {
     expect(parseSchedule('2026-06-12T09:30:00').hasTime).toBe(true);
     expect(parseSchedule('2026-06-12T00:00:00').hasTime).toBe(false);
   });
+
+  it('parseSchedule: explicit allDay flag overrides the time derivation (E5)', () => {
+    // explicit midnight ("@오전 12시") stores 00:00 but allDay:false → timed, not all-day
+    expect(parseSchedule('2026-06-12T00:00:00', false).hasTime).toBe(true);
+    // an all-day item at any stored time reads as all-day when flagged
+    expect(parseSchedule('2026-06-12T09:00:00', true).hasTime).toBe(false);
+    // undefined (every pre-existing doc) → derive exactly as before (backward compat)
+    expect(parseSchedule('2026-06-12T00:00:00', undefined).hasTime).toBe(false);
+    expect(parseSchedule('2026-06-12T09:00:00', undefined).hasTime).toBe(true);
+  });
 });

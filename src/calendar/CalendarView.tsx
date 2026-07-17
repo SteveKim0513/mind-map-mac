@@ -370,7 +370,7 @@ export function CalendarView() {
       <div className="cal-head">
         <span className="cal-title">
           <Icon name="calendar" />
-          캘린더
+          <span className="cal-title-text">캘린더</span>
         </span>
 
         <div className="cal-toggle">
@@ -407,7 +407,7 @@ export function CalendarView() {
         {/* one visible entry point in every view (same place, same label) — §3.1 */}
         <button className="cal-add-btn" onClick={() => pickerCtl.openAt(headerAddDate(), null)} title="일정 추가">
           <Icon name="plus" />
-          일정 추가
+          <span className="cal-add-btn-text">일정 추가</span>
         </button>
 
         <span className="cal-grow" />

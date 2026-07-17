@@ -49,7 +49,9 @@ export function CaptureWindow() {
         parentId: null,
         children: [],
         collapsed: false,
-        ...(sched.matched && sched.scheduleAt ? { scheduled: true, scheduleAt: sched.scheduleAt } : {}),
+        ...(sched.matched && sched.scheduleAt
+          ? { scheduled: true, scheduleAt: sched.scheduleAt, ...(sched.allDay !== undefined ? { allDay: sched.allDay } : {}) }
+          : {}),
         ...(color ? { color } : {}),
       };
       doc.rootIds.push(id);

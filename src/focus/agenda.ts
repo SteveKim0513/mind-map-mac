@@ -30,11 +30,20 @@ function startOfDay(ms: number): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
-/** Parse a node's schedule into an AgendaItem field set (at + hasTime). */
-export function parseSchedule(scheduleAt: string): { at: number; hasTime: boolean } {
+/**
+ * Parse a node's schedule into an AgendaItem field set (at + hasTime).
+ * `allDay` (the node's explicit flag) wins when set; otherwise hasTime is derived
+ * from the time component (00:00 = all-day) — so pre-existing docs, which have no
+ * allDay field, behave exactly as before.
+ */
+export function parseSchedule(
+  scheduleAt: string,
+  allDay?: boolean,
+): { at: number; hasTime: boolean } {
   const d = new Date(scheduleAt);
   const at = d.getTime();
-  const hasTime = !Number.isNaN(at) && (d.getHours() !== 0 || d.getMinutes() !== 0);
+  const derived = !Number.isNaN(at) && (d.getHours() !== 0 || d.getMinutes() !== 0);
+  const hasTime = allDay === true ? false : allDay === false ? !Number.isNaN(at) : derived;
   return { at, hasTime };
 }
 

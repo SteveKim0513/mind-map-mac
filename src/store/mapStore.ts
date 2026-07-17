@@ -18,12 +18,14 @@ const HISTORY_LIMIT = 100;
 export type NavDir = 'up' | 'down' | 'left' | 'right';
 
 /** A detached, id-free copy of a subtree, held on the in-app clipboard. */
-// Copy semantics (decisions/0005): a copy carries ALL of the node's content —
-// including schedule dates and links — but never the reminder identity
-// (reminderOn/reminderId), so a paste can't duplicate or steal a macOS reminder.
-// Mirrors duplicateNode, which clones everything and strips only reminder ids.
+// Copy semantics (decisions/0005): a copy carries ALL of the node's content — its
+// todo/done state, schedule date + duration, icon, note, and links — but never the
+// reminder identity (reminderOn/reminderId/reminderSyncedAt/reminderBase), so a paste
+// can't duplicate or steal a macOS reminder. Mirrors duplicateNode, which clones
+// everything and strips those 4 reminder fields (ADR 0016).
 interface ClipNode {
   text: string;
+  todo?: boolean;
   done?: boolean;
   color?: string;
   icon?: string;
@@ -32,6 +34,8 @@ interface ClipNode {
   links?: string[];
   scheduled?: boolean;
   scheduleAt?: string;
+  durationMin?: number;
+  allDay?: boolean;
   children: ClipNode[];
 }
 let clipboard: ClipNode | null = null;
@@ -185,6 +189,30 @@ function pruneRefs(doc: MindMapDoc, removed: Set<string>) {
   }
 }
 
+/** After `removed` are deleted, pick a surviving node to select, anchored on `primary`
+ *  (the last-selected node). Scans siblings (forward, then back), then climbs ancestors,
+ *  mirroring deleteNode's single-node neighbour pick — so a delete never leaves nothing
+ *  selected (which would let the next Enter spawn an orphan root · A4). */
+function pickSurvivingNeighbor(
+  doc: MindMapDoc,
+  removed: Set<string>,
+  primary: string | null,
+): string | null {
+  let cur = primary;
+  while (cur) {
+    const node = doc.nodes[cur];
+    if (!node) return null;
+    const sibs = node.parentId ? doc.nodes[node.parentId].children : doc.rootIds;
+    const idx = sibs.indexOf(cur);
+    for (let i = idx + 1; i < sibs.length; i++) if (!removed.has(sibs[i])) return sibs[i];
+    for (let i = idx - 1; i >= 0; i--) if (!removed.has(sibs[i])) return sibs[i];
+    // no surviving sibling — take the parent if it survives, else climb past it
+    if (node.parentId && !removed.has(node.parentId)) return node.parentId;
+    cur = node.parentId;
+  }
+  return null;
+}
+
 /** Detach a node from its parent's children list or from the root list. */
 function detach(doc: MindMapDoc, id: string) {
   const node = doc.nodes[id];
@@ -201,10 +229,16 @@ export type MapStore = StoreApi<MapState>;
 /** Each open document/tab owns its own isolated store instance. */
 export function createMapStore(): MapStore {
   return createStore<MapState>((set, get) => {
-  /** Apply a mutation to a cloned doc, recording history. */
-  const commit = (mutate: (draft: MindMapDoc) => void, keepSelection = true) => {
+  // A node created for immediate editing (addChild/addRoot/…). Its creation is NOT
+  // snapshotted, so create + first-text-commit collapse into ONE undo step (A5).
+  // Held per-store. Resolved by commitText (fold), or deleteNode/cancelEdit (drop).
+  let pendingCreate: { id: string; snapshot: MindMapDoc } | null = null;
+
+  /** Apply a mutation to a cloned doc, recording history. `baseSnapshot` overrides the
+   *  history entry pushed — used to fold a just-created node's first text (A5). */
+  const commit = (mutate: (draft: MindMapDoc) => void, baseSnapshot?: MindMapDoc) => {
     const { doc, past } = get();
-    const snapshot = structuredClone(doc);
+    const snapshot = baseSnapshot ?? structuredClone(doc);
     const draft = structuredClone(doc);
     mutate(draft);
     set({
@@ -212,8 +246,18 @@ export function createMapStore(): MapStore {
       past: [...past.slice(-HISTORY_LIMIT + 1), snapshot],
       future: [],
       dirty: true,
-      ...(keepSelection ? {} : {}),
     });
+  };
+
+  /** Create a node for immediate editing WITHOUT pushing history — the first text
+   *  commit folds it into a single undo step (A5). Remembers the pre-creation doc so an
+   *  empty cancel (deleteNode) can drop the node with no history noise. */
+  const beginCreate = (id: string, mutate: (draft: MindMapDoc) => void) => {
+    const { doc } = get();
+    pendingCreate = { id, snapshot: structuredClone(doc) };
+    const draft = structuredClone(doc);
+    mutate(draft);
+    set({ doc: draft, future: [], dirty: true });
   };
 
   return {
@@ -233,7 +277,16 @@ export function createMapStore(): MapStore {
     filterDescendants: false,
 
     setFocus: (id) => set((s) => ({ focusRootId: id, docEpoch: s.docEpoch + 1 })),
-    setColorFilter: (color) => set((s) => ({ colorFilter: color, docEpoch: s.docEpoch + 1 })),
+    setColorFilter: (color) =>
+      set((s) => ({
+        colorFilter: color,
+        // A cleared (null) or switched-to-a-different-color filter starts fresh — drop
+        // the ancestor/descendant expansions so a stale toggle from the previous filter
+        // can't silently widen the next one (B4).
+        filterAncestors: color === s.colorFilter ? s.filterAncestors : false,
+        filterDescendants: color === s.colorFilter ? s.filterDescendants : false,
+        docEpoch: s.docEpoch + 1,
+      })),
     toggleFilterAncestors: () =>
       set((s) => ({ filterAncestors: !s.filterAncestors, docEpoch: s.docEpoch + 1 })),
     toggleFilterDescendants: () =>
@@ -282,7 +335,12 @@ export function createMapStore(): MapStore {
       set({ selectedIds: next, selectedId: has ? next[next.length - 1] ?? null : id, editingId: null });
     },
     startEdit: (id) => set({ selectedId: id, selectedIds: [id], editingId: id }),
-    cancelEdit: () => set({ editingId: null }),
+    cancelEdit: () => {
+      // A non-deletable new node cancelled empty (e.g. a sole root, Escape) keeps the
+      // node but drops its pending fold — its creation simply carries no history (A5).
+      pendingCreate = null;
+      set({ editingId: null });
+    },
 
     commitEdit: (text) => {
       const { editingId } = get();
@@ -293,6 +351,13 @@ export function createMapStore(): MapStore {
     // commit text for a specific node — independent of editingId, so a click on the
     // canvas background (which clears editingId) can't drop the in-progress text.
     commitText: (id, text) => {
+      // Fold a freshly-created node's first text into ONE undo step: creation pushed no
+      // history, so commit against the PRE-creation snapshot instead (A5).
+      let baseSnapshot: MindMapDoc | undefined;
+      if (pendingCreate && pendingCreate.id === id) {
+        baseSnapshot = pendingCreate.snapshot;
+        pendingCreate = null;
+      }
       commit((d) => {
         const n = d.nodes[id];
         if (n) {
@@ -311,6 +376,7 @@ export function createMapStore(): MapStore {
             const sched = parseScheduleText(trimmed);
             if (sched.matched && sched.scheduleAt) {
               n.scheduleAt = sched.scheduleAt;
+              if (sched.allDay !== undefined) n.allDay = sched.allDay; // pin explicit "오전 12시"
               n.scheduled = true;
               n.todo = true; // @내일 3시 등 자연어 일정도 할 일로 승격 (결정 0014)
             }
@@ -320,13 +386,13 @@ export function createMapStore(): MapStore {
             if (color) n.color = color;
           }
         }
-      });
+      }, baseSnapshot);
       set({ editingId: null, editCommittedAt: Date.now() });
     },
 
     addRoot: () => {
       const id = newId();
-      commit((d) => {
+      beginCreate(id, (d) => {
         d.nodes[id] = { id, text: '', parentId: null, children: [], collapsed: false };
         d.rootIds.push(id);
       });
@@ -335,7 +401,7 @@ export function createMapStore(): MapStore {
 
     addRootAt: (x, y) => {
       const id = newId();
-      commit((d) => {
+      beginCreate(id, (d) => {
         d.nodes[id] = {
           id,
           text: '',
@@ -381,10 +447,13 @@ export function createMapStore(): MapStore {
           const o = d.nodes[nid];
           const cid = newId();
           d.nodes[cid] = { ...structuredClone(o), id: cid, parentId, children: [] };
-          // A clone must not inherit the original's reminder identity, or both nodes
-          // would map to one reminder. If still reminder-enabled, sync creates a new one.
+          // A clone starts reminder-free (ADR 0016) — inheriting any reminder identity
+          // would make both nodes map to one macOS reminder. Strip all 4 reminder fields
+          // (matches copy/paste's ClipNode); if still reminder-on, sync creates a new one.
+          delete d.nodes[cid].reminderOn;
           delete d.nodes[cid].reminderId;
           delete d.nodes[cid].reminderSyncedAt;
+          delete d.nodes[cid].reminderBase;
           d.nodes[cid].children = o.children.map((c) => clone(c, cid));
           return cid;
         };
@@ -404,7 +473,7 @@ export function createMapStore(): MapStore {
 
     addChild: (parentId) => {
       const id = newId();
-      commit((d) => {
+      beginCreate(id, (d) => {
         const parent = d.nodes[parentId];
         if (!parent) return;
         parent.collapsed = false;
@@ -420,7 +489,7 @@ export function createMapStore(): MapStore {
       const ref = get().doc.nodes[refId];
       if (!ref) return;
       const id = newId();
-      commit((d) => {
+      beginCreate(id, (d) => {
         const node = d.nodes[refId];
         if (node.parentId) {
           const parent = d.nodes[node.parentId];
@@ -451,7 +520,11 @@ export function createMapStore(): MapStore {
         const idx = doc.rootIds.indexOf(id);
         nextSel = doc.rootIds[idx + 1] ?? doc.rootIds[idx - 1] ?? null;
       }
-      commit((d) => {
+      // A just-created node cancelled empty: its creation pushed no history, so its
+      // removal must push none either — no undo noise (A5). Otherwise a normal delete.
+      const pendingDrop = pendingCreate?.id === id;
+      if (pendingDrop) pendingCreate = null;
+      const removeSubtree = (d: MindMapDoc) => {
         // collect subtree ids
         const toRemove: string[] = [];
         const reminders: string[] = [];
@@ -466,7 +539,14 @@ export function createMapStore(): MapStore {
         pruneRefs(d, new Set(toRemove));
         if (reminders.length && reminderDeleteHook) reminderDeleteHook(reminders);
         if (noteLinkDeleteHook) noteLinkDeleteHook(d.id ?? '', toRemove); // IF-05 · GC dead note links
-      });
+      };
+      if (pendingDrop) {
+        const draft = structuredClone(doc);
+        removeSubtree(draft);
+        set({ doc: draft, dirty: true });
+      } else {
+        commit(removeSubtree);
+      }
       set({ selectedId: nextSel, selectedIds: nextSel ? [nextSel] : [], editingId: null });
     },
 
@@ -563,22 +643,38 @@ export function createMapStore(): MapStore {
     setScheduled: (id, on) =>
       commit((d) => {
         const removedReminders: string[] = [];
-        const visit = (nid: string) => {
-          const n = d.nodes[nid];
-          if (!n) return;
-          n.scheduled = on || undefined;
-          if (on) n.todo = true; // 일정을 잡으면 자동으로 할 일 (결정 0014)
-          if (!on) {
+        if (on) {
+          // "하위까지 일정 지정": propagate THIS node's date down the subtree. A dateless
+          // `scheduled: true` renders a bare "일정" chip that never lands on the calendar,
+          // so with no date there is nothing to schedule — no-op (E2).
+          const target = d.nodes[id];
+          if (!target || !target.scheduleAt) return;
+          const at = target.scheduleAt;
+          const visit = (nid: string) => {
+            const n = d.nodes[nid];
+            if (!n) return;
+            n.scheduled = true;
+            n.todo = true; // 일정을 잡으면 자동으로 할 일 (결정 0014)
+            n.scheduleAt = at; // descendants inherit the target's date
+            n.updatedAt = Date.now(); // mark for reminder push
+            n.children.forEach(visit);
+          };
+          visit(id);
+        } else {
+          const visit = (nid: string) => {
+            const n = d.nodes[nid];
+            if (!n) return;
+            n.scheduled = undefined;
             // un-scheduling also clears the date and detaches any reminder
             n.scheduleAt = undefined;
             if (n.reminderId) removedReminders.push(n.reminderId);
             n.reminderOn = undefined;
             n.reminderId = undefined;
             n.reminderSyncedAt = undefined;
-          }
-          n.children.forEach(visit);
-        };
-        visit(id);
+            n.children.forEach(visit);
+          };
+          visit(id);
+        }
         if (removedReminders.length && reminderDeleteHook) reminderDeleteHook(removedReminders);
       }),
 
@@ -588,6 +684,9 @@ export function createMapStore(): MapStore {
         const n = d.nodes[id];
         if (!n) return;
         n.scheduleAt = iso;
+        // Reschedule via popover/picker/drag → let hasTime derive from the new time
+        // (00:00 = all-day). Only NL-typed explicit midnight pins allDay=false.
+        n.allDay = undefined;
         n.updatedAt = Date.now(); // mark for reminder push
         if (iso) {
           n.scheduled = true;
@@ -677,6 +776,7 @@ export function createMapStore(): MapStore {
         if (!n) return null;
         return {
           text: n.text,
+          todo: n.todo,
           done: n.done,
           color: n.color,
           icon: n.icon,
@@ -685,6 +785,8 @@ export function createMapStore(): MapStore {
           links: n.links ? [...n.links] : undefined,
           scheduled: n.scheduled,
           scheduleAt: n.scheduleAt,
+          durationMin: n.durationMin,
+          allDay: n.allDay,
           children: n.children.map(build).filter((c): c is ClipNode => c !== null),
         };
       };
@@ -703,6 +805,7 @@ export function createMapStore(): MapStore {
             parentId,
             children: [],
             collapsed: false,
+            todo: clip.todo,
             done: clip.done,
             color: clip.color,
             icon: clip.icon,
@@ -711,6 +814,8 @@ export function createMapStore(): MapStore {
             links: clip.links ? [...clip.links] : undefined,
             scheduled: clip.scheduled,
             scheduleAt: clip.scheduleAt,
+            durationMin: clip.durationMin,
+            allDay: clip.allDay,
           };
           d.nodes[id].children = clip.children.map((c) => add(c, id));
           return id;
@@ -782,6 +887,7 @@ export function createMapStore(): MapStore {
             const parent = d.nodes[newParentId];
             parent.collapsed = false;
             node.parentId = newParentId;
+            node.manualPos = undefined; // a child is laid out by the tree, not free-placed
             parent.children.push(id);
           } else {
             node.parentId = null;
@@ -793,20 +899,26 @@ export function createMapStore(): MapStore {
     },
 
     deleteSelected: () => {
+      const { doc } = get();
       const sel = get().selectedIds.length
         ? get().selectedIds
         : get().selectedId
           ? [get().selectedId as string]
           : [];
       if (!sel.length) return;
+      // Build the removed set up-front so we can select a surviving neighbour afterwards
+      // (mirrors deleteNode — otherwise clearing selection lets the next Enter spawn an
+      // orphan root · A4).
+      const remove = new Set<string>();
+      const collect = (nid: string) => {
+        if (!doc.nodes[nid] || remove.has(nid)) return;
+        remove.add(nid);
+        doc.nodes[nid].children.forEach(collect);
+      };
+      sel.forEach(collect);
+      if (pendingCreate && remove.has(pendingCreate.id)) pendingCreate = null;
+      const nextSel = pickSurvivingNeighbor(doc, remove, get().selectedId ?? sel[0]);
       commit((d) => {
-        const remove = new Set<string>();
-        const collect = (nid: string) => {
-          if (!d.nodes[nid] || remove.has(nid)) return;
-          remove.add(nid);
-          d.nodes[nid].children.forEach(collect);
-        };
-        sel.forEach(collect);
         const reminders: string[] = [];
         remove.forEach((id) => {
           const n = d.nodes[id];
@@ -826,7 +938,7 @@ export function createMapStore(): MapStore {
         if (reminders.length && reminderDeleteHook) reminderDeleteHook(reminders);
         if (noteLinkDeleteHook) noteLinkDeleteHook(d.id ?? '', [...remove]); // IF-05 · GC dead note links
       });
-      set({ selectedId: null, selectedIds: [], editingId: null });
+      set({ selectedId: nextSel, selectedIds: nextSel ? [nextSel] : [], editingId: null });
     },
 
     setManualPos: (rootId, pos) =>
@@ -853,11 +965,20 @@ export function createMapStore(): MapStore {
       return shifts.size;
     },
 
-    toggleCollapse: (id) =>
+    toggleCollapse: (id) => {
+      const n0 = get().doc.nodes[id];
+      if (!n0 || n0.children.length === 0) return;
+      const willCollapse = !n0.collapsed;
+      const sel = get().selectedId;
       commit((d) => {
-        const n = d.nodes[id];
-        if (n && n.children.length > 0) n.collapsed = !n.collapsed;
-      }),
+        d.nodes[id].collapsed = willCollapse;
+      });
+      // Collapsing hides descendants — if the selection is now buried under this node,
+      // lift it to the collapsed node so arrow-nav doesn't drive an invisible cursor (A7).
+      if (willCollapse && sel && sel !== id && isAncestor(get().doc.nodes, id, sel)) {
+        set({ selectedId: id, selectedIds: [id], editingId: null });
+      }
+    },
 
     // ── connections ──
     addConnection: (from, to) => {
@@ -947,8 +1068,26 @@ export function createMapStore(): MapStore {
       const { past, future, doc, selectedId, selectedIds } = get();
       if (past.length === 0) return;
       const prev = past[past.length - 1];
-      const sid = prev.nodes[selectedId ?? ''] ? selectedId : prev.rootIds[0] ?? null;
-      const sids = selectedIds.filter((i) => prev.nodes[i]);
+      // Nodes present in the restored state but gone now = what the undone action
+      // deleted. Reselect them so undoing a delete restores its selection too (A6) —
+      // otherwise the post-delete neighbour stays selected and the node comes back cold.
+      const resurrected = Object.keys(prev.nodes).filter((id) => !doc.nodes[id]);
+      let sid: string | null;
+      let sids: string[];
+      if (resurrected.length) {
+        // Prefer the top of each restored subtree (the nodes that were actually
+        // deleted/selected), not buried descendants that came back with them.
+        const back = new Set(resurrected);
+        const tops = resurrected.filter((id) => {
+          const p = prev.nodes[id].parentId;
+          return !p || !back.has(p);
+        });
+        sids = tops.length ? tops : resurrected;
+        sid = sids[sids.length - 1] ?? null;
+      } else {
+        sid = prev.nodes[selectedId ?? ''] ? selectedId : prev.rootIds[0] ?? null;
+        sids = selectedIds.filter((i) => prev.nodes[i]);
+      }
       set({
         doc: prev,
         past: past.slice(0, -1),

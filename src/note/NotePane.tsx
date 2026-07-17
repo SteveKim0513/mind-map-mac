@@ -180,6 +180,17 @@ function NotePaneBody() {
     if (isSession || !filePath || renaming.current) return;
     const base = (filePath.split('/').pop() ?? '').replace(/\.md$/, '');
     const wanted = fileNameFromTitle(note.title);
+    // A non-empty title that yields no usable filename (starts with ".", or is only
+    // punctuation / path-invalid chars) can't rename the .md, so the tab and sidebar
+    // label silently keep the old name. Surface that instead of leaving the user
+    // confused — debounced so it fires once they pause, not on every keystroke.
+    // (An empty title is a transient editing state, so it's left unwarned.)
+    if (!wanted && note.title.trim()) {
+      const warn = setTimeout(() => {
+        useUi.getState().toast('이 제목으로는 파일 이름을 만들 수 없어 탭·사이드바 이름이 그대로예요 — 다른 제목을 입력해 보세요');
+      }, 800);
+      return () => clearTimeout(warn);
+    }
     // Skip if identical, OR if the current filename is just a longer version of
     // the wanted name (e.g. a file imported with a >60-char name whose first 60
     // chars already match — renaming would create a collision with the truncated copy).

@@ -112,6 +112,9 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       <div className="ctx-colors">
         <ColorSwatchGrid value={node.color} onChange={(c) => run(() => map.setColor(id, c))()} />
       </div>
+      {/* openNote is a legacy misnomer: it sets notePopoverId, which now renders
+          the icon-only NodePopover (memo·link·note have their own paths). The
+          store action is shared with other call sites, so it isn't renamed here. */}
       <button className="ctx-item subtle" onClick={run(() => useUi.getState().openNote(id))}>
         <span>아이콘…</span>
       </button>
@@ -145,7 +148,9 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
             </>
           ) : (
             <button className="ctx-item" onClick={run(() => map.setScheduled(id, true))}>
-              <span>{hasChildren ? '하위까지 일정 지정' : '일정 지정'}</span>
+              {/* "하위까지 일정 지정"은 이 노드의 scheduleAt을 하위 트리에 전파하므로,
+                  날짜가 있을 때만 의미가 있다(없으면 무동작). 날짜가 없으면 "일정 지정". */}
+              <span>{hasChildren && node.scheduleAt ? '하위까지 일정 지정' : '일정 지정'}</span>
             </button>
           )}
           <button

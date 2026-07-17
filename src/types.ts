@@ -22,6 +22,12 @@ export interface MindNode {
   // schema `version` stays 1 (decision 0012). Local-only: NOT synced to Reminders
   // (they have no duration concept); only meaningful for timed (hasTime) events.
   durationMin?: number;
+  // "종일" vs explicit-time disambiguation. scheduleAt "...T00:00:00" is ambiguous
+  // (all-day OR a deliberately-typed midnight, e.g. "@오전 12시"); allDay pins it.
+  // Optional & additive — schema `version` stays 1 (decision 0012). undefined →
+  // derive from the time component (00:00 = all-day), so every pre-existing doc
+  // keeps its current behaviour.
+  allDay?: boolean;
   reminderOn?: boolean; // user wants this node mirrored to macOS Reminders
   reminderId?: string; // external Reminders id once created (sync key)
   reminderSyncedAt?: number; // ms — reminder's modification date at last reconcile

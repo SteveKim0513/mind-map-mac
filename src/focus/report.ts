@@ -19,11 +19,13 @@ function startOfDay(ms: number): number {
   const d = new Date(ms);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
-/** Monday 00:00 of the week containing `ms`. */
+/** Sunday 00:00 of the week containing `ms`. Sunday-start to match the calendar
+ *  (calendarMath.startOfWeek) so "이번 주" means the same range in the focus
+ *  dashboard and the calendar view. */
 function startOfWeek(ms: number): number {
   const sod = startOfDay(ms);
   const dow = new Date(sod).getDay(); // 0=Sun..6=Sat
-  const back = (dow + 6) % 7; // days since Monday
+  const back = dow; // days since Sunday
   return sod - back * DAY;
 }
 

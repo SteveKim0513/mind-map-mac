@@ -213,17 +213,22 @@ function applyTheme(t: Theme) {
   document.documentElement.dataset.theme = t;
 }
 
+// DOM/localStorage init side-effects only run in the renderer. A node test env
+// (which imports this store transitively via the store graph) has no window —
+// same guard the matchMedia read above uses. Renderer behaviour is unchanged.
+const hasDOM = typeof window !== 'undefined';
+
 // Migrate: an explicit legacy 'theme' (only written when the user picked one)
 // becomes an explicit mode; a fresh install with no saved choice follows the
 // system, matching how a native macOS app behaves out of the box.
-const savedMode = localStorage.getItem('themeMode') as ThemeMode | null;
-const legacyTheme = localStorage.getItem('theme') as Theme | null;
+const savedMode = hasDOM ? (localStorage.getItem('themeMode') as ThemeMode | null) : null;
+const legacyTheme = hasDOM ? (localStorage.getItem('theme') as Theme | null) : null;
 const initialMode: ThemeMode = savedMode ?? legacyTheme ?? 'system';
 const initialTheme: Theme = resolveTheme(initialMode);
-applyTheme(initialTheme);
+if (hasDOM) applyTheme(initialTheme);
 
-const initialScale = Number(localStorage.getItem('fontScale')) || 1;
-document.documentElement.style.setProperty('--font-scale', String(initialScale));
+const initialScale = hasDOM ? Number(localStorage.getItem('fontScale')) || 1 : 1;
+if (hasDOM) document.documentElement.style.setProperty('--font-scale', String(initialScale));
 
 let toastSeq = 0;
 

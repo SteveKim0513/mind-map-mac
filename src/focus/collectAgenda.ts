@@ -31,12 +31,13 @@ export async function collectAgenda(): Promise<AgendaItem[]> {
     scheduleAt: string,
     done: boolean,
     durationMin: number | undefined,
+    allDay: boolean | undefined,
     mapPath?: string,
   ) => {
     const k = `${mapId} ${nodeId}`;
     if (seen.has(k)) return;
     seen.add(k);
-    const { at, hasTime } = parseSchedule(scheduleAt);
+    const { at, hasTime } = parseSchedule(scheduleAt, allDay);
     out.push({ mapId, nodeId, text: text || '(이름 없음)', scheduleAt, at, hasTime, done: !!done, durationMin, mapPath });
   };
 
@@ -46,7 +47,7 @@ export async function collectAgenda(): Promise<AgendaItem[]> {
     for (const id in doc.nodes) {
       const n = doc.nodes[id];
       if (n.scheduled && n.scheduleAt)
-        add(doc.id ?? '', id, n.text, n.scheduleAt, !!n.done, n.durationMin, s.filePath ?? undefined);
+        add(doc.id ?? '', id, n.text, n.scheduleAt, !!n.done, n.durationMin, n.allDay, s.filePath ?? undefined);
     }
   }
   for (const p of collectMindPaths(useWorkspace.getState().tree)) {
@@ -54,7 +55,7 @@ export async function collectAgenda(): Promise<AgendaItem[]> {
       const doc = deserialize(await window.api.readFile(p));
       for (const id in doc.nodes) {
         const n = doc.nodes[id];
-        if (n.scheduled && n.scheduleAt) add(doc.id ?? '', id, n.text, n.scheduleAt, !!n.done, n.durationMin, p);
+        if (n.scheduled && n.scheduleAt) add(doc.id ?? '', id, n.text, n.scheduleAt, !!n.done, n.durationMin, n.allDay, p);
       }
     } catch {
       /* skip unreadable */

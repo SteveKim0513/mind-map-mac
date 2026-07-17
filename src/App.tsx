@@ -52,6 +52,11 @@ const TAG_LABEL: Record<TagKey, string> = {
   teal: '청록', violet: '보라', pink: '분홍', brown: '갈색',
 };
 
+// Standard Markdown/OPML carry structure + text only — color, schedule, todo
+// state and note links have no representation there. Warn once per export so the
+// loss is never silent (decision: keep the standard format, inform the user).
+const EXPORT_LOSSY_WARNING = '색·일정·완료·노트 링크는 표준 포맷에 포함되지 않습니다.';
+
 export default function App() {
   useKeyboard();
 
@@ -130,7 +135,10 @@ export default function App() {
     return window.api.onWorkspaceFocus(() => {
       void useWorkspace.getState().refresh();
       for (const t of useSession.getState().tabs) {
-        if (t.kind !== 'map' || !t.path) continue;
+        // Maps AND notes (both back real files) get external-change detection —
+        // an open note edited by another app/device used to be silently
+        // overwritten by this tab's autosave (calendar has no backing file).
+        if ((t.kind !== 'map' && t.kind !== 'note') || !t.path) continue;
         const p = t.path;
         const title = t.title;
         void window.api.externalChange(p).then(({ changed, mtime }) => {
@@ -275,14 +283,29 @@ export default function App() {
           activeControls.current?.fit();
           break;
         case 'export-markdown':
-          if (st) await window.api.saveAs(`${title}.md`, toMarkdown(st.doc), 'md');
+          if (st) {
+            const saved = await window.api.saveAs(`${title}.md`, toMarkdown(st.doc), 'md');
+            if (saved) useUi.getState().toast(EXPORT_LOSSY_WARNING);
+          }
           break;
         case 'export-opml':
-          if (st) await window.api.saveAs(`${title}.opml`, toOpml(st.doc), 'opml');
+          if (st) {
+            const saved = await window.api.saveAs(`${title}.opml`, toOpml(st.doc), 'opml');
+            if (saved) useUi.getState().toast(EXPORT_LOSSY_WARNING);
+          }
           break;
         case 'import-markdown': {
           const res = await window.api.openAs('md');
-          if (res) await createFromDoc('가져온 마인드맵', fromMarkdown(res.content));
+          if (res) {
+            const doc = fromMarkdown(res.content);
+            // A file with no bullet list yields zero nodes — creating an empty
+            // "가져온 마인드맵" would look like a silent failure, so warn instead.
+            if (Object.keys(doc.nodes).length === 0) {
+              useUi.getState().toast('불릿(- * +)이 없어 가져올 구조가 없습니다');
+            } else {
+              await createFromDoc('가져온 마인드맵', doc);
+            }
+          }
           break;
         }
         case 'import-opml': {
@@ -568,7 +591,7 @@ function buildCommands(o: {
     { id: 'theme', icon: 'moon', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },
     { id: 'sidebar', icon: 'menu', label: '사이드바 토글', run: o.toggleSidebar },
     { id: 'split', icon: 'expand', label: o.split ? '화면 분할 해제' : '화면 분할', run: () => useSession.getState().toggleSplit() },
-    { id: 'relayout', icon: 'refresh', label: '새로고침 (재배치)', run: () => useUi.getState().relayout() },
+    { id: 'relayout', icon: 'refresh', label: '화면 다시 맞춤', run: () => useUi.getState().relayout() },
     { id: 'tidy', icon: 'target', label: '겹침 정돈 (겹친 가지 떨어뜨리기)', run: o.tidy },
   ];
   // 선택된 노드에 대한 동작 — 아이콘을 몰라도, 마우스로 우연히 찾지 못해도
@@ -618,7 +641,10 @@ function buildCommands(o: {
         run: async () => {
           const sess = useSession.getState();
           const st = sess.activeStore()?.getState();
-          if (st) await window.api.saveAs(`${sess.activeTab()?.title ?? 'map'}.md`, toMarkdown(st.doc), 'md');
+          if (st) {
+            const saved = await window.api.saveAs(`${sess.activeTab()?.title ?? 'map'}.md`, toMarkdown(st.doc), 'md');
+            if (saved) useUi.getState().toast(EXPORT_LOSSY_WARNING);
+          }
         },
       },
       {
@@ -628,7 +654,10 @@ function buildCommands(o: {
         run: async () => {
           const sess = useSession.getState();
           const st = sess.activeStore()?.getState();
-          if (st) await window.api.saveAs(`${sess.activeTab()?.title ?? 'map'}.opml`, toOpml(st.doc), 'opml');
+          if (st) {
+            const saved = await window.api.saveAs(`${sess.activeTab()?.title ?? 'map'}.opml`, toOpml(st.doc), 'opml');
+            if (saved) useUi.getState().toast(EXPORT_LOSSY_WARNING);
+          }
         },
       },
     );

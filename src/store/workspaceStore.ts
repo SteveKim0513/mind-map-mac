@@ -3,6 +3,7 @@ import type { TreeNode } from '../../electron/preload';
 import type { NoteMeta, FocusSession } from '../types';
 import { parseNote } from '../io/noteFormat';
 import { extractWikiTargets } from '../note/wikiLinkText';
+import { useSession } from './sessionStore';
 
 interface WorkspaceState {
   root: string;
@@ -84,10 +85,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   choose: async () => {
     const next = await window.api.workspaceChoose();
-    if (next) {
-      set({ expanded: {} });
-      await get().refresh();
+    if (!next) return; // picker cancelled
+    if (next !== get().root) {
+      // Actual switch: every open tab belongs to the OLD workspace. Flush their
+      // pending autosaves and close them, which also resets (and persists) an
+      // empty session snapshot — otherwise old-workspace files keep autosaving in
+      // the background and reopen on next launch even though we switched away.
+      // (Re-picking the same folder skips this so open tabs are left untouched.)
+      await useSession.getState().closeAllTabs();
     }
+    set({ expanded: {} });
+    await get().refresh();
   },
 
   toggle: (path) => set((s) => ({ expanded: { ...s.expanded, [path]: !s.expanded[path] } })),

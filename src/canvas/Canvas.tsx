@@ -231,12 +231,20 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       }
     };
 
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
       const st = interaction.current;
       // a real drag just ended → suppress the toolbar; a plain click (pending-drag
       // that never moved) → allow it. Selecting via click re-shows the toolbar.
       if (st.mode === 'dragging') setDragSuppress(true);
       else if (st.mode === 'pending-drag') setDragSuppress(false);
+      // Background gesture: only a genuine CLICK (released without panning past the
+      // drag threshold) clears the selection. A pan drag keeps it — matching
+      // wheel-pan, which never deselects. (select(null) is deferred to here from
+      // pointerdown so the drag path can preserve selection.)
+      if (st.mode === 'panning') {
+        const moved = Math.hypot(e.clientX - st.startX, e.clientY - st.startY) > DRAG_THRESHOLD;
+        if (!moved) select(null);
+      }
       if (st.mode === 'dragging') {
         setDraggingId(null);
         if (st.kind === 'move-root') {
@@ -245,8 +253,12 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
           const dy = st.dy;
           setDropTargetId((target) => {
             if (target) {
-              // dropped the tree onto a node → make this root its child
-              reparent(rootId, target);
+              // dropped the tree onto a node → make this root its child. If the
+              // dragged root is part of a multi-selection (e.g. several roots in
+              // "오늘의 생각"), move them ALL, not just the grabbed one.
+              const sel = mapStore.getState().selectedIds;
+              if (sel.length > 1 && sel.includes(rootId)) reparentMany(sel, target);
+              else reparent(rootId, target);
             } else {
               const rootPos = result.nodes.find((p) => p.node.id === rootId);
               if (rootPos && (dx !== 0 || dy !== 0)) {
@@ -304,7 +316,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
     };
-  }, [doc.nodes, result.nodes, reparent, reparentMany, setManualPos, setView, toWorld, mapStore]);
+  }, [doc.nodes, result.nodes, reparent, reparentMany, setManualPos, setView, toWorld, mapStore, select]);
 
   // The selection toolbar is suppressed after a drag and restored on the next
   // genuine click (onUp's pending-drag branch flips it back). We deliberately do
@@ -325,7 +337,8 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       (document.activeElement as HTMLElement | null)?.blur();
       return;
     }
-    select(null);
+    // NOTE: deselect is deferred to pointerup (onUp) so a pan DRAG keeps the
+    // current selection; only a click that never moves clears it.
     interaction.current = {
       mode: 'panning',
       startX: e.clientX,
@@ -349,19 +362,22 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   }, []);
 
   // ── Wheel: trackpad pan, ctrl/⌘ + wheel (pinch) zoom ──────────────────────
+  // Read FRESH view state per event (not the render closure) so rapid wheel
+  // events compose instead of each overwriting the last render's stale zoom/pan.
   const onWheel = (e: React.WheelEvent) => {
+    const v = mapStore.getState().doc.view;
     if (e.ctrlKey || e.metaKey) {
       const rect = containerRef.current!.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
       const factor = Math.exp(-e.deltaY * 0.01);
-      const nz = clamp(zoom * factor, MIN_ZOOM, MAX_ZOOM);
+      const nz = clamp(v.zoom * factor, MIN_ZOOM, MAX_ZOOM);
       // keep the world point under the cursor fixed
-      const wx = (cx - panX) / zoom;
-      const wy = (cy - panY) / zoom;
+      const wx = (cx - v.panX) / v.zoom;
+      const wy = (cy - v.panY) / v.zoom;
       setView({ zoom: nz, panX: cx - wx * nz, panY: cy - wy * nz });
     } else {
-      setView({ panX: panX - e.deltaX, panY: panY - e.deltaY });
+      setView({ panX: v.panX - e.deltaX, panY: v.panY - e.deltaY });
     }
   };
 
@@ -478,12 +494,24 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
     collect(zoomReq.id);
     const pts = result.nodes.filter((n) => ids.has(n.node.id));
     if (!pts.length) return;
-    const b = {
-      minX: Math.min(...pts.map((p) => p.x)),
-      minY: Math.min(...pts.map((p) => p.y)),
-      maxX: Math.max(...pts.map((p) => p.x + p.width)),
-      maxY: Math.max(...pts.map((p) => p.y)),
-    };
+    // Full-box bounds: p.y is the node's vertical CENTER, so include its height and
+    // any below-box chips (mirrors treeLayout's bounds calc) — otherwise tall chips
+    // at the subtree's edge get clipped when framing.
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const p of pts) {
+      const sz = sizes[p.node.id];
+      const h = sz?.h ?? 34;
+      const top = p.y - h / 2;
+      const bottom = top + (sz?.below ?? h);
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, top);
+      maxX = Math.max(maxX, p.x + p.width);
+      maxY = Math.max(maxY, bottom);
+    }
+    const b = { minX, minY, maxX, maxY };
     fitBounds(b, 1.6);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoomReq?.nonce]);
@@ -542,17 +570,21 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
     return { ...e, source: { x: a.x + a.w, y: a.y }, target: { x: b.x, y: b.y } };
   });
 
+  const lod = zoom < 0.42; // semantic zoom: hide chips/badges only when truly zoomed out
+
   // floating selection toolbar position (screen space, above the node)
   const selToolbar = (() => {
     // hide while dragging a node/tree, and stay hidden after a drag until the next click
     if (draggingId || rootDrag || dragSuppress) return null;
+    // hide at extreme zoom-out (same LOD threshold as chips/badges) — otherwise the
+    // full-size toolbar floats detached above a tiny node.
+    if (lod) return null;
     if (editingId || selectedIds.length !== 1) return null;
     const id = selectedIds[0];
     const c = centers[id];
     if (!c) return null;
     return { id, sx: c.cx * zoom + panX, sy: (c.cy - c.h / 2) * zoom + panY };
   })();
-  const lod = zoom < 0.42; // semantic zoom: hide chips/badges only when truly zoomed out
 
   return (
     <div

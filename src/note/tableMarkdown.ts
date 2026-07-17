@@ -10,9 +10,12 @@ import { Table } from '@tiptap/extension-table';
  * next save / tab switch (round-trip). GFM table cells are single-line, so we
  * flatten each cell's blocks onto one line instead of bailing out.
  */
-// the tiptap-markdown serialize `state` isn't typed in this project
+// the tiptap-markdown serialize `state` isn't typed in this project.
+// `out` is prosemirror-markdown's running output buffer; `write` is also called
+// with no argument (to flush block delimiters), so `s` is optional.
 type SerState = {
-  write: (s: string) => void;
+  out: string;
+  write: (s?: string) => void;
   renderInline: (node: unknown) => void;
   ensureNewLine: () => void;
   closeBlock: (node: unknown) => void;
@@ -41,7 +44,19 @@ export const TableMarkdown = Table.extend({
               cell.forEach((block) => {
                 if (!block.textContent.trim()) return;
                 if (wrote) state.write(' ');
+                // A literal "|" in cell text ends the column in GFM, so an
+                // unescaped pipe collapses the whole table to plain text on the
+                // next parse (e.g. "yes|no"). prosemirror-markdown appends inline
+                // text straight to state.out (via text()/esc, and esc() does NOT
+                // escape "|"); it only calls state.write() with no args to flush
+                // delimiters. So we can't intercept the text by wrapping write —
+                // instead capture just this block's appended output and escape
+                // pipes + fold any stray newline to a space.
+                const start = state.out.length;
                 state.renderInline(block);
+                state.out =
+                  state.out.slice(0, start) +
+                  state.out.slice(start).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
                 wrote = true;
               });
             });
