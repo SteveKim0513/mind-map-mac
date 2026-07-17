@@ -4,7 +4,7 @@ import { launchApp } from './helpers';
 // 버그: 노드의 일정을 해제해도 캘린더에 그대로 남던 문제. collectAgendaCached의
 // per-node dedup은 "열린 맵이 뺀 노드"를 못 지켜, 디스크의 (stale) 스케줄 복사본이
 // 다시 붙었다. 열린 맵의 파일은 아예 스캔에서 제외하도록 고쳤다.
-test('노드의 일정을 해제하면 캘린더에서도 사라진다', async () => {
+test('노드의 일정을 해제하면 캘린더에서도 사라진다', { tag: ['@calendar', '@schedule'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 마인드맵"]');
