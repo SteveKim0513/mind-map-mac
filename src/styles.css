@@ -5313,6 +5313,12 @@ textarea:focus-visible,
   background: color-mix(in srgb, var(--state-danger) 14%, transparent);
   color: color-mix(in srgb, var(--state-danger) 70%, var(--ink)); font-size: 12px; font-weight: 600;
 }
+/* recovery for an orphaned session (end never stamped) — a quieter, neutral variant */
+.sess-end.stale {
+  background: var(--canvas-soft);
+  color: var(--ink-secondary);
+  border: 1px solid var(--hairline);
+}
 .sess-running { margin-left: auto; font-size: 12px; color: var(--ink-faint); }
 .session-banner-sub { font-size: 12px; color: var(--ink-muted); margin-top: 5px; padding-left: 23px; }
 .session-banner-goal { font-size: 13px; color: var(--ink-secondary); margin-top: 7px; padding-left: 23px; }
@@ -5625,6 +5631,26 @@ textarea:focus-visible,
   border-radius: var(--r-md);
 }
 .cal-today-btn:hover { background: var(--hover); color: var(--ink); }
+/* the one visible "일정 추가" entry — same place/label in day/week/month (§3.1) */
+.cal-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--state-scheduled) 40%, var(--hairline));
+  background: color-mix(in srgb, var(--state-scheduled) 10%, transparent);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: var(--r-md);
+  margin-left: 6px;
+}
+.cal-add-btn .ic { width: 13px; height: 13px; }
+.cal-add-btn:hover {
+  color: var(--state-scheduled);
+  border-color: color-mix(in srgb, var(--state-scheduled) 55%, var(--hairline));
+}
 
 .cal-grow { flex: 1; }
 .cal-history-btn { border: none; background: transparent; cursor: pointer; color: var(--ink-muted); padding: 6px; border-radius: var(--r-sm); display: inline-flex; }
@@ -5809,7 +5835,22 @@ textarea:focus-visible,
 .cal-wk-rail { border-right: 1px solid var(--hairline); }
 .cal-wk-hour { height: 40px; position: relative; }
 .cal-wk-hour span { position: absolute; top: -7px; right: 5px; font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
-.cal-wk-col { position: relative; border-left: 1px solid var(--hairline); min-width: 0; }
+.cal-wk-col { position: relative; border-left: 1px solid var(--hairline); min-width: 0; cursor: pointer; }
+/* hover hint: an empty time slot is clickable to add a schedule (§3.3) */
+.cal-wk-col:hover::before {
+  content: '+ 일정';
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--state-scheduled);
+  background: color-mix(in srgb, var(--state-scheduled) 14%, var(--canvas));
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  pointer-events: none;
+  z-index: 3;
+}
 .cal-wk-col.today { background: color-mix(in srgb, var(--state-scheduled) 5%, transparent); }
 .cal-wk-col.drop { background: color-mix(in srgb, var(--state-scheduled) 12%, transparent); }
 .cal-wk-slot { height: 40px; border-bottom: 1px solid color-mix(in srgb, var(--hairline) 55%, transparent); }
@@ -5832,6 +5873,17 @@ textarea:focus-visible,
 .cal-wk-block-text { font-size: 12px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-wk-block-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; z-index: 2; }
 .cal-wk-block:hover .cal-wk-block-resize { background: color-mix(in srgb, var(--state-scheduled) 45%, transparent); }
+/* Overlap handling: narrow side-by-side columns hide the redundant time to keep
+   the title readable; hovering an overlapped block lifts it and expands it to the
+   full column so it's fully legible (직관적·깔끔한 겹침 UI). */
+.cal-wk-block.overlap .cal-wk-block-time { display: none; }
+.cal-wk-block:hover { z-index: 6; }
+.cal-wk-block.overlap:hover {
+  left: 1px !important;
+  width: calc(100% - 2px) !important;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--ink) 22%, transparent);
+}
+.cal-wk-block.overlap:hover .cal-wk-block-time { display: inline; }
 
 .cal-wk-allday-col { cursor: pointer; }
 
@@ -5873,18 +5925,31 @@ textarea:focus-visible,
 .cal-month-cell.today .cal-month-datebtn { color: var(--state-scheduled); font-weight: 600; }
 .cal-month-chips { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-y: auto; }
 
-/* ── SubtreeMiniView — read-only schedule-node preview (§3.2) ─────────────── */
-.cal-peek-mini { width: 100%; overflow: hidden; }
-.cal-peek-edge { fill: none; stroke: var(--edge); stroke-width: 1.4; }
-.cal-peek-node rect { fill: var(--surface); stroke: var(--hairline); stroke-width: 1; }
-.cal-peek-node text { fill: var(--ink); font-size: 12px; }
-.cal-peek-node.root rect {
-  fill: color-mix(in srgb, var(--state-scheduled) 16%, var(--surface));
-  stroke: color-mix(in srgb, var(--state-scheduled) 45%, var(--hairline));
+/* ── SubtreeMiniView — read-only schedule preview, indented outline (§3.2) ── */
+/* Full wrapping text (no truncation) — the preview is for reading the content. */
+.cal-peek-outline { width: 100%; overflow-y: auto; padding: 4px 0; }
+.cal-peek-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px 4px 0;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.45;
 }
-.cal-peek-node.root text { font-weight: 600; }
-.cal-peek-node.root:hover rect { fill: color-mix(in srgb, var(--state-scheduled) 26%, var(--surface)); }
-.cal-peek-node.done text { fill: var(--ink-faint); text-decoration: line-through; }
+.cal-peek-text { white-space: normal; overflow-wrap: anywhere; }
+.cal-peek-bullet { color: var(--ink-faint); flex-shrink: 0; }
+.cal-peek-line.root { font-weight: 600; cursor: pointer; border-radius: var(--r-sm); }
+.cal-peek-line.root:hover { background: color-mix(in srgb, var(--state-scheduled) 12%, transparent); }
+.cal-peek-line.done .cal-peek-text { color: var(--ink-faint); text-decoration: line-through; }
+.cal-peek-noteflag {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--state-note);
+  border: 1px solid color-mix(in srgb, var(--state-note) 35%, var(--hairline));
+  border-radius: var(--r-sm);
+  padding: 0 5px;
+}
 .cal-peek-empty { font-size: 12px; color: var(--ink-faint); padding: 8px; }
 
 /* ── Peek containers: day drawer / month panel / week popup (§3.2) ─────────── */
@@ -5943,25 +6008,7 @@ textarea:focus-visible,
 }
 .cal-peek-popup .cal-peek { border: none; }
 
-/* ── Create-schedule entry points (§3.4–3.5) ──────────────────────────────── */
-.cal-day-top { display: flex; align-items: center; gap: 8px; padding: 0 2px 8px; }
-.cal-day-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 1px solid var(--hairline);
-  background: var(--canvas);
-  color: var(--ink-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 5px 10px;
-  border-radius: var(--r-sm);
-}
-.cal-day-add:hover {
-  color: var(--state-scheduled);
-  border-color: color-mix(in srgb, var(--state-scheduled) 40%, var(--hairline));
-}
-.cal-day-add .ic { width: 13px; height: 13px; }
+/* ── Month cell "+" — faintly visible at rest, brightens on hover (§3.3) ──── */
 .cal-month-add {
   position: absolute;
   top: 3px;
@@ -5973,11 +6020,11 @@ textarea:focus-visible,
   cursor: pointer;
   padding: 2px;
   border-radius: var(--r-sm);
-  opacity: 0;
+  opacity: 0.3;
   transition: opacity 0.1s;
 }
 .cal-month-add .ic { width: 13px; height: 13px; }
-.cal-month-add:hover { color: var(--state-scheduled); background: var(--hover); }
+.cal-month-add:hover { color: var(--state-scheduled); background: var(--hover); opacity: 1; }
 .cal-month-cell:hover .cal-month-add { opacity: 1; }
 
 /* ── SchedulePicker: search existing / new → 오늘의 생각 / 종일·시간 (§3.3) ── */

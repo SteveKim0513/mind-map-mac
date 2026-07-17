@@ -28,6 +28,7 @@
 - [2026-06-12-work-dashboard-redesign.md](2026-06-12-work-dashboard-redesign.md) — 작업 기록 대시보드 재기획 (아이디어 단계)
 - [2026-06-15-release-history.md](2026-06-15-release-history.md) — 배포 내역 기록 + 사용자 가시성
 - [2026-07-16-calendar-ux-overhaul.md](2026-07-16-calendar-ux-overhaul.md) — 캘린더 UX 개선: 스케줄 클릭→서브트리 미리보기→우측 분할, 통합 일정 생성(기존 노드 검색+오늘의 생각), 종일/시간 옵트인, 월간 스크롤
+- [2026-07-16-calendar-schedule-add-consolidation.md](2026-07-16-calendar-schedule-add-consolidation.md) — 일정 추가 진입점 일관화(공용 헤더 버튼 + 토글 상시 + Escape 닫기 + hover 힌트). ux-audit 라이브 워크스루 기반
 
 ## 폐기 (기록용, 대체 문서 참고)
 

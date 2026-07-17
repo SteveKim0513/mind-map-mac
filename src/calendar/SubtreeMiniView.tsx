@@ -1,22 +1,37 @@
-import { useMemo } from 'react';
 import type { MindMapDoc } from '../types';
-import { layout, type NodeSize } from '../layout/treeLayout';
 
-// A read-only static preview of a schedule node + its descendants, rendered from
-// the pure layout() (no editing, no store binding). Lives in calendar/ — not ui/
-// or canvas/ — so it doesn't cross a domain boundary (calendar can't import a
-// sibling domain like canvas/; it reuses the lower-level layout/ lib). The bezier
-// connector matches canvas/Edges.tsx but is inlined here to avoid that import.
-// See specs/2026-07-16-calendar-ux-overhaul.md §3.2.
+// A read-only preview of a schedule node + its descendants, shown under/next to a
+// calendar entry (§3.2). Rendered as an INDENTED OUTLINE with full, wrapping text
+// (no truncation) — its purpose is reading the content, not a scaled-down map.
+// Lives in calendar/ (not ui/ or canvas/) so it doesn't cross a domain boundary.
 
-const NODE_H = 30;
-const PAD = 16;
+interface Row {
+  id: string;
+  text: string;
+  depth: number;
+  done: boolean;
+  hasNote: boolean;
+}
 
-/** Rough box width — we don't measure text in a read-only preview. */
-function estimateWidth(text: string, hasIcon: boolean): number {
-  const chars = [...text].length; // CJK counts as 1 code point but renders ~wide
-  const w = chars * 9 + (hasIcon ? 22 : 0) + 22;
-  return Math.max(56, Math.min(w, 220));
+/** Depth-first flatten of the subtree rooted at `rootId` (all descendants). */
+function flatten(doc: MindMapDoc, rootId: string): Row[] {
+  const rows: Row[] = [];
+  const seen = new Set<string>();
+  const walk = (id: string, depth: number) => {
+    const n = doc.nodes[id];
+    if (!n || seen.has(id)) return; // guard against a cyclic graph
+    seen.add(id);
+    rows.push({
+      id,
+      text: (n.icon ? n.icon + ' ' : '') + (n.text || '무제'),
+      depth,
+      done: !!n.done,
+      hasNote: !!n.note,
+    });
+    for (const c of n.children) walk(c, depth + 1);
+  };
+  walk(rootId, 0);
+  return rows;
 }
 
 interface Props {
@@ -24,65 +39,34 @@ interface Props {
   rootId: string;
   /** Fired when the root (schedule) node is clicked — container opens it in split. */
   onOpenRoot?: () => void;
-  /** Pixel height of the preview viewport; larger trees scale to fit (meet). */
+  /** Max viewport height; a large subtree scrolls (each line still shows in full). */
   height?: number;
 }
 
-export function SubtreeMiniView({ doc, rootId, onOpenRoot, height = 200 }: Props) {
-  const result = useMemo(() => {
-    const sizes: Record<string, NodeSize> = {};
-    for (const id of Object.keys(doc.nodes)) {
-      const n = doc.nodes[id];
-      sizes[id] = { w: estimateWidth(n.text || '무제', !!n.icon), h: NODE_H };
-    }
-    return layout(doc, sizes, rootId);
-  }, [doc, rootId]);
-
+export function SubtreeMiniView({ doc, rootId, onOpenRoot, height = 260 }: Props) {
   if (!doc.nodes[rootId]) {
     return <div className="cal-peek-empty">노드를 찾을 수 없습니다.</div>;
   }
-
-  const { nodes, edges, bounds } = result;
-  const vw = Math.max(1, bounds.maxX - bounds.minX) + PAD * 2;
-  const vh = Math.max(1, bounds.maxY - bounds.minY) + PAD * 2;
-
+  const rows = flatten(doc, rootId);
   return (
-    <div className="cal-peek-mini" style={{ height }}>
-      <svg
-        viewBox={`${bounds.minX - PAD} ${bounds.minY - PAD} ${vw} ${vh}`}
-        preserveAspectRatio="xMidYMid meet"
-        width="100%"
-        height="100%"
-        role="img"
-        aria-label="일정 노드 미리보기"
-      >
-        {edges.map((e) => {
-          const dx = Math.abs(e.target.x - e.source.x);
-          const cp = Math.max(18, Math.min(dx * 0.5, 90));
-          const d = `M ${e.source.x} ${e.source.y} C ${e.source.x + cp} ${e.source.y} ${e.target.x - cp} ${e.target.y} ${e.target.x} ${e.target.y}`;
-          return <path key={e.id} className="cal-peek-edge" d={d} />;
-        })}
-        {nodes.map((p) => {
-          const isRoot = p.node.id === rootId;
-          const top = p.y - NODE_H / 2;
-          const maxChars = Math.max(3, Math.floor((p.width - 16) / 8));
-          const raw = (p.node.icon ? p.node.icon + ' ' : '') + (p.node.text || '무제');
-          const label = [...raw].length > maxChars ? [...raw].slice(0, maxChars).join('') + '…' : raw;
-          return (
-            <g
-              key={p.node.id}
-              className={`cal-peek-node${isRoot ? ' root' : ''}${p.node.done ? ' done' : ''}`}
-              onClick={isRoot ? onOpenRoot : undefined}
-              style={isRoot && onOpenRoot ? { cursor: 'pointer' } : undefined}
-            >
-              <rect x={p.x} y={top} width={p.width} height={NODE_H} rx={7} />
-              <text x={p.x + 9} y={p.y} dominantBaseline="central">
-                {label}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+    <div className="cal-peek-outline" style={{ maxHeight: height }}>
+      {rows.map((r) => {
+        const isRoot = r.depth === 0;
+        return (
+          <div
+            key={r.id}
+            className={`cal-peek-line${isRoot ? ' root' : ''}${r.done ? ' done' : ''}`}
+            style={{ paddingLeft: 10 + r.depth * 16 }}
+            onClick={isRoot ? onOpenRoot : undefined}
+            role={isRoot && onOpenRoot ? 'button' : undefined}
+            title={isRoot && onOpenRoot ? '오른쪽 화면에 맵 열기' : undefined}
+          >
+            {!isRoot && <span className="cal-peek-bullet" aria-hidden="true">·</span>}
+            <span className="cal-peek-text">{r.text}</span>
+            {r.hasNote && <span className="cal-peek-noteflag" title="노트 있음">노트</span>}
+          </div>
+        );
+      })}
     </div>
   );
 }

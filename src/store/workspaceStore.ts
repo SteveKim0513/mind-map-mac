@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { TreeNode } from '../../electron/preload';
-import type { NoteMeta } from '../types';
+import type { NoteMeta, FocusSession } from '../types';
 import { parseNote } from '../io/noteFormat';
 import { extractWikiTargets } from '../note/wikiLinkText';
 
@@ -43,7 +43,9 @@ function nameOf(path: string): string {
 async function buildNoteIndex(tree: TreeNode[]): Promise<NoteMeta[]> {
   // visible notes (in the tree) + hidden attached notes (.notes/) — both indexed
   const attached = await window.api.attachedNotes().catch(() => [] as string[]);
-  const paths = [...collectMdPaths(tree), ...attached];
+  // dedup paths — a note that's both in the tree AND returned as attached must be
+  // indexed once, else its session counts twice / shows a duplicate node chip.
+  const paths = [...new Set([...collectMdPaths(tree), ...attached])];
   const metas = await Promise.all(
     paths.map(async (path): Promise<NoteMeta | null> => {
       try {
@@ -105,8 +107,24 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       (m) => m.path !== selfPath && !m.session && (m.refs ?? []).includes(t),
     );
   },
-  sessions: () =>
-    get().noteIndex.map((m) => m.session).filter((s): s is NonNullable<typeof s> => !!s),
+  // Dedup by sessionId (the promised "dedup key", types.ts) — a copied or
+  // double-indexed session note must not double-count in history/rollups. When two
+  // copies share an id, the ENDED one wins so a completed session is always counted.
+  sessions: () => {
+    const bySid = new Map<string, FocusSession>();
+    const anon: FocusSession[] = [];
+    for (const m of get().noteIndex) {
+      const s = m.session;
+      if (!s) continue;
+      if (!s.sessionId) {
+        anon.push(s);
+        continue;
+      }
+      const prev = bySid.get(s.sessionId);
+      if (!prev || (prev.end == null && s.end != null)) bySid.set(s.sessionId, s);
+    }
+    return [...bySid.values(), ...anon];
+  },
   reindexNote: (meta) =>
     set((s) => {
       const rest = s.noteIndex.filter((m) => m.path !== meta.path);

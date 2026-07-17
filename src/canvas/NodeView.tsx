@@ -248,8 +248,9 @@ export function NodeView({
         </span>
       )}
 
-      {/* ②③ STATUS GUTTER — one compact row: schedule (urgency) · links · notes · focus */}
-      {!editing && (sched || allLinks.length > 0 || linkedNotes.length > 0 || focusStat) && (
+      {/* ②③ STATUS GUTTER — one compact row: schedule (urgency) · links · notes · focus.
+          집중 통계는 실행 지표라 할 일(todo) 노드에서만 — 생각 노드로 새어나가지 않게(누수 수정). */}
+      {!editing && (sched || allLinks.length > 0 || linkedNotes.length > 0 || (focusStat && node.todo)) && (
         <div className="node-gutter" onPointerDown={(e) => e.stopPropagation()}>
           {sched && (
             <button
@@ -311,7 +312,7 @@ export function NodeView({
               <span className="gchip-t">{m.title}</span>
             </button>
           ))}
-          {focusStat && (
+          {focusStat && node.todo && (
             <button
               className="gchip focus"
               title={`집중 ${focusStat.count}회 · 누적 ${fmtDuration(focusStat.sec)} (하위 포함)`}

@@ -17,9 +17,9 @@ import { ColorSwatchGrid } from '../ui/ColorSwatchGrid';
  * (UX-CLARITY-VISION 전략 C, REDESIGN-VISION §T2가 애초에 "자주 쓰는
  * 3~4개만" 남기라고 정했던 것과도 맞춘다).
  *
- * 집중 버튼은 `node.scheduled`일 때만 나타난다 — 집중 세션은 일정이 지정된
- * 노드를 실행하는 걸 돕는 모드라는 재정의(결정 0011 §3)를 그대로 게이트로
- * 건다. 일정 없는 노드를 선택하면 이 버튼 자체가 없다. */
+ * 할 일(todo) 노드에서는 완료·일정 지정·집중이 각각 독립 기능으로 나온다.
+ * 집중은 더 이상 일정을 요구하지 않는다 — 일정 지정과 집중은 별개다(결정 0015가
+ * 0011 §3의 "집중은 scheduled만" 게이트를 해제). 일반 노드에는 "할 일로 전환"만. */
 export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: number; sy: number }) {
   const node = useMap((s) => s.doc.nodes[nodeId]);
   const setColor = useMap((s) => s.setColor);
@@ -53,7 +53,8 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
       </button>
       <span className="st-sep" />
 
-      {/* 실행 — 완료·집중은 할 일(todo) 노드에서만. 일반 노드는 "할 일로" 전환만 (결정 0014) */}
+      {/* 실행 — 할 일(todo) 노드에서만. 완료 · 일정 지정 · 집중은 각각 독립 기능
+          (결정 0014·0015). 일반 노드는 "할 일로 전환"만. */}
       {node.todo ? (
         <>
           <button
@@ -63,18 +64,23 @@ export function SelectionToolbar({ nodeId, sx, sy }: { nodeId: string; sx: numbe
           >
             <Icon name="check" />
           </button>
-          {node.scheduled && (
-            <button
-              className={`st-btn${focusing ? ' on' : ''}`}
-              title={focusing ? '집중 중 (클릭하면 안내)' : '집중 시작'}
-              onClick={() => {
-                if (focusing) useUi.getState().toast('집중이 이미 진행 중입니다. 먼저 종료하세요.');
-                else requestFocusStart(mapStore, nodeId);
-              }}
-            >
-              <Icon name="clock" />
-            </button>
-          )}
+          <button
+            className={`st-btn${node.scheduled ? ' on' : ''}`}
+            title="일정 지정"
+            onClick={() => useUi.getState().openSchedule(nodeId)}
+          >
+            <Icon name="calendar" />
+          </button>
+          <button
+            className={`st-btn${focusing ? ' on' : ''}`}
+            title={focusing ? '집중 중 (클릭하면 안내)' : '집중 시작'}
+            onClick={() => {
+              if (focusing) useUi.getState().toast('집중이 이미 진행 중입니다. 먼저 종료하세요.');
+              else requestFocusStart(mapStore, nodeId);
+            }}
+          >
+            <Icon name="clock" />
+          </button>
         </>
       ) : (
         <button className="st-btn" title="할 일로 전환" onClick={() => setTodo(nodeId, true)}>

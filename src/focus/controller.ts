@@ -132,7 +132,18 @@ export async function startFocusSession(store: MapStore, nodeId: string, goal?: 
   await useWorkspace.getState().refresh();
   reindexFromNote(path, note);
 
-  ui.setActiveFocus({ sessionId, notePath: path, start, mapId, nodeId, nodeText });
+  // If the node has no schedule, place THIS focus on the calendar at its start
+  // time (사용자 요청: todo에서 바로 집중하면 그 시각이 스케줄로 잡힌다). An already-planned
+  // node keeps its plan. Goes through mapStore so the reminder invariant holds.
+  const autoScheduled = !node.scheduleAt;
+  if (autoScheduled) {
+    const d = new Date(start);
+    const p = (n: number) => String(n).padStart(2, '0');
+    const startIso = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`;
+    store.getState().setScheduleAt(nodeId, startIso);
+  }
+
+  ui.setActiveFocus({ sessionId, notePath: path, start, mapId, nodeId, nodeText, autoScheduled });
   // open the note in the right split so the session = working in the note
   useSession.getState().openInRight(path, serialized);
 
@@ -205,7 +216,21 @@ export async function endFocusSession(reflect?: string): Promise<void> {
   const idleSec = idleTracker.finish(now); // seal the idle total before disarming
   ui.setActiveFocus(null); // disarm immediately (idempotent against double-clicks)
 
+  // Persist the note's live work-log body FIRST, then stamp end. Without this,
+  // stampEnd read the note from disk (losing text typed in the last ~800ms before
+  // the autosave debounce) and a pending autosave could re-write session.end=null
+  // afterward → note stuck "진행 중", missing from history (§14-I data-loss race).
+  await useSession.getState().flushSaves(active.notePath);
+
   const ended = await stampEnd(active.notePath, now, reflect, idleSec);
+
+  // For a focus that auto-scheduled its node (no prior plan), size the calendar
+  // block to the real focus duration so "그 집중한 만큼"이 시간표에 그대로 보인다.
+  if (active.autoScheduled && ended) {
+    const minutes = Math.max(5, Math.round(ended.durationSec / 60));
+    mapStoreById(active.mapId)?.getState().setDuration(active.nodeId, minutes);
+  }
+
   await useWorkspace.getState().refresh(); // pick up the stamped frontmatter
 
   const sessions = useWorkspace.getState().sessions();
@@ -223,6 +248,16 @@ export async function endFocusSession(reflect?: string): Promise<void> {
     nodeRolledSec: stat?.rolledSec ?? 0,
     notePath: active.notePath,
   });
+}
+
+/** Recover a STALE session note whose `end` never got stamped (an orphan from an
+ *  interrupted end, or the pre-fix data-loss race). Not the active session — reached
+ *  from the note banner. Flushes any typed body, then stamps end=now (an absurd
+ *  span is flagged `estimated` by sanitizeDuration) so it stops showing "진행 중". */
+export async function closeStaleSession(notePath: string): Promise<void> {
+  await useSession.getState().flushSaves(notePath);
+  await stampEnd(notePath, Date.now());
+  await useWorkspace.getState().refresh();
 }
 
 /** Append a reflection to an already-ended session (from the completion card). */

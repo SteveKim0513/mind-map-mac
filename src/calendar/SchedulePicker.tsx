@@ -17,9 +17,14 @@ function parseHHMM(s: string): number {
   return (Number.isFinite(h) ? h : 9) * 60 + (Number.isFinite(m) ? m : 0);
 }
 
+function minuteToHHMM(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+}
+
 interface Props {
   dayMs: number;
-  /** Locked minute-of-day from a week-grid slot; null → show the 종일/시간 toggle. */
+  /** Minute-of-day from a week-grid slot — PREFILLS "시간 지정" with this time; null →
+   *  defaults to 종일. Either way the 종일/시간 toggle is always shown (§3.2 consolidation). */
   fixed: number | null;
   onAssign: (node: NodeRef, iso: string) => void;
   onCreate: (text: string, iso: string) => void;
@@ -29,8 +34,8 @@ interface Props {
 export function SchedulePicker({ dayMs, fixed, onAssign, onCreate, onClose }: Props) {
   const [nodes, setNodes] = useState<NodeRef[] | null>(null);
   const [query, setQuery] = useState('');
-  const [allDay, setAllDay] = useState(true);
-  const [timeStr, setTimeStr] = useState('09:00');
+  const [allDay, setAllDay] = useState(fixed == null); // week slot → timed prefill
+  const [timeStr, setTimeStr] = useState(fixed != null ? minuteToHHMM(fixed) : '09:00');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,11 +43,19 @@ export function SchedulePicker({ dayMs, fixed, onAssign, onCreate, onClose }: Pr
     inputRef.current?.focus();
   }, []);
 
+  // Escape closes from anywhere — not just when the search input is focused (§3.4).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const iso = useMemo(() => {
     const midnight = `${isoDate(dayMs)}T00:00:00`;
-    if (fixed != null) return rescheduleToMinute(midnight, fixed);
     return allDay ? midnight : rescheduleToMinute(midnight, parseHHMM(timeStr));
-  }, [dayMs, fixed, allDay, timeStr]);
+  }, [dayMs, allDay, timeStr]);
 
   const results = useMemo(() => {
     if (!nodes) return [];
@@ -53,12 +66,7 @@ export function SchedulePicker({ dayMs, fixed, onAssign, onCreate, onClose }: Pr
 
   const d = new Date(dayMs);
   const dateLabel = `${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[d.getDay()]})`;
-  const timeLabel =
-    fixed != null
-      ? `${String(Math.floor(fixed / 60)).padStart(2, '0')}:${String(fixed % 60).padStart(2, '0')}`
-      : allDay
-        ? '종일'
-        : timeStr;
+  const timeLabel = allDay ? '종일' : timeStr;
 
   const canCreate = query.trim().length > 0;
   const createNew = () => {
@@ -86,31 +94,29 @@ export function SchedulePicker({ dayMs, fixed, onAssign, onCreate, onClose }: Pr
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') onClose();
-            else if (e.key === 'Enter' && canCreate) createNew();
+            if (e.key === 'Enter' && canCreate) createNew();
           }}
         />
 
-        {fixed == null && (
-          <div className="cal-picker-time">
-            <div className="cal-picker-seg">
-              <button className={`cal-picker-seg-btn${allDay ? ' on' : ''}`} onClick={() => setAllDay(true)}>
-                종일
-              </button>
-              <button className={`cal-picker-seg-btn${allDay ? '' : ' on'}`} onClick={() => setAllDay(false)}>
-                시간 지정
-              </button>
-            </div>
-            {!allDay && (
-              <input
-                type="time"
-                className="cal-picker-timefield"
-                value={timeStr}
-                onChange={(e) => setTimeStr(e.target.value)}
-              />
-            )}
+        {/* time control shown in EVERY view; week slot just prefills 시간 지정 (§3.2) */}
+        <div className="cal-picker-time">
+          <div className="cal-picker-seg">
+            <button className={`cal-picker-seg-btn${allDay ? ' on' : ''}`} onClick={() => setAllDay(true)}>
+              종일
+            </button>
+            <button className={`cal-picker-seg-btn${allDay ? '' : ' on'}`} onClick={() => setAllDay(false)}>
+              시간 지정
+            </button>
           </div>
-        )}
+          {!allDay && (
+            <input
+              type="time"
+              className="cal-picker-timefield"
+              value={timeStr}
+              onChange={(e) => setTimeStr(e.target.value)}
+            />
+          )}
+        </div>
 
         <div className="cal-picker-list">
           {canCreate && (

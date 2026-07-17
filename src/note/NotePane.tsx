@@ -14,7 +14,7 @@ import { useUi } from '../store/uiStore';
 import { useMetaStore } from '../store/metaStore';
 import { Icon } from '../ui/Icon';
 import { fmtDuration } from '../focus/aggregate';
-import { endFocusSession } from '../focus/controller';
+import { endFocusSession, closeStaleSession } from '../focus/controller';
 import type { FocusSession } from '../types';
 import type { Tab } from '../store/sessionStore';
 
@@ -210,7 +210,7 @@ function NotePaneBody() {
 
   return (
     <div className="note-doc">
-      {note.session && <SessionMetaBanner session={note.session} />}
+      {note.session && <SessionMetaBanner session={note.session} notePath={filePath} />}
       {/* 메타 블록은 노트 자체에 붙는 구조화 데이터라 템플릿엔 의미가 없다 — 템플릿+로
           삽입되는 건 본문 텍스트뿐이라 메타 블록은 절대 옮겨지지 않고, 삽입 대상 노트가
           이미 같은 템플릿의 메타 블록을 갖고 있으면 혼란만 준다. */}
@@ -400,7 +400,7 @@ const clock = (ms: number) => {
 
 /** Read-only meta header for a focus-session note — driven by frontmatter, not
  *  the editable body, so the user can never alter start/end/target (§6.2). */
-function SessionMetaBanner({ session }: { session: FocusSession }) {
+function SessionMetaBanner({ session, notePath }: { session: FocusSession; notePath: string | null }) {
   const active = useUi((s) => s.activeFocus);
   const running = session.end == null;
   const isThis = active?.notePath && active.sessionId === session.sessionId;
@@ -418,7 +418,18 @@ function SessionMetaBanner({ session }: { session: FocusSession }) {
         종료
       </button>
     ) : (
-      <span className="sess-running">진행 중</span>
+      // orphaned session (end never stamped) — let the user close it out
+      notePath ? (
+        <button
+          className="sess-end stale"
+          title="이 세션의 종료가 기록되지 않았어요 — 지금 종료 처리합니다"
+          onClick={() => void closeStaleSession(notePath)}
+        >
+          종료 처리
+        </button>
+      ) : (
+        <span className="sess-running">진행 중</span>
+      )
     )
   ) : null;
 

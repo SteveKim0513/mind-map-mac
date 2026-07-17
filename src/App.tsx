@@ -491,7 +491,7 @@ export default function App() {
               ? (() => {
                   const st = activeStore.getState();
                   const n = st.selectedId ? st.doc.nodes[st.selectedId] : undefined;
-                  return n ? { id: n.id, text: n.text, mapId: st.doc.id ?? '', mapPath: activeTab.path, store: activeStore } : null;
+                  return n ? { id: n.id, text: n.text, todo: !!n.todo, mapId: st.doc.id ?? '', mapPath: activeTab.path, store: activeStore } : null;
                 })()
               : null,
           })}
@@ -543,7 +543,7 @@ function buildCommands(o: {
   tidy: () => void;
   toggleSidebar: () => void;
   activeMapPath: string | null;
-  selectedNode: { id: string; text: string; mapId: string; mapPath: string; store: MapStore } | null;
+  selectedNode: { id: string; text: string; todo: boolean; mapId: string; mapPath: string; store: MapStore } | null;
 }): Command[] {
   const cmds: Command[] = [
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
@@ -575,8 +575,17 @@ function buildCommands(o: {
   // "이걸 하고 싶다"고 타이핑해서 도달할 수 있는 통로 (UX-CLARITY-VISION 전략 D).
   const sel = o.selectedNode;
   if (sel) {
+    // 실행(일정·집중)은 할 일(todo) 노드에서만 — 툴바·우클릭 메뉴와 동일 게이트(결정 0014).
+    // 일반 노드(순수 생각)엔 "할 일로 전환"만 노출한다.
+    if (sel.todo) {
+      cmds.push(
+        { id: 'node-schedule', icon: 'calendar', label: '선택 노드: 일정 설정', run: () => useUi.getState().openSchedule(sel.id) },
+        { id: 'node-focus', icon: 'clock', label: '선택 노드: 집중 시작', run: () => requestFocusStart(sel.store, sel.id) },
+      );
+    } else {
+      cmds.push({ id: 'node-make-todo', icon: 'checklist', label: '선택 노드: 할 일로 전환', run: () => sel.store.getState().setTodo(sel.id, true) });
+    }
     cmds.push(
-      { id: 'node-schedule', icon: 'calendar', label: '선택 노드: 일정 설정', run: () => useUi.getState().openSchedule(sel.id) },
       { id: 'node-link', icon: 'link', label: '선택 노드: 링크 추가', run: () => useUi.getState().openAddLink(sel.id) },
       {
         id: 'node-link-note',
@@ -584,7 +593,6 @@ function buildCommands(o: {
         label: '선택 노드: 노트 연결',
         run: () => useUi.getState().openLinkNote({ mapId: sel.mapId, nodeId: sel.id, nodeText: sel.text, mapPath: sel.mapPath }),
       },
-      { id: 'node-focus', icon: 'clock', label: '선택 노드: 집중 시작', run: () => requestFocusStart(sel.store, sel.id) },
       ...TAG_KEYS.map((c) => ({
         id: `node-color-${c}`,
         icon: 'paint' as const,

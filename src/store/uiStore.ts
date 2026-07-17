@@ -182,6 +182,9 @@ export interface ActiveFocus {
   mapId: string;
   nodeId: string;
   nodeText: string;
+  // true when the node had no schedule and this focus placed it on the calendar
+  // at its start time — on end we size the block to the real focus duration.
+  autoScheduled?: boolean;
 }
 export interface FocusDoneCard {
   durationSec: number;

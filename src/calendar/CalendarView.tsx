@@ -351,6 +351,20 @@ export function CalendarView() {
     setMode('day');
   };
 
+  /** Reference date for the header "일정 추가" button — the viewed day (day), or
+   *  today when it's inside the shown week/month, else the period's start. */
+  const headerAddDate = (): number => {
+    const today = startOfDay(now);
+    if (mode === 'day') return anchor;
+    if (mode === 'week') {
+      const days = weekDays(anchor);
+      return days.includes(today) ? today : days[0];
+    }
+    const d = new Date(anchor);
+    const sameMonth = new Date(today).getFullYear() === d.getFullYear() && new Date(today).getMonth() === d.getMonth();
+    return sameMonth ? today : startOfDay(new Date(d.getFullYear(), d.getMonth(), 1).getTime());
+  };
+
   return (
     <div className="cal">
       <div className="cal-head">
@@ -390,6 +404,12 @@ export function CalendarView() {
           오늘
         </button>
 
+        {/* one visible entry point in every view (same place, same label) — §3.1 */}
+        <button className="cal-add-btn" onClick={() => pickerCtl.openAt(headerAddDate(), null)} title="일정 추가">
+          <Icon name="plus" />
+          일정 추가
+        </button>
+
         <span className="cal-grow" />
 
         <button className="cal-history-btn" title="집중 기록" onClick={() => useUi.getState().openHistory()}>
@@ -401,7 +421,7 @@ export function CalendarView() {
         {items == null ? (
           <div className="cal-empty">불러오는 중…</div>
         ) : mode === 'day' ? (
-          <DayPane anchor={anchor} agenda={agenda} grouped={grouped} now={now} actions={actions} peek={peekCtl} picker={pickerCtl} focusByDay={focusByDay} />
+          <DayPane anchor={anchor} agenda={agenda} grouped={grouped} now={now} actions={actions} peek={peekCtl} focusByDay={focusByDay} />
         ) : mode === 'week' ? (
           <WeekPane
             anchor={anchor}
@@ -409,7 +429,6 @@ export function CalendarView() {
             now={now}
             onPickDay={jumpToDay}
             drag={drag}
-            actions={actions}
             peek={peekCtl}
             picker={pickerCtl}
             focusByDay={focusByDay}
@@ -422,7 +441,6 @@ export function CalendarView() {
             now={now}
             onPickDay={jumpToDay}
             drag={drag}
-            actions={actions}
             peek={peekCtl}
             picker={pickerCtl}
             focusByDay={focusByDay}
@@ -553,7 +571,6 @@ function DayPane({
   now,
   actions,
   peek,
-  picker,
   focusByDay,
 }: {
   anchor: number;
@@ -562,24 +579,17 @@ function DayPane({
   now: number;
   actions: AgendaActions;
   peek: PeekCtl;
-  picker: PickerCtl;
   focusByDay: Map<string, number>;
 }) {
   const isToday = anchor === startOfDay(now);
   const dayAll = grouped.get(dayKey(anchor)) ?? [];
+  // add entry point lives in the calendar header (§3.1), same in every view.
   const summary = (
-    <div className="cal-day-top">
-      <DaySummary
-        planned={dayAll.length}
-        focusSec={focusByDay.get(dayKey(anchor)) ?? 0}
-        done={dayAll.filter((i) => i.done).length}
-      />
-      <span className="cal-grow" />
-      <button className="cal-day-add" onClick={() => picker.openAt(anchor, null)} title="이 날에 일정 추가">
-        <Icon name="plus" />
-        일정 추가
-      </button>
-    </div>
+    <DaySummary
+      planned={dayAll.length}
+      focusSec={focusByDay.get(dayKey(anchor)) ?? 0}
+      done={dayAll.filter((i) => i.done).length}
+    />
   );
 
   // Today: lead with *today only* (no upcoming days). Overdue sits collapsed above.
@@ -627,37 +637,17 @@ function DayPane({
   );
 }
 
-/** Inline focus/done actions, shared by week blocks and month chips (Phase 1c).
- *  Clicks stopPropagation so they never bubble to a parent cell's day-jump. */
-function ItemActions({ it, actions }: { it: AgendaItem; actions: AgendaActions }) {
-  const stop = (fn: () => void) => (e: ReactMouseEvent) => {
-    e.stopPropagation();
-    fn();
-  };
-  return (
-    <span className="cal-item-acts">
-      <button className="cal-item-act" title="집중 시작" onClick={stop(() => actions.startFocus(it))}>
-        <Icon name="clock" />
-      </button>
-      <button className="cal-item-act" title="완료 표시" onClick={stop(() => actions.toggleDone(it))}>
-        <Icon name="check" />
-      </button>
-    </span>
-  );
-}
-
-/** A draggable schedule chip (week all-day strip + month cells). A div, not a
- *  button, so it can hold both a clickable main area and nested action buttons. */
+/** A draggable schedule chip (week all-day strip + month cells). Overview/plan
+ *  surfaces — no inline 집중·완료 (execution lives only in the day view, §3.1/§6).
+ *  Click = peek the node; drag = reschedule. */
 function CalChip({
   it,
   drag,
-  actions,
   peek,
   showTime,
 }: {
   it: AgendaItem;
   drag: DragReschedule;
-  actions: AgendaActions;
   peek: PeekCtl;
   showTime: boolean;
 }) {
@@ -682,7 +672,6 @@ function CalChip({
         {showTime && <span className="cal-chip-time">{rowTime(it)}</span>}
         <span className="cal-chip-text">{it.text}</span>
       </button>
-      <ItemActions it={it} actions={actions} />
     </div>
   );
 }
@@ -697,7 +686,6 @@ function WeekBlock({
   col,
   cols,
   drag,
-  actions,
   peek,
   onResize,
 }: {
@@ -707,7 +695,6 @@ function WeekBlock({
   col: number;
   cols: number;
   drag: DragReschedule;
-  actions: AgendaActions;
   peek: PeekCtl;
   onResize: (it: AgendaItem, minutes: number) => void;
 }) {
@@ -744,12 +731,14 @@ function WeekBlock({
   return (
     <div
       ref={ref}
-      className={`cal-wk-block${isPeeked(peek, it) ? ' peeked' : ''}`}
+      className={`cal-wk-block${isPeeked(peek, it) ? ' peeked' : ''}${cols > 1 ? ' overlap' : ''}`}
       style={{
         top: `${minutesToPx(topMin)}px`,
         height: `${minutesToPx(Math.min(span, WEEK_GRID_MINUTES - topMin))}px`,
-        left: `${(col / cols) * 100}%`,
-        width: `${100 / cols}%`,
+        // side-by-side columns for overlaps, with a small gap so they read as
+        // distinct blocks (hover expands one to full width — see CSS).
+        left: `calc(${(col / cols) * 100}% + 1px)`,
+        width: `calc(${100 / cols}% - 3px)`,
       }}
       draggable={!resizing}
       onDragStart={(e) => {
@@ -766,10 +755,11 @@ function WeekBlock({
           peek.open(it);
         }}
       >
+        {/* overlapping blocks hide the redundant time (CSS) to give the title room;
+            it returns on hover when the block expands to full width. */}
         <span className="cal-wk-block-time">{rowTime(it)}</span>
         <span className="cal-wk-block-text">{it.text}</span>
       </button>
-      <ItemActions it={it} actions={actions} />
       <div className="cal-wk-block-resize" onPointerDown={startResize} title="드래그로 소요 시간 조절" />
     </div>
   );
@@ -781,7 +771,6 @@ function WeekPane({
   now,
   onPickDay,
   drag,
-  actions,
   peek,
   picker,
   focusByDay,
@@ -792,7 +781,6 @@ function WeekPane({
   now: number;
   onPickDay: (ms: number) => void;
   drag: DragReschedule;
-  actions: AgendaActions;
   peek: PeekCtl;
   picker: PickerCtl;
   focusByDay: Map<string, number>;
@@ -852,7 +840,7 @@ function WeekPane({
               title="클릭해서 종일 일정 추가"
             >
               {strip.map((it) => (
-                <CalChip key={it.nodeId} it={it} drag={drag} actions={actions} peek={peek} showTime={it.hasTime} />
+                <CalChip key={it.nodeId} it={it} drag={drag} peek={peek} showTime={it.hasTime} />
               ))}
             </div>
           );
@@ -903,7 +891,6 @@ function WeekPane({
                   col={b.col}
                   cols={b.cols}
                   drag={drag}
-                  actions={actions}
                   peek={peek}
                   onResize={onResize}
                 />
@@ -931,7 +918,6 @@ function MonthPane({
   now,
   onPickDay,
   drag,
-  actions,
   peek,
   picker,
   focusByDay,
@@ -941,7 +927,6 @@ function MonthPane({
   now: number;
   onPickDay: (ms: number) => void;
   drag: DragReschedule;
-  actions: AgendaActions;
   peek: PeekCtl;
   picker: PickerCtl;
   focusByDay: Map<string, number>;
@@ -999,7 +984,7 @@ function MonthPane({
               {/* All items scroll within the cell (no "+N" truncation) — §3.7 */}
               <div className="cal-month-chips">
                 {dayItems.map((it) => (
-                  <CalChip key={it.nodeId} it={it} drag={drag} actions={actions} peek={peek} showTime={it.hasTime} />
+                  <CalChip key={it.nodeId} it={it} drag={drag} peek={peek} showTime={it.hasTime} />
                 ))}
               </div>
             </div>

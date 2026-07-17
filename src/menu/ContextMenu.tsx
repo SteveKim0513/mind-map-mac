@@ -150,8 +150,6 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
           )}
           <button
             className="ctx-item"
-            disabled={!node.scheduled}
-            title={node.scheduled ? undefined : '일정 설정 후 이용 가능'}
             onClick={run(() => {
               if (focusing) useUi.getState().toast('집중이 이미 진행 중입니다');
               else requestFocusStart(mapStore, id);
