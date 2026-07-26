@@ -4,6 +4,11 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.11.6] - 2026-07-26
+
+### 수정
+- **오버레이 스택 도입 (ADR 0018)** — 관리형 오버레이 9개(설정·최근 수정·즐겨찾기·사용 안내·휴지통·노트 템플릿·버전 기록·업데이트 내역·집중 기록)가 각자 window 캡처 keydown으로 Esc를 처리해 겹치면 한 번에 전부 닫혔고, 겹침 순서는 정적 DOM 렌더 순서가 결정해 나중에 연 것이 아래에 깔릴 수 있었다(설정→최근 수정이 설정을 닫고 열던 근본 원인). `uiStore.overlayStack`(open/close가 boolean과 스택을 한 액션에서 동기 갱신) + 공용 훅 `useOverlayEsc`(스택 최상단만 반응, 팔레트 열림 시 양보) + 스택 위치 기반 동적 z-index(팔레트 z 90→100)로 교체. 설정→최근 수정의 `closeSettings()` 제거 — 위에 쌓고 닫기/Esc로 설정 복귀. 최근 수정·즐겨찾기의 "열기"는 `closeAllOverlays()`로 스택 전체 해소 후 이동. 원칙 명문화(UI-DESIGN-PRINCIPLES.md): 취소는 한 단계 되감고, 목적 달성은 전체를 해소한다. 단위 10건(`uiStore.overlays.test.ts`) + e2e `overlay-navigation` 2건 추가, `smart-views` 새 동작으로 갱신.
+
 ## [0.11.5] - 2026-07-17
 
 ### 새 기능
