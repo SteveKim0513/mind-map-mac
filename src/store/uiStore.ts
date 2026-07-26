@@ -43,6 +43,28 @@ function readTimePresets(): TimePreset[] {
   }
 }
 
+/** The managed overlays that participate in the ESC/z-order stack (ADR 0018).
+ *  Palettes (quickOpen/cmdk/global search) and one-shot cards (whatsNew) stay out. */
+export type OverlayId =
+  | 'history'
+  | 'trash'
+  | 'versions'
+  | 'templates'
+  | 'recent'
+  | 'favorites'
+  | 'updates'
+  | 'settings'
+  | 'manual';
+
+/** Move `id` to the top of the stack (re-opening an already-open overlay raises it). */
+export const pushOverlay = (stack: OverlayId[], id: OverlayId): OverlayId[] => [
+  ...stack.filter((x) => x !== id),
+  id,
+];
+/** Drop `id` from the stack (closing keeps the rest in their open order). */
+export const removeOverlay = (stack: OverlayId[], id: OverlayId): OverlayId[] =>
+  stack.filter((x) => x !== id);
+
 interface UiState {
   theme: Theme; // resolved theme actually applied (data-theme)
   themeMode: ThemeMode; // user preference — 'system' follows the OS appearance
@@ -167,6 +189,13 @@ interface UiState {
   // completion card shown on end (null = hidden)
   focusDone: FocusDoneCard | null;
   setFocusDone: (c: FocusDoneCard | null) => void;
+  // managed-overlay stack — open order decides both z-order and which overlay
+  // the next Esc closes (top only = one-step back, ADR 0018). Kept in sync with
+  // the booleans below inside each open*/close* action.
+  overlayStack: OverlayId[];
+  // close every managed overlay at once — for "leave the screen" moments
+  // (e.g. opening a file from 최근 수정) where step-by-step unwinding is noise
+  closeAllOverlays: () => void;
   // work-history dashboard (overlay)
   historyOpen: boolean;
   openHistory: () => void;
@@ -401,34 +430,53 @@ export const useUi = create<UiState>((set, get) => ({
   },
   focusDone: null,
   setFocusDone: (c) => set({ focusDone: c }),
+  // each open*/close* updates its boolean AND the stack in one synchronous set —
+  // the two can never drift apart (the booleans stay the render switches in App)
+  overlayStack: [],
+  closeAllOverlays: () =>
+    set({
+      historyOpen: false,
+      trashOpen: false,
+      versionsOpen: false,
+      versionsPath: null,
+      templatesOpen: false,
+      recentOpen: false,
+      favoritesOpen: false,
+      updatesOpen: false,
+      settingsOpen: false,
+      manualOpen: false,
+      overlayStack: [],
+    }),
   historyOpen: false,
-  openHistory: () => set({ historyOpen: true }),
-  closeHistory: () => set({ historyOpen: false }),
+  openHistory: () => set((s) => ({ historyOpen: true, overlayStack: pushOverlay(s.overlayStack, 'history') })),
+  closeHistory: () => set((s) => ({ historyOpen: false, overlayStack: removeOverlay(s.overlayStack, 'history') })),
   trashOpen: false,
-  openTrash: () => set({ trashOpen: true }),
-  closeTrash: () => set({ trashOpen: false }),
+  openTrash: () => set((s) => ({ trashOpen: true, overlayStack: pushOverlay(s.overlayStack, 'trash') })),
+  closeTrash: () => set((s) => ({ trashOpen: false, overlayStack: removeOverlay(s.overlayStack, 'trash') })),
   versionsOpen: false,
   versionsPath: null,
-  openVersions: (path) => set({ versionsOpen: true, versionsPath: path }),
-  closeVersions: () => set({ versionsOpen: false, versionsPath: null }),
+  openVersions: (path) =>
+    set((s) => ({ versionsOpen: true, versionsPath: path, overlayStack: pushOverlay(s.overlayStack, 'versions') })),
+  closeVersions: () =>
+    set((s) => ({ versionsOpen: false, versionsPath: null, overlayStack: removeOverlay(s.overlayStack, 'versions') })),
   templatesOpen: false,
-  openTemplates: () => set({ templatesOpen: true }),
-  closeTemplates: () => set({ templatesOpen: false }),
+  openTemplates: () => set((s) => ({ templatesOpen: true, overlayStack: pushOverlay(s.overlayStack, 'templates') })),
+  closeTemplates: () => set((s) => ({ templatesOpen: false, overlayStack: removeOverlay(s.overlayStack, 'templates') })),
   recentOpen: false,
-  openRecent: () => set({ recentOpen: true }),
-  closeRecent: () => set({ recentOpen: false }),
+  openRecent: () => set((s) => ({ recentOpen: true, overlayStack: pushOverlay(s.overlayStack, 'recent') })),
+  closeRecent: () => set((s) => ({ recentOpen: false, overlayStack: removeOverlay(s.overlayStack, 'recent') })),
   favoritesOpen: false,
-  openFavorites: () => set({ favoritesOpen: true }),
-  closeFavorites: () => set({ favoritesOpen: false }),
+  openFavorites: () => set((s) => ({ favoritesOpen: true, overlayStack: pushOverlay(s.overlayStack, 'favorites') })),
+  closeFavorites: () => set((s) => ({ favoritesOpen: false, overlayStack: removeOverlay(s.overlayStack, 'favorites') })),
   updatesOpen: false,
-  openUpdates: () => set({ updatesOpen: true }),
-  closeUpdates: () => set({ updatesOpen: false }),
+  openUpdates: () => set((s) => ({ updatesOpen: true, overlayStack: pushOverlay(s.overlayStack, 'updates') })),
+  closeUpdates: () => set((s) => ({ updatesOpen: false, overlayStack: removeOverlay(s.overlayStack, 'updates') })),
   settingsOpen: false,
-  openSettings: () => set({ settingsOpen: true }),
-  closeSettings: () => set({ settingsOpen: false }),
+  openSettings: () => set((s) => ({ settingsOpen: true, overlayStack: pushOverlay(s.overlayStack, 'settings') })),
+  closeSettings: () => set((s) => ({ settingsOpen: false, overlayStack: removeOverlay(s.overlayStack, 'settings') })),
   manualOpen: false,
-  openManual: () => set({ manualOpen: true }),
-  closeManual: () => set({ manualOpen: false }),
+  openManual: () => set((s) => ({ manualOpen: true, overlayStack: pushOverlay(s.overlayStack, 'manual') })),
+  closeManual: () => set((s) => ({ manualOpen: false, overlayStack: removeOverlay(s.overlayStack, 'manual') })),
   updateStatus: null,
   setUpdateStatus: (s) => set({ updateStatus: s }),
   whatsNew: null,

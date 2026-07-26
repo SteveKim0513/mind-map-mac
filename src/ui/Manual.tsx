@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useUi } from '../store/uiStore';
 import { Icon, type IconName } from './Icon';
+import { useOverlayEsc } from './useOverlayEsc';
 
 function K({ k, d }: { k: string; d: string }) {
   return (
@@ -53,7 +54,7 @@ const SECTIONS: Section[] = [
         <K k="⌘C ⌘V" d="복사 / 붙여넣기" />
         <K k="⌘Z ⌘⇧Z" d="실행 취소 / 다시 실행" />
         <K k="Shift+클릭" d="다중 선택" />
-        <K k="Esc" d="선택 · 집중 해제" />
+        <K k="Esc" d="선택 · 집중 해제 (겹친 창은 위의 것부터 하나씩 닫기)" />
         <div className="man-grp">검색 · 창</div>
         <K k="⌘F" d="검색 (지도는 노드, 노트·홈은 전체 검색)" />
         <K k="⌘⇧F" d="전체 검색 (노드 · 노트 · 내용)" />
@@ -123,17 +124,14 @@ const SECTIONS: Section[] = [
  *  Settings ("사용 안내"). A navigable popup, not a wall of text. */
 export function Manual() {
   const close = useUi((s) => s.closeManual);
+  const stackIndex = useUi((s) => s.overlayStack.indexOf('manual'));
   const [active, setActive] = useState('start');
   const sec = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0];
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [close]);
+  useOverlayEsc('manual', close);
 
   return (
-    <div className="wh-backdrop" onMouseDown={close}>
+    <div className="wh-backdrop" style={{ zIndex: 88 + Math.max(0, stackIndex) }} onMouseDown={close}>
       <div className="man" onMouseDown={(e) => e.stopPropagation()}>
         <nav className="man-nav">
           <div className="man-nav-title">사용 안내</div>

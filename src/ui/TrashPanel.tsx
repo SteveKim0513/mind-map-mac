@@ -3,6 +3,7 @@ import { useUi } from '../store/uiStore';
 import { useTrash } from '../store/trashStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { Icon } from './Icon';
+import { useOverlayEsc } from './useOverlayEsc';
 import type { TrashItem } from '../../electron/preload';
 
 function relTime(iso: string): string {
@@ -32,6 +33,7 @@ function originDir(it: TrashItem, root: string): string {
 
 export function TrashPanel() {
   const close = useUi((s) => s.closeTrash);
+  const stackIndex = useUi((s) => s.overlayStack.indexOf('trash'));
   const items = useTrash((s) => s.items);
   const refreshTrash = useTrash((s) => s.refresh);
   const root = useWorkspace((s) => s.root);
@@ -53,13 +55,7 @@ export function TrashPanel() {
     await window.api.trashAutoPurgeSet(v);
     await refreshTrash(); // turning it on may sweep expired items right away
   };
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', k, true);
-    return () => window.removeEventListener('keydown', k, true);
-  }, [close]);
+  useOverlayEsc('trash', close);
 
   const restore = async (it: TrashItem) => {
     await window.api.trashRestore(it.trashedPath);
@@ -89,7 +85,7 @@ export function TrashPanel() {
   };
 
   return (
-    <div className="wh-backdrop" onMouseDown={close}>
+    <div className="wh-backdrop" style={{ zIndex: 88 + Math.max(0, stackIndex) }} onMouseDown={close}>
       <div className="trash-panel" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wh-head">
           <Icon name="trash" />

@@ -16,12 +16,16 @@ test('설정에 최근 수정 진입점이 있고 클릭하면 빈 상태를 보
     await page.waitForSelector('.settings', { timeout: 3_000 });
     await page.click('.set-advanced-toggle');
     await page.click('.set-link:has-text("최근 수정")');
-    // "최근 수정"을 클릭하면 설정 오버레이는 닫히고 최근 수정 오버레이만 남는다
-    // (겹친 두 오버레이 중 위의 것이 아래 것의 클릭을 가로채는 문제 방지).
-    await expect(page.locator('.settings')).toHaveCount(0);
+    // "최근 수정"은 설정 위에 쌓인다 — 설정은 아래에 열린 채 유지되고(스택 z-order가
+    // 위-아래를 보장), Esc는 위의 것 하나만 닫아 설정으로 되돌아온다 (ADR 0018).
     await expect(page.locator('.wh-title:has-text("최근 수정")')).toBeVisible();
+    await expect(page.locator('.settings')).toHaveCount(1);
     await expect(page.locator('.today-empty')).toContainText('수정한 파일');
     await page.keyboard.press('Escape');
+    await expect(page.locator('.wh-title:has-text("최근 수정")')).toHaveCount(0);
+    await expect(page.locator('.settings')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.settings', { state: 'hidden', timeout: 3_000 });
 
     await page.click('.sb-nav-item:has-text("즐겨찾기")');
     await expect(page.locator('.wh-title:has-text("즐겨찾기")')).toBeVisible();
@@ -41,8 +45,9 @@ test('파일을 만들면 최근 수정에 나타나고, 열어서 클릭하면 
     await page.click('.set-link:has-text("최근 수정")');
     await expect(page.locator('.trash-row')).toHaveCount(1);
     await page.click('.trash-row .trash-act:has-text("열기")');
-    // 클릭하면 패널이 닫히고 해당 노트 탭이 활성화된다.
+    // "열기"는 목적 달성 이동 — 아래에 깔린 설정까지 스택 전체가 해소된다 (ADR 0018).
     await expect(page.locator('.wh-title:has-text("최근 수정")')).toHaveCount(0);
+    await expect(page.locator('.settings')).toHaveCount(0);
     await expect(page.locator('.note-pane')).toBeVisible();
   } finally {
     await cleanup();

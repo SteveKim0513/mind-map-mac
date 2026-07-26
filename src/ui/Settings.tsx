@@ -5,6 +5,7 @@ import { useMetaStore } from '../store/metaStore';
 import { useTemplates } from '../store/templateStore';
 import { CURRENT_VERSION, RELEASES } from './changelog';
 import { Icon } from './Icon';
+import { useOverlayEsc } from './useOverlayEsc';
 import { renderMarkdown } from '../note/markdown';
 import type { MetaTemplate, MetaFieldDef, MetaFieldType } from '../types';
 
@@ -121,6 +122,7 @@ function useAiProviders() {
 export function Settings() {
   const [view, setView] = useState<SettingsView>('main');
   const close = useUi((s) => s.closeSettings);
+  const stackIndex = useUi((s) => s.overlayStack.indexOf('settings'));
   const themeMode = useUi((s) => s.themeMode);
   const fontScale = useUi((s) => s.fontScale);
   const root = useWorkspace((s) => s.root);
@@ -130,26 +132,22 @@ export function Settings() {
   const openaiRef = useRef<HTMLInputElement>(null) as React.RefObject<HTMLInputElement>;
   const bothSet = !!(ai.claude.masked && ai.openai.masked);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (view === 'ai') {
-        if (ai.claude.mode === 'edit' && ai.claude.masked) { ai.cancelClaude(); e.stopPropagation(); return; }
-        if (ai.openai.mode === 'edit' && ai.openai.masked) { ai.cancelOpenai(); e.stopPropagation(); return; }
-        setView('main'); e.stopPropagation(); return;
-      }
-      if (view !== 'main') { setView('main'); e.stopPropagation(); return; }
-      close();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [close, ai, view]);
+  // in-overlay step-back stays: key edit → sub-page → main → close
+  useOverlayEsc('settings', () => {
+    if (view === 'ai') {
+      if (ai.claude.mode === 'edit' && ai.claude.masked) { ai.cancelClaude(); return; }
+      if (ai.openai.mode === 'edit' && ai.openai.masked) { ai.cancelOpenai(); return; }
+      setView('main'); return;
+    }
+    if (view !== 'main') { setView('main'); return; }
+    close();
+  });
 
   useEffect(() => { if (ai.claude.mode === 'edit') claudeRef.current?.focus(); }, [ai.claude.mode]);
   useEffect(() => { if (ai.openai.mode === 'edit') openaiRef.current?.focus(); }, [ai.openai.mode]);
 
   return (
-    <div className="wh-backdrop" onMouseDown={close}>
+    <div className="wh-backdrop" style={{ zIndex: 88 + Math.max(0, stackIndex) }} onMouseDown={close}>
       <div className="settings" onMouseDown={(e) => e.stopPropagation()}>
         <div className="settings-head">
           {view !== 'main' && (
@@ -361,13 +359,8 @@ function MainView({
 
           <div className="set-sep" />
 
-          <button
-            className="set-link"
-            onClick={() => {
-              useUi.getState().closeSettings();
-              useUi.getState().openRecent();
-            }}
-          >
+          {/* 설정은 열어둔 채 위에 쌓는다 — Esc/닫기가 설정으로 되돌아온다 (ADR 0018) */}
+          <button className="set-link" onClick={() => useUi.getState().openRecent()}>
             <span className="set-link-main"><Icon name="clock" /> 최근 수정</span>
             <Icon name="chevronRight" />
           </button>

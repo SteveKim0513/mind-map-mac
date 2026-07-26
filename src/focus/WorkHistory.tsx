@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { useSession } from '../store/sessionStore';
 import type { MapStore } from '../store/mapStore';
 import { Icon } from '../ui/Icon';
+import { useOverlayEsc } from '../ui/useOverlayEsc';
 import { openSessionNote } from './controller';
 import { dayKey, fmtDuration, isCounted, perNode, type LiveResolver } from './aggregate';
 import {
@@ -48,6 +49,7 @@ const liveResolver: LiveResolver = (mapId, nodeId) => {
 
 export function WorkHistory() {
   const close = useUi((s) => s.closeHistory);
+  const stackIndex = useUi((s) => s.overlayStack.indexOf('history'));
   const noteIndex = useWorkspace((s) => s.noteIndex);
   const now = Date.now();
   const today = dayPeriod(now).from;
@@ -67,16 +69,12 @@ export function WorkHistory() {
     [scope, dayMs, weekOffset, now],
   );
 
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (expanded) setExpanded(null);
-      else if (filter) setFilter(null);
-      else close();
-    };
-    window.addEventListener('keydown', k, true);
-    return () => window.removeEventListener('keydown', k, true);
-  }, [close, filter, expanded]);
+  // in-overlay step-back stays: expanded entry → node filter → close
+  useOverlayEsc('history', () => {
+    if (expanded) setExpanded(null);
+    else if (filter) setFilter(null);
+    else close();
+  });
 
   const sessions = useMemo(
     () => noteIndex.map((m) => m.session).filter((s): s is FocusSession => !!s),
@@ -151,7 +149,7 @@ export function WorkHistory() {
   );
 
   return (
-    <div className="wh-backdrop" onMouseDown={close}>
+    <div className="wh-backdrop" style={{ zIndex: 88 + Math.max(0, stackIndex) }} onMouseDown={close}>
       <div className="wh" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wh-head">
           <span className="wh-title">집중 기록</span>

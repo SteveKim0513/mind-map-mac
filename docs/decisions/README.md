@@ -33,3 +33,6 @@
 - [0013 — 온보딩(첫 실행 코치)은 기능이 안정된 뒤에 도입한다](0013-onboarding-after-features-stable.md)
 - [0014 — 완료·일정·집중은 할 일(todo) 노드 전용 (0011 §4 실행 그룹 개정)](0014-todo-node.md)
 - [0015 — 집중 게이트 해제 — 일정과 집중은 독립 기능 (0011 §3 완화)](0015-focus-independent-of-schedule.md)
+- [0016 — 노드 복제는 리마인더 4개 필드를 모두 제거한다](0016-duplicate-strips-all-reminder-fields.md)
+- [0017 — 명시적 자정 vs 종일 구분을 위한 `allDay` 필드](0017-allday-field-explicit-midnight.md)
+- [0018 — 관리형 오버레이 스택 — 닫기/Esc의 한 단계 복귀](0018-overlay-esc-stack.md)

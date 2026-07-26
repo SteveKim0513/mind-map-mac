@@ -75,6 +75,9 @@ MindMap은 **Electron + React + TypeScript** macOS 데스크탑 앱이다.
 | 온보딩은 기능 안정화 후 도입 (조기 코치 제거) | `docs/decisions/0013-onboarding-after-features-stable.md` |
 | 완료·일정·집중은 할 일(todo) 노드 전용 (0011 실행 그룹 개정) | `docs/decisions/0014-todo-node.md` |
 | 집중 게이트 해제 — 일정과 집중은 독립 기능 (0011 §3 완화) | `docs/decisions/0015-focus-independent-of-schedule.md` |
+| 노드 복제는 리마인더 4개 필드를 모두 제거 (0005 확장) | `docs/decisions/0016-duplicate-strips-all-reminder-fields.md` |
+| 명시적 자정 vs 종일 구분을 위한 allDay 필드 | `docs/decisions/0017-allday-field-explicit-midnight.md` |
+| 관리형 오버레이 스택 — 닫기/Esc의 한 단계 복귀 | `docs/decisions/0018-overlay-esc-stack.md` |
 
 ## 경계 규칙 (기계적으로 강제)
 

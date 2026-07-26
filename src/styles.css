@@ -3038,7 +3038,7 @@ button {
 .qo-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 100; /* above the managed-overlay stack (88 + index, max 96) — ADR 0018 */
   background: rgba(0, 0, 0, 0.28);
   display: flex;
   justify-content: center;
@@ -5300,9 +5300,9 @@ textarea:focus-visible,
 .focus-pill.docked.collapsed:hover { background: var(--hover); }
 .focus-pill.docked.collapsed .focus-elapsed { color: var(--ink-muted); font-weight: 500; }
 
-/* completion card */
+/* completion card (also whatsNew) — above the managed stack max 96, below palettes 100 */
 .focus-done-backdrop {
-  position: fixed; inset: 0; z-index: 90;
+  position: fixed; inset: 0; z-index: 98;
   background: color-mix(in srgb, var(--ink) 18%, transparent);
   display: flex; align-items: center; justify-content: center;
   animation: fadeIn 0.15s ease;
@@ -5388,7 +5388,9 @@ textarea:focus-visible,
 .session-target:hover { color: var(--primary); text-decoration: underline; }
 .session-est { color: var(--ink-faint); }
 
-/* work-history dashboard overlay — a credible, presentable work record */
+/* work-history dashboard overlay — a credible, presentable work record.
+   z-index 88 is the stack BASE: managed overlays override it inline with
+   88 + overlayStack index, so the later-opened one always sits on top (ADR 0018). */
 .wh-backdrop {
   position: fixed; inset: 0; z-index: 88;
   background: color-mix(in srgb, var(--ink) 16%, transparent);

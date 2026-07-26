@@ -3,6 +3,7 @@ import { useUi } from '../store/uiStore';
 import { useSession } from '../store/sessionStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { Icon } from './Icon';
+import { useOverlayEsc } from './useOverlayEsc';
 import type { VersionInfo } from '../../electron/preload';
 
 function relTime(iso: string): string {
@@ -29,6 +30,7 @@ const nameOf = (p: string) => (p.split('/').pop() ?? p).replace(/\.(mind|md)$/, 
 // IF-02 · Local version history — restore a map/note to an earlier saved point.
 export function VersionHistoryPanel() {
   const close = useUi((s) => s.closeVersions);
+  const stackIndex = useUi((s) => s.overlayStack.indexOf('versions'));
   const filePath = useUi((s) => s.versionsPath);
   const toast = useUi((s) => s.toast);
   const reloadIfOpen = useSession((s) => s.reloadIfOpen);
@@ -48,13 +50,7 @@ export function VersionHistoryPanel() {
     };
   }, [filePath]);
 
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', k, true);
-    return () => window.removeEventListener('keydown', k, true);
-  }, [close]);
+  useOverlayEsc('versions', close);
 
   if (!filePath) return null;
 
@@ -79,7 +75,7 @@ export function VersionHistoryPanel() {
   };
 
   return (
-    <div className="wh-backdrop" onMouseDown={close}>
+    <div className="wh-backdrop" style={{ zIndex: 88 + Math.max(0, stackIndex) }} onMouseDown={close}>
       <div className="trash-panel" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wh-head">
           <Icon name="clock" />

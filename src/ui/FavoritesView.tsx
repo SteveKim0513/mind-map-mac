@@ -3,6 +3,7 @@ import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { usePins } from '../store/pinStore';
 import { Icon } from './Icon';
+import { useOverlayEsc } from './useOverlayEsc';
 
 function dirLabel(filePath: string, root: string): string {
   const parent = filePath.slice(0, filePath.lastIndexOf('/'));
@@ -12,6 +13,7 @@ function dirLabel(filePath: string, root: string): string {
 
 export function FavoritesView({ onOpen }: { onOpen: (path: string) => void }) {
   const close = useUi((s) => s.closeFavorites);
+  const stackIndex = useUi((s) => s.overlayStack.indexOf('favorites'));
   const root = useWorkspace((s) => s.root);
   const paths = usePins((s) => s.paths);
   const refresh = usePins((s) => s.refresh);
@@ -20,21 +22,16 @@ export function FavoritesView({ onOpen }: { onOpen: (path: string) => void }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', k, true);
-    return () => window.removeEventListener('keydown', k, true);
-  }, [close]);
+  useOverlayEsc('favorites', close);
 
+  // opening a file is a "leave the screen" action — dissolve the whole stack
   const openOne = (p: string) => {
-    close();
+    useUi.getState().closeAllOverlays();
     onOpen(p);
   };
 
   return (
-    <div className="wh-backdrop" onMouseDown={close}>
+    <div className="wh-backdrop" style={{ zIndex: 88 + Math.max(0, stackIndex) }} onMouseDown={close}>
       <div className="trash-panel" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wh-head">
           <Icon name="star" />

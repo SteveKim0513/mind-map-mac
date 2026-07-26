@@ -1,20 +1,17 @@
-import { useEffect } from 'react';
 import { useUi } from '../store/uiStore';
 import { Icon } from './Icon';
 import { renderMarkdown } from '../note/markdown';
 import { RELEASES } from './changelog';
+import { useOverlayEsc } from './useOverlayEsc';
 
 /** Full release history — opened from settings. */
 export function UpdatesOverlay() {
   const close = useUi((s) => s.closeUpdates);
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    window.addEventListener('keydown', k, true);
-    return () => window.removeEventListener('keydown', k, true);
-  }, [close]);
+  const stackIndex = useUi((s) => s.overlayStack.indexOf('updates'));
+  useOverlayEsc('updates', close);
 
   return (
-    <div className="wh-backdrop" onMouseDown={close}>
+    <div className="wh-backdrop" style={{ zIndex: 88 + Math.max(0, stackIndex) }} onMouseDown={close}>
       <div className="upd" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wh-head">
           <span className="wh-title">업데이트 내역</span>

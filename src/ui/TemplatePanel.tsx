@@ -3,6 +3,7 @@ import { useUi } from '../store/uiStore';
 import { useTemplates } from '../store/templateStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { Icon } from './Icon';
+import { useOverlayEsc } from './useOverlayEsc';
 import type { TemplateSummary } from '../../electron/preload';
 
 function relTime(iso: string): string {
@@ -20,6 +21,7 @@ function relTime(iso: string): string {
 
 export function TemplatePanel({ onOpen }: { onOpen: (path: string) => void }) {
   const close = useUi((s) => s.closeTemplates);
+  const stackIndex = useUi((s) => s.overlayStack.indexOf('templates'));
   const items = useTemplates((s) => s.items);
   const refresh = useTemplates((s) => s.refresh);
   const create = useTemplates((s) => s.create);
@@ -30,13 +32,7 @@ export function TemplatePanel({ onOpen }: { onOpen: (path: string) => void }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', k, true);
-    return () => window.removeEventListener('keydown', k, true);
-  }, [close]);
+  useOverlayEsc('templates', close);
 
   const filtered = items.filter((it) => it.title.toLowerCase().includes(query.trim().toLowerCase()));
 
@@ -61,7 +57,7 @@ export function TemplatePanel({ onOpen }: { onOpen: (path: string) => void }) {
   };
 
   return (
-    <div className="wh-backdrop" onMouseDown={close}>
+    <div className="wh-backdrop" style={{ zIndex: 88 + Math.max(0, stackIndex) }} onMouseDown={close}>
       <div className="trash-panel" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wh-head">
           <Icon name="template" />
