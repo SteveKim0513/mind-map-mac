@@ -22,11 +22,11 @@ jobs:
     runs-on: macos-14 # Apple Silicon (arm64) — 현재 배포 arch 와 동일
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install
