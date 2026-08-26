@@ -7,13 +7,13 @@ set -euo pipefail
 
 INPUT=$(cat - 2>/dev/null || echo '{}')
 
-TOOL=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool',''))" 2>/dev/null || echo '')
+TOOL=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_name',''))" 2>/dev/null || echo '')
 
 if [[ "$TOOL" != "Edit" && "$TOOL" != "Write" ]]; then
   exit 0
 fi
 
-FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('input',{}).get('file_path',''))" 2>/dev/null || echo '')
+FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null || echo '')
 
 # TypeScript 파일만
 if ! echo "$FILE_PATH" | grep -qE '\.(ts|tsx)$'; then

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PreToolUse hook (Bash tool) — 파괴적 명령 차단
-# 입력: JSON via stdin {"tool":"Bash","input":{"command":"..."}}
+# 입력: JSON via stdin {"tool_name":"Bash","tool_input":{"command":"..."}}
 # 차단 → exit 2, 경고 → exit 1, 통과 → exit 0
 
 set -euo pipefail
@@ -9,13 +9,13 @@ set -euo pipefail
 INPUT=$(cat - 2>/dev/null || echo '{}')
 
 # Bash 도구가 아니면 통과
-TOOL=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool',''))" 2>/dev/null || echo '')
+TOOL=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_name',''))" 2>/dev/null || echo '')
 if [ "$TOOL" != "Bash" ]; then
   exit 0
 fi
 
 # 명령 추출
-CMD=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('input',{}).get('command',''))" 2>/dev/null || echo '')
+CMD=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('command',''))" 2>/dev/null || echo '')
 
 if [ -z "$CMD" ]; then
   exit 0

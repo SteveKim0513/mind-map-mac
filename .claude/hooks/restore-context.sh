@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# PostCompact hook — 컨텍스트 압축 후 상태 파일 재로드 안내
+# SessionStart hook (matcher: compact) — 컨텍스트 압축 후 상태 파일 재로드 안내
+# (PostCompact는 존재하지 않는 이벤트명 — 압축 후 재개는 SessionStart의 source=compact로 발화)
 # 항상 exit 0
 
 set -euo pipefail
@@ -7,7 +8,7 @@ set -euo pipefail
 INPUT=$(cat - 2>/dev/null || echo '{}')
 
 HOOK_EVENT=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('hook_event_name',''))" 2>/dev/null || echo '')
-if [ "$HOOK_EVENT" != "PostCompact" ]; then
+if [ "$HOOK_EVENT" != "SessionStart" ]; then
   exit 0
 fi
 

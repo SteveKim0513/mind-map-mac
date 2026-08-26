@@ -13,11 +13,16 @@ Claude Code가 실행하는 이벤트 기반 스크립트. `.claude/settings.jso
 | `PostToolUse` (Edit/Write) | `format-changed-files.sh` | 변경 파일 빠른 타입 검사 |
 | `PostToolUse` (Write) | `remind-doc-index.sh` | 새 결정/명세/리포트 문서 생성 시 인덱스 갱신 안내 (advisory) |
 | `Stop` | `verify-before-stop.sh` | 종료 전 검증 상태 확인 |
+| `PreCompact` | `save-context.sh` | 압축 전 `.claude/session-state.md` 자동 저장 |
+| `SessionStart` (compact) | `restore-context.sh` | 압축 후 세션 재개 시 상태 파일 재로드 안내 |
 
 ## Hook 개발 원칙
 
 - 모든 스크립트는 실행 권한(`chmod +x`)이 필요하다.
-- 입력 JSON은 stdin으로 받는다.
+- 입력 JSON은 stdin으로 받는다. **키 스키마에 주의**: 도구 이벤트(PreToolUse/PostToolUse)는
+  `tool_name`·`tool_input` (~~`tool`·`input`이 아님~~ — 과거 이 오타로 hook 6종이 조용히
+  무력화된 적 있음), 모든 이벤트 공통으로 `hook_event_name`이 들어온다.
+  압축 후 재개 이벤트는 `PostCompact`가 아니라 `SessionStart`(matcher `compact`)다.
 - 차단 시 `exit 2`와 이유를 stderr에 출력한다 (Claude에게 전달됨).
 - 경고 시 `exit 1`과 메시지를 출력한다.
 - 통과 시 `exit 0`.
@@ -30,20 +35,24 @@ Claude Code가 실행하는 이벤트 기반 스크립트. `.claude/settings.jso
 
 ```bash
 # PreToolUse hook 테스트 (Bash 도구)
-echo '{"tool":"Bash","input":{"command":"rm -rf /"}}' | .claude/hooks/block-destructive-command.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | .claude/hooks/block-destructive-command.sh
 echo $?  # 2 = 차단, 0 = 통과
 
 # Edit hook 테스트
-echo '{"tool":"Edit","input":{"file_path":"/Users/me/.ssh/id_rsa"}}' | .claude/hooks/protect-sensitive-files.sh
+echo '{"tool_name":"Edit","tool_input":{"file_path":"/Users/me/.ssh/id_rsa"}}' | .claude/hooks/protect-sensitive-files.sh
 echo $?  # 2 = 차단
 
 # 문서 무결성 게이트 테스트 (git commit이 아니면 즉시 통과)
-echo '{"tool":"Bash","input":{"command":"git commit -m \"x\""}}' | .claude/hooks/check-docs-before-commit.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"x\""}}' | .claude/hooks/check-docs-before-commit.sh
 echo $?  # 0 = make harness-check 통과, 2 = 차단(원인은 stderr)
 
 # 인덱스 갱신 안내 테스트
-echo '{"tool":"Write","input":{"file_path":"docs/product/specs/2026-07-14-example.md"}}' | .claude/hooks/remind-doc-index.sh
+echo '{"tool_name":"Write","tool_input":{"file_path":"docs/product/specs/2026-07-14-example.md"}}' | .claude/hooks/remind-doc-index.sh
 echo $?  # 항상 0 — advisory
+
+# 압축 후 복원 안내 테스트 (SessionStart, matcher compact)
+echo '{"hook_event_name":"SessionStart","source":"compact"}' | .claude/hooks/restore-context.sh
+echo $?  # 항상 0 — 안내만
 ```
 
 ## 실패 시 안전 방향

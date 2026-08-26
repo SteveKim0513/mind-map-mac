@@ -8,7 +8,7 @@ set -euo pipefail
 
 INPUT=$(cat - 2>/dev/null || echo '{}')
 
-COMMAND=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('input',{}).get('command',''))" 2>/dev/null || echo '')
+COMMAND=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('command',''))" 2>/dev/null || echo '')
 [ -z "$COMMAND" ] && exit 0
 echo "$COMMAND" | grep -qE '(^|&&|;|\|)\s*git commit(\s|$)' || exit 0
 
