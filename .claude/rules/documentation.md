@@ -36,7 +36,7 @@ description: "문서 갱신 규칙 — 어떤 변경이 어떤 문서를 요구�
 ```markdown
 # [작업명]
 날짜: YYYY-MM-DD
-상태: active | completed | abandoned
+상태: active | blocked | completed | abandoned
 
 ## 목표
 ## 범위 (포함 / 제외)
@@ -44,13 +44,34 @@ description: "문서 갱신 규칙 — 어떤 변경이 어떤 문서를 요구�
 ## 가정
 ## 위험
 ## 구현 단계
-- [ ] 단계 1
+<!-- 상태 마커: [ ] pending · [>] in-progress · [x] completed · [!] blocked · [e] error -->
+- [ ] 0. step-name — 설명
 ## 검증 방법
 ## 발견한 사실 (작업 중 갱신)
 ## 결정 변경 이력
 ```
 
 완료 후 `docs/exec-plans/completed/`로 이동.
+
+### 구현 단계 상태 머신 (ADR 0019)
+
+각 단계는 `- [마커] N. kebab-case-이름 — 설명` 형식으로 쓰고, 마커로 상태를 추적한다.
+세션이 끊겨도 이 마커와 완료 요약만 읽으면 다음 세션이 이어받을 수 있다.
+
+| 마커 | 상태 | 전이 시 단계 줄 끝에 덧붙일 것 |
+|---|---|---|
+| `[ ]` | pending | — |
+| `[>]` | in-progress | — (동시에 1개만 유지) |
+| `[x]` | completed | `→ <산출물 한 줄 요약>` — 생성·수정 파일과 핵심 결정. 다음 단계의 컨텍스트가 된다 |
+| `[!]` | blocked | `→ blocked: <사유>` — API 키·인간 승인 등 사람 개입 필요. **즉시 중단하고 보고** |
+| `[e]` | error | `→ error: <에러 요약>` — 3회 시도 후에도 실패한 경우 |
+
+- 단계 하나라도 `[!]`이면 계획 상태도 `blocked`로 바꾸고 작업을 멈춘다. 사람이 사유를
+  해소하면 마커를 `[ ]`로 되돌리고 재개한다.
+- 각 단계는 implementation-worker에 그대로 위임 가능한 수준으로 쓴다 — 자기완결적 설명과
+  실행 가능한 AC (`.claude/agents/implementation-worker.md`의 위임 명세 표준 참조).
+- `make harness-check`(check-docs.mjs)가 active/ 계획의 마커 어휘·blocked 사유·상태 정합성을
+  검사한다.
 
 ## 결정 기록 형식
 

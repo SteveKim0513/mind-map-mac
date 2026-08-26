@@ -78,6 +78,7 @@ MindMap은 **Electron + React + TypeScript** macOS 데스크탑 앱이다.
 | 노드 복제는 리마인더 4개 필드를 모두 제거 (0005 확장) | `docs/decisions/0016-duplicate-strips-all-reminder-fields.md` |
 | 명시적 자정 vs 종일 구분을 위한 allDay 필드 | `docs/decisions/0017-allday-field-explicit-midnight.md` |
 | 관리형 오버레이 스택 — 닫기/Esc의 한 단계 복귀 | `docs/decisions/0018-overlay-esc-stack.md` |
+| exec-plan step 상태 머신 + 위임 명세 표준 | `docs/decisions/0019-exec-plan-step-state-machine.md` |
 
 ## 경계 규칙 (기계적으로 강제)
 

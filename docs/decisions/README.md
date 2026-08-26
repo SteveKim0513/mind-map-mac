@@ -36,3 +36,4 @@
 - [0016 — 노드 복제는 리마인더 4개 필드를 모두 제거한다](0016-duplicate-strips-all-reminder-fields.md)
 - [0017 — 명시적 자정 vs 종일 구분을 위한 `allDay` 필드](0017-allday-field-explicit-midnight.md)
 - [0018 — 관리형 오버레이 스택 — 닫기/Esc의 한 단계 복귀](0018-overlay-esc-stack.md)
+- [0019 — exec-plan step 상태 머신 + 위임 명세 표준](0019-exec-plan-step-state-machine.md)

@@ -114,6 +114,41 @@ if (fs.existsSync(activePlansDir)) {
   }
   if (staleActive === 0) console.log('  ✓ active/ 상태-위치 정합성 확인 완료');
 
+  // step 상태 마커 검증 (active/만 — ADR 0019): 마커 어휘, blocked 사유, 상태 정합성
+  const STEP_MARKERS = new Set([' ', '>', 'x', '!', 'e']);
+  const PLAN_STATUSES = ['active', 'blocked', 'completed', 'abandoned'];
+  let markerIssues = 0;
+  for (const plan of plans) {
+    const content = fs.readFileSync(path.join(activePlansDir, plan), 'utf8');
+    const status = (content.match(/상태[:：]\s*(\S+)/)?.[1] ?? '').toLowerCase();
+    if (status && !PLAN_STATUSES.includes(status)) {
+      warn(`docs/exec-plans/active/${plan}: 상태 '${status}'는 어휘 밖입니다 (${PLAN_STATUSES.join('|')}).`);
+      markerIssues++;
+    }
+    const section = content.split(/^## 구현 단계\s*$/m)[1]?.split(/^## /m)[0] ?? '';
+    let hasBlockedStep = false;
+    for (const line of section.split('\n')) {
+      const m = line.match(/^\s*- \[(.)\]/);
+      if (!m) continue;
+      if (!STEP_MARKERS.has(m[1])) {
+        warn(`docs/exec-plans/active/${plan}: 알 수 없는 step 마커 '[${m[1]}]' — [ ] [>] [x] [!] [e]만 사용하세요.`);
+        markerIssues++;
+      }
+      if (m[1] === '!') {
+        hasBlockedStep = true;
+        if (!/blocked[:：]/.test(line)) {
+          warn(`docs/exec-plans/active/${plan}: '[!]' step에 'blocked: <사유>'가 없습니다.`);
+          markerIssues++;
+        }
+      }
+    }
+    if (hasBlockedStep && status !== 'blocked') {
+      warn(`docs/exec-plans/active/${plan}: '[!]' step이 있는데 계획 상태가 'blocked'가 아닙니다.`);
+      markerIssues++;
+    }
+  }
+  if (markerIssues === 0) console.log('  ✓ step 상태 마커(ADR 0019) 확인 완료');
+
   // 필수 필드: active/와 completed/의 모든 계획에 '날짜:'와 '상태:'가 있는지
   let missingFields = 0;
   for (const [label, dir] of [['active', activePlansDir], ['completed', completedPlansDir]]) {
