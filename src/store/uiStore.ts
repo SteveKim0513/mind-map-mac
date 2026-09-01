@@ -163,6 +163,12 @@ interface UiState {
   relayoutReq: number;
   relayout: () => void;
 
+  // request to reveal a file/folder in the sidebar tree — opens the sidebar,
+  // expands its ancestors and scrolls/highlights it (nonce makes repeats fire).
+  // Fired from the path bar (PathBar.tsx) when a path segment is clicked.
+  revealPathReq: { path: string; nonce: number } | null;
+  revealInSidebar: (path: string) => void;
+
   // toasts
   toasts: { id: number; msg: string; action?: { label: string; onClick: () => void } }[];
   toast: (msg: string) => void;
@@ -377,6 +383,10 @@ export const useUi = create<UiState>((set, get) => ({
 
   relayoutReq: 0,
   relayout: () => set((s) => ({ relayoutReq: s.relayoutReq + 1 })),
+
+  revealPathReq: null,
+  revealInSidebar: (path) =>
+    set((s) => ({ revealPathReq: { path, nonce: (s.revealPathReq?.nonce ?? 0) + 1 } })),
 
   toasts: [],
   toast: (msg) => {

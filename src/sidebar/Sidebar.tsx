@@ -64,6 +64,27 @@ export function Sidebar({
   useEffect(() => void useTemplates.getState().refresh(), []); // hydrate templates on mount
   const pinnedPaths = usePins((s) => s.paths);
   useEffect(() => void usePins.getState().refresh(), []); // hydrate favorites on mount
+
+  // path bar "reveal in sidebar" (PathBar.tsx): expand ancestors, select + scroll
+  // the row into view. Runs on mount too (not just change) so opening the
+  // sidebar because of a reveal click still completes the reveal.
+  const revealPathReq = useUi((s) => s.revealPathReq);
+  useEffect(() => {
+    if (!revealPathReq) return;
+    const { path } = revealPathReq;
+    const isFile = path.endsWith('.md') || path.endsWith('.mind');
+    useWorkspace.getState().expandAncestors(path);
+    setSelected({ path, type: isFile ? 'file' : 'dir' });
+    // wait for the expand to re-render the tree before the row exists to scroll to
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document
+          .querySelector(`[data-node-path="${CSS.escape(path)}"]`)
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealPathReq]);
   // work-log session notes have an immutable name (title = start time, fixed at
   // creation); they can't be renamed from the tree either.
   const isLocked = (path: string) => !!noteByPath(path)?.session || path.split('/').includes('work-log');
@@ -444,6 +465,7 @@ export function Sidebar({
               dragging === node.path ? ' dragging' : ''
             }`}
             style={{ paddingLeft: pad }}
+            data-node-path={node.path}
             draggable={!renaming && !isLocked(node.path)}
             onDragStart={(e) => {
               e.dataTransfer.effectAllowed = 'move';
@@ -490,11 +512,16 @@ export function Sidebar({
               if (node.type === 'dir') {
                 if (e.metaKey || e.ctrlKey) {
                   // ⌘/Ctrl+click a folder → add it to the multi-selection so bulk
-                  // delete/move can include folders; a plain click still expands.
+                  // delete/move can include folders.
                   toggleMark(node.path);
                 } else {
+                  // A plain click only selects (sets the target dir for "새 폴더/새
+                  // 노트") — it does NOT also toggle expand/collapse. Selecting a
+                  // folder to create children inside it used to fight with browsing:
+                  // clicking it also collapsed it. Expand/collapse is the twisty
+                  // (left arrow) only, below.
+                  setMarked(new Set());
                   setSelected({ path: node.path, type: 'dir' });
-                  toggle(node.path);
                 }
               } else if (e.metaKey || e.ctrlKey) {
                 // ⌘/Ctrl+click → toggle multi-selection (don't open)
@@ -510,7 +537,17 @@ export function Sidebar({
               setRowMenu({ x: e.clientX, y: e.clientY, node });
             }}
           >
-            <span className="twisty">
+            <span
+              className={`twisty${node.type === 'dir' ? ' twisty--dir' : ''}`}
+              onClick={
+                node.type === 'dir'
+                  ? (e) => {
+                      e.stopPropagation(); // don't also fire the row's select handler
+                      toggle(node.path);
+                    }
+                  : undefined
+              }
+            >
               {node.type === 'dir' && (
                 <Icon name={expanded[node.path] ? 'chevronDown' : 'chevronRight'} />
               )}

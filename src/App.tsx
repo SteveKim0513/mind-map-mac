@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sidebar } from './sidebar/Sidebar';
 import { TabBar } from './panes/TabBar';
+import { PathBar } from './panes/PathBar';
 import { Pane } from './panes/Pane';
 import { NotePane } from './note/NotePane';
 import { NotePopup } from './note/NotePopup';
@@ -70,6 +71,12 @@ export default function App() {
   const recent = useSession((s) => s.recent);
 
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  // path bar "reveal in sidebar" click: make sure the sidebar is mounted so its
+  // own effect (Sidebar.tsx) can expand/scroll to the requested path.
+  const revealPathReq = useUi((s) => s.revealPathReq);
+  useEffect(() => {
+    if (revealPathReq) setSidebarVisible(true);
+  }, [revealPathReq]);
   // ⌘K "전체에서 찾기" → ⌘⇧F로 넘어갈 때 이미 입력한 쿼리를 이어받기 위한 중계 상태.
   const [gsInitialQuery, setGsInitialQuery] = useState('');
   const searchOpen = useUi((s) => s.searchOpen);
@@ -453,6 +460,8 @@ export default function App() {
           onCloseAll={() => useSession.getState().closeAllTabs()}
           onShowSidebar={() => setSidebarVisible(true)}
         />
+
+        <PathBar leftTab={leftTab} rightTab={rightTab} split={split} />
 
         <div className={`panes${split ? ' split' : ''}`}>
           {renderPane(leftTab, 0)}

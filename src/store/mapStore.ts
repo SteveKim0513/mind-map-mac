@@ -88,6 +88,8 @@ interface MapState {
   // selection / editing
   select: (id: string | null) => void;
   toggleSelect: (id: string) => void;
+  // union `ids` into the current selection — used by the canvas marquee (drag box-select)
+  selectMany: (ids: string[]) => void;
   startEdit: (id: string) => void;
   commitEdit: (text: string) => void;
   commitText: (id: string, text: string) => void;
@@ -333,6 +335,11 @@ export function createMapStore(): MapStore {
       const has = cur.includes(id);
       const next = has ? cur.filter((x) => x !== id) : [...cur, id];
       set({ selectedIds: next, selectedId: has ? next[next.length - 1] ?? null : id, editingId: null });
+    },
+    selectMany: (ids) => {
+      if (!ids.length) return;
+      const next = Array.from(new Set([...get().selectedIds, ...ids]));
+      set({ selectedIds: next, selectedId: next[next.length - 1] ?? null, editingId: null });
     },
     startEdit: (id) => set({ selectedId: id, selectedIds: [id], editingId: id }),
     cancelEdit: () => {

@@ -15,6 +15,10 @@ interface WorkspaceState {
   choose: () => Promise<void>;
   toggle: (path: string) => void;
   setExpanded: (path: string, open: boolean) => void;
+  /** Expand every ancestor folder of `path` (and `path` itself, if it's a folder)
+   *  so the sidebar tree can scroll it into view — used by the path bar's
+   *  "reveal in sidebar" click (App.tsx `revealPathReq`). */
+  expandAncestors: (path: string) => void;
 
   // link-index queries / updates
   notesForNode: (mapId: string, nodeId: string) => NoteMeta[];
@@ -100,6 +104,19 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   toggle: (path) => set((s) => ({ expanded: { ...s.expanded, [path]: !s.expanded[path] } })),
   setExpanded: (path, open) => set((s) => ({ expanded: { ...s.expanded, [path]: open } })),
+  expandAncestors: (path) =>
+    set((s) => {
+      if (!s.root || !path.startsWith(`${s.root}/`)) return {};
+      const rel = path.slice(s.root.length + 1);
+      const parts = rel.split('/');
+      const next = { ...s.expanded };
+      let cur = s.root;
+      for (const part of parts) {
+        cur = `${cur}/${part}`;
+        if (cur !== path || (!path.endsWith('.md') && !path.endsWith('.mind'))) next[cur] = true;
+      }
+      return { expanded: next };
+    }),
 
   notesForNode: (mapId, nodeId) =>
     get().noteIndex.filter((m) => m.links.some((l) => l.mapId === mapId && l.nodeId === nodeId)),

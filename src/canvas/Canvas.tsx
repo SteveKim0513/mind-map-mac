@@ -36,6 +36,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   const selectedIds = useMap((s) => s.selectedIds);
   const editingId = useMap((s) => s.editingId);
   const select = useMap((s) => s.select);
+  const selectMany = useMap((s) => s.selectMany);
   const reparent = useMap((s) => s.reparent);
   const reparentMany = useMap((s) => s.reparentMany);
   const setManualPos = useMap((s) => s.setManualPos);
@@ -88,6 +89,19 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   // true after a drag ends → keep the selection toolbar hidden until the next click
   const [dragSuppress, setDragSuppress] = useState(false);
   const [panning, setPanning] = useState(false);
+  // Shift+drag on empty canvas draws a marquee box (rubber-band select) instead of
+  // panning — a plain drag still pans, unchanged, so the existing "drag to navigate"
+  // gesture never breaks. `marquee` (world-space rect) drives the visible box;
+  // `marqueeIds` is a LIVE preview (nodes light up as the box touches them) mirrored
+  // into a ref for synchronous read on pointerup (state updates are async).
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [marqueeIds, setMarqueeIds] = useState<string[]>([]);
+  const marqueeIdsRef = useRef<string[]>([]);
+  // while dragging a marquee, nodes under the box preview as selected before commit
+  const previewSelSet = useMemo(
+    () => (marqueeIds.length ? new Set([...selectedIds, ...marqueeIds]) : selSet),
+    [selSet, selectedIds, marqueeIds],
+  );
 
   // …or until the user navigates with the keyboard: arrow keys after a drag must
   // bring the toolbar back too, not just a mouse click (keyboard-first app).
@@ -110,6 +124,8 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
     // move-root: a root node dragged to freely reposition its whole tree
     | { mode: 'dragging'; kind: 'move-root'; id: string; startWX: number; startWY: number; dx: number; dy: number }
     | { mode: 'panning'; startX: number; startY: number; startPanX: number; startPanY: number }
+    // marquee: Shift+drag on empty canvas — box-select nodes under the rectangle
+    | { mode: 'marquee'; startWX: number; startWY: number }
   >({ mode: 'idle' });
 
 
@@ -130,6 +146,24 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       const st = interaction.current;
       if (st.mode === 'panning') {
         setView({ panX: st.startPanX + (e.clientX - st.startX), panY: st.startPanY + (e.clientY - st.startY) });
+        return;
+      }
+      if (st.mode === 'marquee') {
+        const cur = toWorld(e.clientX, e.clientY);
+        const x = Math.min(st.startWX, cur.x);
+        const y = Math.min(st.startWY, cur.y);
+        const w = Math.abs(cur.x - st.startWX);
+        const h = Math.abs(cur.y - st.startWY);
+        setMarquee({ x, y, w, h });
+        // live preview: nodes under the box light up as selected before the drag ends
+        const hits = result.nodes
+          .filter((p) => {
+            const nh = sizesRef.current[p.node.id]?.h ?? 34;
+            return rectsIntersect(x, y, w, h, p.x, p.y - nh / 2, p.width, nh);
+          })
+          .map((p) => p.node.id);
+        marqueeIdsRef.current = hits;
+        setMarqueeIds(hits);
         return;
       }
       if (st.mode === 'pending-drag') {
@@ -245,6 +279,13 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
         const moved = Math.hypot(e.clientX - st.startX, e.clientY - st.startY) > DRAG_THRESHOLD;
         if (!moved) select(null);
       }
+      if (st.mode === 'marquee') {
+        // union the boxed nodes into the selection (Shift = "add", matching Shift+클릭)
+        selectMany(marqueeIdsRef.current);
+        marqueeIdsRef.current = [];
+        setMarqueeIds([]);
+        setMarquee(null);
+      }
       if (st.mode === 'dragging') {
         setDraggingId(null);
         if (st.kind === 'move-root') {
@@ -305,6 +346,9 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       setInsertMark(null);
       insertRef.current = null;
       setPanning(false);
+      marqueeIdsRef.current = [];
+      setMarqueeIds([]);
+      setMarquee(null);
       interaction.current = { mode: 'idle' };
     };
 
@@ -316,7 +360,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
     };
-  }, [doc.nodes, result.nodes, reparent, reparentMany, setManualPos, setView, toWorld, mapStore, select]);
+  }, [doc.nodes, result.nodes, reparent, reparentMany, setManualPos, setView, toWorld, mapStore, select, selectMany]);
 
   // The selection toolbar is suppressed after a drag and restored on the next
   // genuine click (onUp's pending-drag branch flips it back). We deliberately do
@@ -335,6 +379,14 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
     // clearing editingId out from under the editor → keeps the typed text
     if (mapStore.getState().editingId) {
       (document.activeElement as HTMLElement | null)?.blur();
+      return;
+    }
+    // Shift+drag on empty canvas = marquee box-select instead of pan (a plain
+    // drag still pans — the existing gesture is unchanged either way).
+    if (e.shiftKey) {
+      const w = toWorld(e.clientX, e.clientY);
+      interaction.current = { mode: 'marquee', startWX: w.x, startWY: w.y };
+      setMarquee({ x: w.x, y: w.y, w: 0, h: 0 });
       return;
     }
     // NOTE: deselect is deferred to pointerup (onUp) so a pan DRAG keeps the
@@ -589,7 +641,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   return (
     <div
       ref={containerRef}
-      className={`canvas${panning ? ' panning' : ''}${lod ? ' lod' : ''}`}
+      className={`canvas${panning ? ' panning' : ''}${marquee ? ' marquee-drag' : ''}${lod ? ' lod' : ''}`}
       onPointerDown={handleBackgroundPointerDown}
       onDoubleClick={(e) => {
         // double-click empty canvas → new center topic at the cursor — but not when
@@ -629,7 +681,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
             key={p.node.id}
             p={pp}
             isRoot={rootSet.has(p.node.id)}
-            selected={selSet.has(p.node.id)}
+            selected={previewSelSet.has(p.node.id)}
             editing={p.node.id === editingId}
             isDropTarget={p.node.id === dropTargetId}
             isDragging={p.node.id === draggingId}
@@ -652,6 +704,12 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
             style={{ left: insertMark.x, top: insertMark.y, width: insertMark.w }}
           />
         )}
+        {marquee && (
+          <div
+            className="marquee-box"
+            style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }}
+          />
+        )}
       </div>
 
       {selToolbar && (
@@ -665,6 +723,21 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
     </div>
   );
 });
+
+// world-space AABB overlap test, used by the marquee (rubber-band select) to
+// find which nodes fall under the drawn box.
+function rectsIntersect(
+  ax: number,
+  ay: number,
+  aw: number,
+  ah: number,
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number,
+): boolean {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
