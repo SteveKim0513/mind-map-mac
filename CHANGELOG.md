@@ -4,6 +4,19 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.13.0] - 2026-09-03
+
+### 새 기능
+- **보드(무드보드) — 세 번째 파일 타입(`.board`)** — 스티키노트·이미지를 절대좌표로 자유 배치하고 화살표로 잇는 무드보드(결정 0020, `src/board/`). 화살표는 항상 두 요소를 id+앵커로 연결(자유 좌표 없음), 연결 포인트 클릭/드래그로 생성. 스티키는 색·모양(사각형/타원)을 독립적으로 갖고 WCAG 대비비율로 글자색을 자동 결정. 이미지는 노트와 동일한 자산 폴더 관례(결정 0010)를 재사용. 명세: `docs/product/specs/2026-09-03-board-moodboard.md`. e2e `board-basics` 12건.
+- **보드 — 키보드 그래프 확장 + 자동 정렬** — 스티키를 선택하고 방향키를 누르면 그 방향에 이미 연결된 스티키가 있으면 이동, 없으면 생성(`BoardCanvasArea.onKeyDown`). "정리" 버튼은 선택한 스티키에서 화살표로 이어진 하위 트리를 BFS로 찾아 옆 열로 재배치(`board/boardLayout.ts` — 보드 전용, 마인드맵 `layout/treeLayout.ts`와 분리).
+- **보드 — 화살표 재배선 + 라벨** — 화살표 선택 시 양 끝에 손잡이가 나타나 다른 요소로 드래그해 재연결(빈 곳에 놓으면 취소). 경로 중앙(`boardRouting.ts`의 `pathMidpoint`, waypoint가 아닌 전체 길이 기준 중점)에 짧은 라벨을 붙일 수 있다.
+- **보드 — 다중 스티키 일괄 편집** — 여러 스티키를 선택하면 플로팅 메뉴가 그대로 뜨고 색·모양·정렬·서식이 `updateElements`로 전체에 한 번에 적용된다. "텍스트 박스 추가"·"연동"은 단일 선택 전용.
+- **보드 ↔ 마인드맵/노트 연동** — 스티키(단일 선택)를 마인드맵 노드나 노트 파일에 연동(`BoardNodePicker`/`BoardNoteLinkPicker`). 링크는 스티키 쪽에 저장되는 단방향 참조(`BoardStickyElement.nodeLink`/`.noteLink`)라 대상 쪽 GC 훅이 없다 — 못 찾으면 토스트로 알린다. 카드 안 칩을 누르면 그 노드/노트로 이동(`board/boardLinks.ts`, `note/noteLinks.ts`의 `revealNode`와 동일한 해석 로직을 도메인 경계상 별도 구현). e2e `board-power-features` 10건.
+- **태그 바(색상 태그 범례)** — 경로 바 바로 아래(`src/panes/TagBar.tsx`)에서 이 맵(또는 보드)에 쓰인 색상 태그에 이름을 붙이고 칩으로 표시, 클릭 시 필터. 하단 캔버스 툴바의 기존 색 점 필터를 대체한다. 명세: `docs/product/specs/2026-09-03-color-tag-legend.md`. e2e `tagbar-color-legend` 3건.
+
+### 리팩터
+- 이미지 처리 공용 로직을 `note/imageInsert.ts` → `io/imageAssets.ts`로 이동 — 보드도 동일 로직이 필요해 `note/` 도메인 내부 파일이 아니라 공유 계층(`io/`)에 두는 게 아키텍처 경계상 맞다.
+
 ## [0.12.0] - 2026-09-01
 
 ### 새 기능
