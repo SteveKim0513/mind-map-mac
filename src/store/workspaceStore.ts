@@ -113,7 +113,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       let cur = s.root;
       for (const part of parts) {
         cur = `${cur}/${part}`;
-        if (cur !== path || (!path.endsWith('.md') && !path.endsWith('.mind'))) next[cur] = true;
+        if (cur !== path || (!path.endsWith('.md') && !path.endsWith('.mind') && !path.endsWith('.board')))
+          next[cur] = true;
       }
       return { expanded: next };
     }),

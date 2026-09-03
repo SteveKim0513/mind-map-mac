@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'rea
 import { createPortal } from 'react-dom';
 import { useEditorState, type Editor } from '@tiptap/react';
 import { Icon } from '../ui/Icon';
-import { fileToDataUrl } from './imageInsert';
+import { fileToDataUrl } from '../io/imageAssets';
 import type { MetaTemplate } from '../types';
 import type { TemplateSummary } from '../../electron/preload';
 

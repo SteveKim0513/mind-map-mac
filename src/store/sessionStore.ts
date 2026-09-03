@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { createMapStore, type MapStore } from './mapStore';
 import { createNoteStore, type NoteStore } from './noteStore';
+import { createBoardStore, type BoardStore } from './boardStore';
 import { deserialize, serialize, newId } from './../io/formats';
 import { parseNote, serializeNote } from './../io/noteFormat';
+import { parseBoard, serializeBoard } from './../io/boardFormat';
 import { useUi } from './uiStore';
 
-export type TabKind = 'map' | 'note' | 'calendar';
+export type TabKind = 'map' | 'note' | 'board' | 'calendar';
 
 export interface Tab {
   id: string;
@@ -14,12 +16,17 @@ export interface Tab {
   kind: TabKind;
   isTemplate: boolean;
   // calendar tabs have no backing file/store — `null` marks that case.
-  store: MapStore | NoteStore | null;
+  store: MapStore | NoteStore | BoardStore | null;
 }
 
 /** true when this path should open as a Markdown note (vs a .mind map). */
 export function isNotePath(path: string): boolean {
   return path.endsWith('.md');
+}
+
+/** true when this path should open as a board (moodboard) file. */
+export function isBoardPath(path: string): boolean {
+  return path.endsWith('.board');
 }
 
 /** true when this path lives in the hidden Note Template folder (.templates/). */
@@ -63,8 +70,9 @@ interface SessionState {
 
   // queries
   activeTab: () => Tab | null;
-  activeStore: () => MapStore | null; // map-only (null when a note tab is active)
+  activeStore: () => MapStore | null; // map-only (null when a note/board tab is active)
   activeNoteStore: () => NoteStore | null;
+  activeBoardStore: () => BoardStore | null;
   tabById: (id: string | null) => Tab | undefined;
 
   // actions
@@ -93,7 +101,7 @@ interface SessionState {
 }
 
 function base(path: string): string {
-  return (path.split('/').pop() ?? path).replace(/\.(mind|md)$/, '');
+  return (path.split('/').pop() ?? path).replace(/\.(mind|md|board)$/, '');
 }
 
 /** Write out a tab's pending (debounced) edit immediately, if it has one.
@@ -107,6 +115,12 @@ async function flushTab(t: Tab): Promise<void> {
     if (st.dirty && st.filePath) {
       const p = await window.api.save(st.filePath, serializeNote(st.note));
       if (p) (t.store as NoteStore).getState().markSaved(p);
+    }
+  } else if (t.kind === 'board') {
+    const st = (t.store as BoardStore).getState();
+    if (st.dirty && st.filePath) {
+      const p = await window.api.save(st.filePath, serializeBoard(st.board));
+      if (p) (t.store as BoardStore).getState().markSaved(p);
     }
   } else {
     const st = (t.store as MapStore).getState();
@@ -123,6 +137,11 @@ function makeTab(path: string, content: string): Tab {
     const store = createNoteStore();
     store.getState().loadNote(parseNote(content, base(path)), path);
     return { id: newId(), path, title: base(path), kind: 'note', isTemplate, store };
+  }
+  if (isBoardPath(path)) {
+    const store = createBoardStore();
+    store.getState().loadBoard(parseBoard(content), path);
+    return { id: newId(), path, title: base(path), kind: 'board', isTemplate, store };
   }
   const store = createMapStore();
   store.getState().loadDoc(deserialize(content), path);
@@ -263,6 +282,10 @@ export const useSession = create<SessionState>((set, get) => {
     activeNoteStore: () => {
       const t = get().activeTab();
       return t && t.kind === 'note' ? (t.store as NoteStore) : null;
+    },
+    activeBoardStore: () => {
+      const t = get().activeTab();
+      return t && t.kind === 'board' ? (t.store as BoardStore) : null;
     },
 
     openPath: (path, content) => {
@@ -405,11 +428,7 @@ export const useSession = create<SessionState>((set, get) => {
       const g = groupOf(tabId);
       if (g === -1) return Promise.resolve();
       const closing = get().tabs.find((t) => t.id === tabId);
-      const dirty = closing?.store
-        ? closing.kind === 'note'
-          ? (closing.store as NoteStore).getState().dirty
-          : (closing.store as MapStore).getState().dirty
-        : false;
+      const dirty = closing?.store ? closing.store.getState().dirty : false;
       // Flush a dirty tab's pending autosave to disk BEFORE discarding it — the
       // debounced write in Pane.tsx/NoteEditor.tsx is still ~1s out when a tab is
       // closed right after an edit, and closing used to just drop that state.
@@ -566,7 +585,7 @@ export const useSession = create<SessionState>((set, get) => {
     // capture scratch file, since skipping the reload just reopens the race.
     reloadIfOpen: async (path) => {
       const tab = get().tabs.find(
-        (t) => t.path === path && (t.kind === 'map' || t.kind === 'note'),
+        (t) => t.path === path && (t.kind === 'map' || t.kind === 'note' || t.kind === 'board'),
       );
       if (!tab || !tab.store) return;
       try {
@@ -577,6 +596,8 @@ export const useSession = create<SessionState>((set, get) => {
           // edited by another app/device refreshes instead of being clobbered by
           // this tab's stale autosave.
           (tab.store as NoteStore).getState().loadNote(parseNote(content, base(path)), path);
+        } else if (tab.kind === 'board') {
+          (tab.store as BoardStore).getState().loadBoard(parseBoard(content), path);
         } else {
           (tab.store as MapStore).getState().loadDoc(deserialize(content), path);
         }

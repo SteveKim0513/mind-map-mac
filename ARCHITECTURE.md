@@ -23,7 +23,8 @@ MindMap은 **Electron + React + TypeScript** macOS 데스크탑 앱이다.
 │  store/             (Zustand 상태 — mapStore 등)     │
 │       ↓                                              │
 │  Domain Modules:                                     │
-│    canvas/  note/  focus/  sync/  search/  layout/  │
+│    canvas/  note/  board/  focus/  sync/  search/    │
+│    layout/                                           │
 │       ↓                                              │
 │  UI Modules:                                         │
 │    ui/  sidebar/  panes/  inspector/  menu/          │
@@ -38,14 +39,16 @@ MindMap은 **Electron + React + TypeScript** macOS 데스크탑 앱이다.
 | 모듈 | 책임 | 핵심 파일 |
 |---|---|---|
 | `types.ts` | 공유 인터페이스 (MindNode, MindMapDoc, NoteDoc …) | `src/types.ts` |
-| `io/` | 직렬화·역직렬화, Markdown/OPML 변환, 자동 이름 생성 | `formats.ts`, `noteFormat.ts` |
+| `io/` | 직렬화·역직렬화, Markdown/OPML 변환, 자동 이름 생성, 이미지 자산 처리 | `formats.ts`, `noteFormat.ts`, `boardFormat.ts`, `imageAssets.ts` |
 | `theme/` | 색상 팔레트 (시맨틱 키 → CSS 값) | `palette.ts` |
 | `store/mapStore` | 노드 트리, 선택, 히스토리(undo/redo) | `mapStore.ts` |
 | `store/noteStore` | 노트 인덱스, 워크스페이스 스캔 | `noteStore.ts` |
+| `store/boardStore` | 보드 요소(text/sticky/image/shape/connector) CRUD, 선택, z-order | `boardStore.ts` |
 | `store/sessionStore` | 탭, 분할 패널, 세션 영속성 | `sessionStore.ts` |
 | `store/uiStore` | 모달, 토스트, 업데이트 상태 | `uiStore.ts` |
 | `canvas/` | SVG 엣지 + React 노드 뷰, 캔버스 오버레이 | `Canvas.tsx`, `NodeView.tsx` |
 | `note/` | Tiptap 에디터, 마크다운 변환, 노드 링크 | `NoteEditor.tsx`, `markdown.tsx` |
+| `board/` | 무드보드 캔버스(자유배치·드래그·리사이즈), 툴바 | `BoardPane.tsx`, `BoardCanvasArea.tsx` |
 | `focus/` | 포커스 세션 기록, 대시보드, 집계 | `FocusWidget.tsx`, `agenda.ts` |
 | `sync/` | macOS Reminders 양방향 동기화 | `reminderSync.ts`, `resolveReminder.ts` |
 | `layout/` | d3-hierarchy 트리 레이아웃 계산 | `treeLayout.ts`, `measure.ts` |
@@ -79,6 +82,7 @@ MindMap은 **Electron + React + TypeScript** macOS 데스크탑 앱이다.
 | 명시적 자정 vs 종일 구분을 위한 allDay 필드 | `docs/decisions/0017-allday-field-explicit-midnight.md` |
 | 관리형 오버레이 스택 — 닫기/Esc의 한 단계 복귀 | `docs/decisions/0018-overlay-esc-stack.md` |
 | exec-plan step 상태 머신 + 위임 명세 표준 | `docs/decisions/0019-exec-plan-step-state-machine.md` |
+| 보드는 절대좌표 자유배치 문서를 가진 세 번째 독립 파일 타입 | `docs/decisions/0020-board-file-type.md` |
 
 ## 경계 규칙 (기계적으로 강제)
 

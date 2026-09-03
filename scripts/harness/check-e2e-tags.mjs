@@ -22,7 +22,7 @@ const E2E = path.join(ROOT, 'e2e');
 // .claude/rules/testing.md 의 태그 표도 함께 갱신한다.
 const DOMAIN = new Set([
   '@map', '@calendar', '@schedule', '@focus', '@todo',
-  '@note', '@capture', '@command', '@nav', '@view',
+  '@note', '@capture', '@command', '@nav', '@view', '@board',
 ]);
 
 // 실행 방식을 나타내는 수식 태그 (도메인과 직교). @serial: 포커스/frontmost 같은

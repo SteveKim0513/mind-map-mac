@@ -203,6 +203,50 @@ const PATHS: Record<string, ReactNode> = {
       <path d="M6 10.8h8M6 13.2h5" />
     </>
   ),
+  board: (
+    <>
+      <rect x="3" y="3.5" width="7" height="6" rx="1.2" />
+      <circle cx="14.5" cy="6" r="3" />
+      <rect x="4.5" y="12" width="11" height="4.5" rx="1.2" />
+    </>
+  ),
+  rectShape: <rect x="3.5" y="5" width="13" height="10" rx="1.6" />,
+  ellipseShape: <ellipse cx="10" cy="10" rx="6.5" ry="5.5" />,
+  sticky: (
+    <>
+      <path d="M4 3.5h8.5L16 7v9.5H4z" />
+      <path d="M12.5 3.5V7H16" />
+    </>
+  ),
+  alignLeft: <path d="M4 5.5h12M4 9h8M4 12.5h10M4 16h6" />,
+  alignCenter: <path d="M4 5.5h12M6 9h8M5 12.5h10M7 16h6" />,
+  alignRight: <path d="M4 5.5h12M8 9h8M6 12.5h10M10 16h6" />,
+  valignTop: (
+    <>
+      <rect x="4" y="3.5" width="12" height="13" rx="1.5" />
+      <path d="M6.5 6.7h7" />
+    </>
+  ),
+  valignMiddle: (
+    <>
+      <rect x="4" y="3.5" width="12" height="13" rx="1.5" />
+      <path d="M6.5 10h7" />
+    </>
+  ),
+  layout: (
+    <>
+      <rect x="3" y="8" width="5" height="4" rx="1" />
+      <rect x="12" y="3" width="5" height="4" rx="1" />
+      <rect x="12" y="13" width="5" height="4" rx="1" />
+      <path d="M8 10h2.5M10.5 10V5M10.5 10v10M10.5 5H12M10.5 15H12" />
+    </>
+  ),
+  valignBottom: (
+    <>
+      <rect x="4" y="3.5" width="12" height="13" rx="1.5" />
+      <path d="M6.5 13.3h7" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;

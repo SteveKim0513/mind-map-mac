@@ -158,9 +158,9 @@ function createWindow() {
     titleBarStyle: 'hiddenInset',
     // Off-screen (not showInactive()/focusable tricks — those broke real
     // window-focus mechanics, e.g. the win.focus()-driven sidebar refresh
-    // test) so it never visually covers whatever else is on screen. This
-    // doesn't stop the one-time OS app-activation blip on launch, but it
-    // does stop an actual window from popping up over other work.
+    // test) so it never visually covers whatever else is on screen. Paired
+    // with the 'accessory' activation policy set below, which stops the
+    // launch-time app-activation blip from stealing OS keyboard focus.
     ...(E2E_QUIET ? { x: -3000, y: -3000 } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -257,6 +257,15 @@ function showCaptureWindow() {
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return; // a second instance is quitting — set nothing up
   log.info(`[app] start v${app.getVersion()} on ${process.platform}`);
+  // 'accessory' apps (macOS's LSUIElement equivalent) don't appear in the
+  // Dock/Cmd+Tab and aren't auto-activated on launch, so an E2E run doesn't
+  // steal keyboard focus from whatever the developer is doing elsewhere.
+  // Explicit win.focus() calls (the @serial file-management focus test) still
+  // work — accessory only suppresses automatic activation, not an intentional
+  // one triggered from within the app itself.
+  if (E2E_QUIET && process.platform === 'darwin') {
+    app.setActivationPolicy('accessory');
+  }
   buildMenu();
   createWindow();
   initAutoUpdate(() => win);
@@ -334,14 +343,14 @@ async function atomicWrite(target: string, data: string | Buffer): Promise<void>
 }
 
 // IF-04 · External-change (cloud conflict) detection. The main process remembers
-// the mtime of every .mind/.md it reads or writes; if a file's mtime later jumps
+// the mtime of every .mind/.md/.board it reads or writes; if a file's mtime later jumps
 // ahead of that baseline, something ELSE (iCloud/Dropbox sync, another app or
 // device) changed it under us. `fs:externalChange` surfaces that so the renderer
 // can offer to reload — without touching the save path at all.
 const seenMtime = new Map<string, number>();
 async function recordSeen(target: string): Promise<void> {
   const ext = path.extname(target);
-  if (ext !== '.mind' && ext !== '.md') return;
+  if (ext !== '.mind' && ext !== '.md' && ext !== '.board') return;
   try {
     const st = await fs.stat(target);
     seenMtime.set(path.resolve(target), st.mtimeMs);
@@ -351,7 +360,7 @@ async function recordSeen(target: string): Promise<void> {
 }
 
 // IF-04 / D6 · Did `target` change on disk since we last read/wrote it? Mirrors the
-// mtime comparison in `fs:externalChange` (`st.mtimeMs > base + 1`). Only .mind/.md
+// mtime comparison in `fs:externalChange` (`st.mtimeMs > base + 1`). Only .mind/.md/.board
 // files have a baseline in `seenMtime`, so this returns false for everything else.
 async function changedSinceSeen(target: string): Promise<boolean> {
   const base = seenMtime.get(path.resolve(target));
@@ -365,7 +374,7 @@ async function changedSinceSeen(target: string): Promise<boolean> {
 }
 
 // ─── Local version history (IF-02) ───────────────────────────────────────────
-// Every overwrite of a .mind/.md file first copies the CURRENT bytes into a
+// Every overwrite of a .mind/.md/.board file first copies the CURRENT bytes into a
 // hidden <workspace>/.history/<file-key>/<timestamp>.<ext> snapshot, so a user
 // can roll a map or note back to an earlier point — a local, offline, free
 // "time machine" that survives restarts (unlike in-memory undo). Snapshots are
@@ -382,7 +391,7 @@ function historyKey(rel: string): string {
 
 async function snapshotVersion(target: string, opts?: { force?: boolean }): Promise<void> {
   const ext = path.extname(target);
-  if (ext !== '.mind' && ext !== '.md') return; // only user content is versioned
+  if (ext !== '.mind' && ext !== '.md' && ext !== '.board') return; // only user content is versioned
   let ws: string;
   try {
     ws = await getWorkspace();
@@ -607,7 +616,7 @@ interface TreeNode {
   mtimeMs?: number; // files only — powers the "최근 수정" smart view (REDESIGN-VISION §3-3)
 }
 
-/** Recursively list folders, .mind maps, and .md notes (hidden entries skipped). */
+/** Recursively list folders, .mind maps, .board moodboards, and .md notes (hidden entries skipped). */
 async function walk(dir: string): Promise<TreeNode[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const nodes: TreeNode[] = [];
@@ -617,7 +626,7 @@ async function walk(dir: string): Promise<TreeNode[]> {
     const full = path.join(dir, ent.name);
     if (ent.isDirectory()) {
       nodes.push({ name: ent.name, path: full, type: 'dir', children: await walk(full) });
-    } else if (ent.name.endsWith('.mind') || ent.name.endsWith('.md')) {
+    } else if (ent.name.endsWith('.mind') || ent.name.endsWith('.md') || ent.name.endsWith('.board')) {
       const stat = await fs.stat(full);
       nodes.push({ name: ent.name, path: full, type: 'file', mtimeMs: stat.mtimeMs });
     }
@@ -876,7 +885,9 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
       ? '.mind'
       : args.newName.endsWith('.md')
         ? '.md'
-        : '';
+        : args.newName.endsWith('.board')
+          ? '.board'
+          : '';
     const base = ext ? args.newName.slice(0, -ext.length) : args.newName;
     try {
       await fs.access(next);
@@ -920,9 +931,9 @@ ipcMain.handle('fs:rename', async (_e, args: { path: string; newName: string }) 
     /* history relocation is best-effort — never fail the rename over it */
   }
 
-  // Keep the companion image-assets directory in sync with the renamed note
+  // Keep the companion image-assets directory in sync with the renamed note/board
   // (also upgrades a pre-0.8.3 visible folder to the hidden naming convention).
-  if (path.extname(next) === '.md') {
+  if (path.extname(next) === '.md' || path.extname(next) === '.board') {
     const oldStem = path.basename(src, path.extname(src));
     const newStem = path.basename(next, path.extname(next));
     const found = await findAssetsDir(path.dirname(src), oldStem);
@@ -1003,8 +1014,9 @@ async function purgeExpiredTrash(metaFile: string): Promise<TrashEntry[]> {
     } catch {
       await fs.rm(it.trashedPath, { recursive: true, force: true });
     }
-    if (path.extname(it.trashedPath) === '.md') {
-      const stem = path.basename(it.trashedPath, '.md');
+    const assetExt = path.extname(it.trashedPath);
+    if (assetExt === '.md' || assetExt === '.board') {
+      const stem = path.basename(it.trashedPath, assetExt);
       const found = await findAssetsDir(path.dirname(it.trashedPath), stem);
       if (found) {
         try {
@@ -1030,8 +1042,8 @@ ipcMain.handle('trash:move', async (_e, target: string) => {
   const dest = await uniquePath(dir, stem, ext); // never clobber inside .trash
   await fs.rename(target, dest);
 
-  // Move the companion image-assets folder into trash alongside the .md file.
-  if (ext === '.md') {
+  // Move the companion image-assets folder into trash alongside the .md/.board file.
+  if (ext === '.md' || ext === '.board') {
     const found = await findAssetsDir(path.dirname(target), stem);
     if (found) await relocateAssetsDir(found, dir, path.basename(dest, ext), dest);
   }
@@ -1082,9 +1094,10 @@ ipcMain.handle('trash:restore', async (_e, trashedPath: string) => {
   }
   await fs.rename(it.trashedPath, dest);
 
-  // Restore the companion image-assets folder if it was trashed alongside the note.
-  if (path.extname(it.trashedPath) === '.md') {
-    const trashedStem = path.basename(it.trashedPath, '.md');
+  // Restore the companion image-assets folder if it was trashed alongside the note/board.
+  const restoreExt = path.extname(it.trashedPath);
+  if (restoreExt === '.md' || restoreExt === '.board') {
+    const trashedStem = path.basename(it.trashedPath, restoreExt);
     const found = await findAssetsDir(path.dirname(it.trashedPath), trashedStem);
     if (found) await relocateAssetsDir(found, path.dirname(dest), path.basename(dest, path.extname(dest)), dest);
   }
@@ -1103,8 +1116,9 @@ ipcMain.handle('trash:deleteOne', async (_e, trashedPath: string) => {
     await fs.rm(trashedPath, { recursive: true, force: true });
   }
   // Also permanently delete the companion image-assets folder if present.
-  if (path.extname(trashedPath) === '.md') {
-    const stem = path.basename(trashedPath, '.md');
+  const deleteOneExt = path.extname(trashedPath);
+  if (deleteOneExt === '.md' || deleteOneExt === '.board') {
+    const stem = path.basename(trashedPath, deleteOneExt);
     const found = await findAssetsDir(path.dirname(trashedPath), stem);
     if (found) {
       try {
@@ -1131,8 +1145,9 @@ ipcMain.handle('trash:empty', async () => {
       await fs.rm(it.trashedPath, { recursive: true, force: true });
     }
     // Also delete the companion image-assets folder if present.
-    if (path.extname(it.trashedPath) === '.md') {
-      const stem = path.basename(it.trashedPath, '.md');
+    const emptyExt = path.extname(it.trashedPath);
+    if (emptyExt === '.md' || emptyExt === '.board') {
+      const stem = path.basename(it.trashedPath, emptyExt);
       const found = await findAssetsDir(path.dirname(it.trashedPath), stem);
       if (found) {
         try {
@@ -1155,9 +1170,15 @@ ipcMain.handle('fs:move', async (_e, args: { src: string; destDir: string }) => 
   const name = path.basename(src);
   if (path.dirname(src) === destDir) return null; // already there
   if (destDir === src || destDir.startsWith(src + path.sep)) return null; // into itself
-  // recognize BOTH app extensions — a bare '' ext would make uniquePath emit
+  // recognize all app extensions — a bare '' ext would make uniquePath emit
   // "foo.md 2" (no extension), invisible to the sidebar walk (= vanished note)
-  const ext = name.endsWith('.mind') ? '.mind' : name.endsWith('.md') ? '.md' : '';
+  const ext = name.endsWith('.mind')
+    ? '.mind'
+    : name.endsWith('.md')
+      ? '.md'
+      : name.endsWith('.board')
+        ? '.board'
+        : '';
   const base = ext ? name.slice(0, -ext.length) : name;
   let target = path.join(destDir, name);
   try {
@@ -1168,11 +1189,11 @@ ipcMain.handle('fs:move', async (_e, args: { src: string; destDir: string }) => 
   }
   await fs.rename(src, target);
 
-  // Move the companion image-assets folder when moving a .md note.
-  if (name.endsWith('.md')) {
-    const srcStem = name.slice(0, -'.md'.length);
+  // Move the companion image-assets folder when moving a .md note or .board file.
+  if (ext === '.md' || ext === '.board') {
+    const srcStem = name.slice(0, -ext.length);
     const found = await findAssetsDir(path.dirname(src), srcStem);
-    if (found) await relocateAssetsDir(found, destDir, path.basename(target, '.md'), target);
+    if (found) await relocateAssetsDir(found, destDir, path.basename(target, ext), target);
   }
 
   return target;

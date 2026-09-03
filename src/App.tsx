@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sidebar } from './sidebar/Sidebar';
 import { TabBar } from './panes/TabBar';
 import { PathBar } from './panes/PathBar';
+import { TagBar } from './panes/TagBar';
 import { Pane } from './panes/Pane';
 import { NotePane } from './note/NotePane';
+import { BoardPane } from './board/BoardPane';
 import { NotePopup } from './note/NotePopup';
 import { FocusOverlay } from './focus/FocusWidget';
 import { WorkHistory } from './focus/WorkHistory';
@@ -142,10 +144,10 @@ export default function App() {
     return window.api.onWorkspaceFocus(() => {
       void useWorkspace.getState().refresh();
       for (const t of useSession.getState().tabs) {
-        // Maps AND notes (both back real files) get external-change detection —
-        // an open note edited by another app/device used to be silently
-        // overwritten by this tab's autosave (calendar has no backing file).
-        if ((t.kind !== 'map' && t.kind !== 'note') || !t.path) continue;
+        // Maps, notes, AND boards (all back real files) get external-change
+        // detection — an open file edited by another app/device used to be
+        // silently overwritten by this tab's autosave (calendar has no backing file).
+        if ((t.kind !== 'map' && t.kind !== 'note' && t.kind !== 'board') || !t.path) continue;
         const p = t.path;
         const title = t.title;
         void window.api.externalChange(p).then(({ changed, mtime }) => {
@@ -407,6 +409,13 @@ export default function App() {
           isActive={effectiveGroup === group}
           onActivate={() => useSession.getState().setActiveGroup(group)}
         />
+      ) : tab.kind === 'board' ? (
+        <BoardPane
+          key={tab.id}
+          tab={tab}
+          isActive={effectiveGroup === group}
+          onActivate={() => useSession.getState().setActiveGroup(group)}
+        />
       ) : (
         <Pane
           key={tab.id}
@@ -462,6 +471,7 @@ export default function App() {
         />
 
         <PathBar leftTab={leftTab} rightTab={rightTab} split={split} />
+        <TagBar leftTab={leftTab} rightTab={rightTab} split={split} />
 
         <div className={`panes${split ? ' split' : ''}`}>
           {renderPane(leftTab, 0)}

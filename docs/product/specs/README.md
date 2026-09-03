@@ -21,6 +21,7 @@
 - [2026-07-15-calendar-execute-insight.md](2026-07-15-calendar-execute-insight.md) — 캘린더 강화 Phase 1+2: 드래그 리스케줄·주간 시간그리드·빈슬롯 캡처 + 계획↔실행 오버레이
 - [2026-07-15-calendar-timeblocking.md](2026-07-15-calendar-timeblocking.md) — 캘린더 강화 Phase 3: 타임블로킹(`durationMin` 선택 필드, 블록 높이·겹침·리사이즈), [decisions/0012](../../decisions/0012-node-duration-field.md)
 - [2026-07-16-todo-node.md](2026-07-16-todo-node.md) — 할 일(todo) 노드: 생각과 실행 분리. 완료·일정·집중은 todo 노드 전용, [decisions/0014](../../decisions/0014-todo-node.md)
+- [2026-09-03-board-moodboard.md](2026-09-03-board-moodboard.md) — 보드(무드보드): 텍스트·스티키·이미지·도형·연결선 자유배치 캔버스, 세 번째 독립 파일 타입, [decisions/0020](../../decisions/0020-board-file-type.md)
 
 ## 명세만 완료 · 구현 예정 / 아이디어 단계
 
@@ -29,6 +30,7 @@
 - [2026-06-15-release-history.md](2026-06-15-release-history.md) — 배포 내역 기록 + 사용자 가시성
 - [2026-07-16-calendar-ux-overhaul.md](2026-07-16-calendar-ux-overhaul.md) — 캘린더 UX 개선: 스케줄 클릭→서브트리 미리보기→우측 분할, 통합 일정 생성(기존 노드 검색+오늘의 생각), 종일/시간 옵트인, 월간 스크롤
 - [2026-07-16-calendar-schedule-add-consolidation.md](2026-07-16-calendar-schedule-add-consolidation.md) — 일정 추가 진입점 일관화(공용 헤더 버튼 + 토글 상시 + Escape 닫기 + hover 힌트). ux-audit 라이브 워크스루 기반
+- [2026-09-03-color-tag-legend.md](2026-09-03-color-tag-legend.md) — 색상 태그 범례: 맵별 색상 라벨 정의 + 경로 바 아래 태그 바(클릭 필터), 기존 하단 색상 필터 대체
 
 ## 폐기 (기록용, 대체 문서 참고)
 

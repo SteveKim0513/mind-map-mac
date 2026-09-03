@@ -1,3 +1,5 @@
+import type { TagKey } from './theme/palette';
+
 /** A single mind-map node. Tree structure is encoded via parentId + children order. */
 export interface MindNode {
   id: string;
@@ -69,6 +71,10 @@ export interface MindMapDoc {
   nodes: Record<string, MindNode>;
   connections?: Connection[]; // node-to-node cross links
   sections?: Section[]; // grouping regions
+  // 색상 태그 범례(2026-09-03): 이 맵에서 각 태그 키에 붙인 사용자 라벨. 문서별로
+  // 독립 저장 — 다른 맵과 공유되지 않는다. 옵션·가산 필드라 version 무범프(결정
+  // 0012 선례). 값이 없는 키는 theme/palette.ts의 TAG_DEFAULT_LABELS로 대체 표시.
+  tagLabels?: Partial<Record<TagKey, string>>;
   view: { zoom: number; panX: number; panY: number };
 }
 
@@ -158,4 +164,105 @@ export interface PositionedEdge {
   target: { x: number; y: number };
   rootId: string; // id of the root this edge belongs to
   depth: number; // depth of the parent (drives connector thickness/hierarchy)
+}
+
+// ── Board (moodboard) — free-placement canvas, decision 0020 ──────────────────
+// A third, independent file type (.board). No tree structure: elements sit at
+// absolute world coordinates. `BoardDoc.order` is the z-order (back→front) —
+// the single source of truth for stacking, same "flat record + ordered id
+// list" shape as MindMapDoc's nodes/rootIds.
+//
+// v1 redesigned around "sticky notes + arrows" (2026-09-03 UX feedback): plain
+// shapes/text boxes were dropped, and connectors are never freestanding — they
+// always attach two elements by id + anchor side, so they follow when either
+// end moves (geometry is derived at render time, never stored as fixed points).
+
+export type BoardElementKind = 'sticky' | 'image' | 'connector';
+
+interface BoardBoxElement {
+  id: string;
+  x: number; // world coords, top-left
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number; // degrees, optional (0 when absent)
+}
+
+/** Outline shape of a sticky note — a second, filterable tag axis alongside
+ *  `color` (same UX as the color filter: pick one, board dims everything else). */
+export type StickyShape = 'rect' | 'ellipse';
+
+export type StickyAlign = 'left' | 'center' | 'right';
+export type StickyValign = 'top' | 'middle' | 'bottom';
+export type StickyFontSize = 'small' | 'medium' | 'large';
+
+export interface BoardStickyElement extends BoardBoxElement {
+  kind: 'sticky';
+  text: string;
+  color?: string; // tag-palette key (background) — see theme/palette.ts
+  shape?: StickyShape; // default 'rect' when absent
+  align?: StickyAlign; // horizontal, default 'left' when absent
+  valign?: StickyValign; // vertical, default 'top' when absent
+  fontSize?: StickyFontSize; // default 'medium' when absent
+  bold?: boolean;
+  // Extra text blocks stacked BELOW the sticky's own box (2026-09-03 UX
+  // feedback) — visually outside the main card, but permanently fused to it:
+  // always part of THIS sticky, move/select/delete with it, never an
+  // independent, separately-positioned element. Any number, stacking downward.
+  notes?: string[];
+  // ── Board ↔ mindmap linking (2026-09-03) ── forward references stored on
+  // the sticky itself, mirroring the note↔node "연동" entry point but
+  // one-directional and un-indexed: no reverse lookup, no rename/delete GC
+  // hooks (board/boardLinks.ts resolves lazily and degrades gracefully — same
+  // "stale hint, fall back, toast on failure" shape as NoteLink.mapPath).
+  nodeLink?: NoteLink; // links this sticky to a mindmap node
+  noteLink?: BoardNoteRef; // links this sticky to a note file
+}
+
+/** A sticky's forward reference to a note file — see `BoardStickyElement.noteLink`. */
+export interface BoardNoteRef {
+  notePath: string;
+  title?: string; // cached label snapshot; may go stale if the note is renamed
+}
+
+/** `src` is a path relative to the board file, resolved against its own
+ *  `.{stem}.assets/` hidden folder — same convention as note images (decision 0010). */
+export interface BoardImageElement extends BoardBoxElement {
+  kind: 'image';
+  src: string;
+  alt?: string;
+}
+
+/** One of a connector's four attachment points on an element's bounding box
+ *  (mid-edge, regardless of the element's own outline shape). */
+export type BoardAnchorSide = 'top' | 'right' | 'bottom' | 'left';
+
+/** An arrow between two existing elements, referenced by id — never a free-
+ *  floating line (2026-09-03 UX feedback). Endpoint coordinates are always
+ *  derived from the current `fromId`/`toId` element boxes, so the arrow
+ *  follows automatically when either element moves. */
+export interface BoardConnectorElement {
+  id: string;
+  kind: 'connector';
+  fromId: string;
+  fromAnchor: BoardAnchorSide;
+  toId: string;
+  toAnchor: BoardAnchorSide;
+  arrow?: boolean; // arrowhead at the `to` end — default true when absent
+  color?: string;
+  label?: string; // short caption shown at the path's midpoint (e.g. "왜냐하면")
+}
+
+export type BoardElement = BoardStickyElement | BoardImageElement | BoardConnectorElement;
+
+/** A standalone moodboard document, stored as JSON (.board). */
+export interface BoardDoc {
+  version: 1;
+  id?: string; // stable doc id, backfilled on load (parity with MindMapDoc.id)
+  elements: Record<string, BoardElement>;
+  order: string[]; // z-order, back→front
+  // Per-board label for each tag color key — same TagBar UX as MindMapDoc.tagLabels
+  // (색상 태그 범례, 2026-09-03). Independent per file, not shared with maps.
+  tagLabels?: Partial<Record<TagKey, string>>;
+  view: { zoom: number; panX: number; panY: number };
 }

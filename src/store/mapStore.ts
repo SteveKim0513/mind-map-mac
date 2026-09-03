@@ -1,6 +1,7 @@
 import { createStore, useStore, type StoreApi } from 'zustand';
 import { createContext, useContext } from 'react';
 import type { MindMapDoc, MindNode } from '../types';
+import type { TagKey } from '../theme/palette';
 import { emptyDoc, newId } from '../io/formats';
 import { parseScheduleText, parseHashtagColor } from './parseNodeText';
 import { resolveOverlaps, type TidyBox } from '../layout/tidyOverlaps';
@@ -106,6 +107,9 @@ interface MapState {
   filterDescendants: boolean;
   toggleFilterAncestors: () => void;
   toggleFilterDescendants: () => void;
+  // 색상 태그 범례: 이 맵에서 태그 키에 붙인 라벨(history-tracked). 빈 문자열은
+  // 해당 키를 tagLabels에서 제거 — 기본 이름(TAG_DEFAULT_LABELS)으로 롤백.
+  setTagLabel: (key: TagKey, label: string) => void;
 
   // structure mutations (history-tracked)
   addRoot: () => void;
@@ -293,6 +297,18 @@ export function createMapStore(): MapStore {
       set((s) => ({ filterAncestors: !s.filterAncestors, docEpoch: s.docEpoch + 1 })),
     toggleFilterDescendants: () =>
       set((s) => ({ filterDescendants: !s.filterDescendants, docEpoch: s.docEpoch + 1 })),
+    setTagLabel: (key, label) =>
+      commit((d) => {
+        if (!label) {
+          if (d.tagLabels) {
+            delete d.tagLabels[key];
+            if (Object.keys(d.tagLabels).length === 0) delete d.tagLabels;
+          }
+          return;
+        }
+        d.tagLabels ??= {};
+        d.tagLabels[key] = label;
+      }),
 
     loadDoc: (doc, filePath) =>
       set((s) => ({

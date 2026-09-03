@@ -5,12 +5,22 @@ import { Icon } from '../ui/Icon';
 import type { Tab, GroupIndex } from '../store/sessionStore';
 import type { MapStore } from '../store/mapStore';
 import type { NoteStore } from '../store/noteStore';
+import type { BoardStore } from '../store/boardStore';
 import { useDismissablePosition } from '../ui/useDismissablePosition';
 
-function TabDirty({ store }: { store: MapStore | NoteStore }) {
-  // both map and note stores expose `dirty`
+function TabDirty({ store }: { store: MapStore | NoteStore | BoardStore }) {
+  // map, note, and board stores all expose `dirty`
   const dirty = useStore(store as MapStore, (s) => s.dirty);
   return dirty ? <span className="tab-dirty" title="저장되지 않음" /> : null;
+}
+
+function tabIconName(kind: Tab['kind']): 'note' | 'board' | 'calendar' | 'mindmap' {
+  return kind === 'note' ? 'note' : kind === 'board' ? 'board' : kind === 'calendar' ? 'calendar' : 'mindmap';
+}
+
+function tabKindLabel(t: Tab): string {
+  if (t.isTemplate) return '노트 템플릿';
+  return t.kind === 'note' ? '노트' : t.kind === 'board' ? '보드' : t.kind === 'calendar' ? '캘린더' : '마인드맵';
 }
 
 interface Props {
@@ -178,9 +188,9 @@ export function TabBar(p: Props) {
           >
             <span
               className={`tab-ic tab-ic--${t.isTemplate ? 'template' : t.kind}`}
-              title={t.isTemplate ? '노트 템플릿' : t.kind === 'note' ? '노트' : t.kind === 'calendar' ? '캘린더' : '마인드맵'}
+              title={tabKindLabel(t)}
             >
-              <Icon name={t.isTemplate ? 'template' : t.kind === 'note' ? 'note' : t.kind === 'calendar' ? 'calendar' : 'mindmap'} />
+              <Icon name={t.isTemplate ? 'template' : tabIconName(t.kind)} />
             </span>
             <span className="tab-title">{t.title || '제목 없음'}</span>
             {t.store && <TabDirty store={t.store} />}

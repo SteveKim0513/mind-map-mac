@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapContext, useMap, useMapStore, type MapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
@@ -11,7 +11,6 @@ import { LinkAddPopover } from '../inspector/LinkAddPopover';
 import { ContextMenu } from '../menu/ContextMenu';
 import { Breadcrumb } from '../ui/Breadcrumb';
 import { Icon } from '../ui/Icon';
-import { tagVar } from '../theme/palette';
 import { useSession, type Tab } from '../store/sessionStore';
 
 interface Props {
@@ -46,22 +45,10 @@ function PaneBody({
   const dirty = useMap((s) => s.dirty);
   const filePath = useMap((s) => s.filePath);
   const markSaved = useMap((s) => s.markSaved);
-  const colorFilter = useMap((s) => s.colorFilter);
-  const setColorFilter = useMap((s) => s.setColorFilter);
-  const filterAncestors = useMap((s) => s.filterAncestors);
-  const filterDescendants = useMap((s) => s.filterDescendants);
-  const toggleFilterAncestors = useMap((s) => s.toggleFilterAncestors);
-  const toggleFilterDescendants = useMap((s) => s.toggleFilterDescendants);
   const notePopoverId = useUi((s) => s.notePopoverId);
   const schedulePopoverId = useUi((s) => s.schedulePopoverId);
   const addLinkFor = useUi((s) => s.addLinkFor);
   const contextMenu = useUi((s) => s.contextMenu);
-
-  const usedColors = useMemo(() => {
-    const set = new Set<string>();
-    for (const n of Object.values(doc.nodes)) if (n.color) set.add(n.color);
-    return [...set];
-  }, [doc]);
 
   const [handle, setHandle] = useState<CanvasHandle | null>(null);
 
@@ -154,42 +141,6 @@ function PaneBody({
         >
           <Icon name="refresh" />
         </button>
-        {usedColors.length > 0 && (
-          <>
-            <span className="sep" />
-            <span className="filter-dots" title="색상 필터">
-              {usedColors.map((c) => (
-                <button
-                  key={c}
-                  className={`filter-dot${colorFilter === c ? ' on' : ''}`}
-                  style={{ background: tagVar(c) }}
-                  title={colorFilter === c ? '필터 해제' : '이 색만 보기'}
-                  onClick={() => setColorFilter(colorFilter === c ? null : c)}
-                />
-              ))}
-            </span>
-            {colorFilter && (
-              <>
-                <button
-                  className={`tool-btn small${filterAncestors ? ' on' : ''}`}
-                  title="상위 노드 포함"
-                  onClick={toggleFilterAncestors}
-                >
-                  <Icon name="chevronUp" />
-                  상위
-                </button>
-                <button
-                  className={`tool-btn small${filterDescendants ? ' on' : ''}`}
-                  title="하위 노드 포함"
-                  onClick={toggleFilterDescendants}
-                >
-                  <Icon name="chevronDown" />
-                  하위
-                </button>
-              </>
-            )}
-          </>
-        )}
       </div>
 
       {notePopoverId && doc.nodes[notePopoverId] && (

@@ -37,3 +37,4 @@
 - [0017 — 명시적 자정 vs 종일 구분을 위한 `allDay` 필드](0017-allday-field-explicit-midnight.md)
 - [0018 — 관리형 오버레이 스택 — 닫기/Esc의 한 단계 복귀](0018-overlay-esc-stack.md)
 - [0019 — exec-plan step 상태 머신 + 위임 명세 표준](0019-exec-plan-step-state-machine.md)
+- [0020 — 보드는 절대좌표 자유배치 문서를 가진 세 번째 독립 파일 타입](0020-board-file-type.md)

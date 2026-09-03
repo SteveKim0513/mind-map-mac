@@ -36,7 +36,7 @@ description: "테스트 작성 규칙 — Vitest(단위) + Playwright(E2E)"
 test('제목', { tag: ['@calendar', '@schedule'] }, async () => { /* ... */ });
 ```
 
-- **고정 어휘 (10개)**: `@map` `@calendar` `@schedule` `@focus` `@todo` `@note` `@capture` `@command` `@nav` `@view`
+- **고정 어휘 (11개)**: `@map` `@calendar` `@schedule` `@focus` `@todo` `@note` `@capture` `@command` `@nav` `@view` `@board`
 - 한 spec은 여러 태그를 가질 수 있다 → `tag=@todo`로 돌리면 `@todo @map`인 `todo-node`, `@focus @todo`인 `focus-lifecycle`까지 함께 실행돼 "연관 기능"이 자연스럽게 딸려온다.
 - **새 spec·새 test는 반드시 도메인 태그를 단다.** 태그 없는 test는 어떤 부분 실행에도 안 잡혀 개발 루프의 회귀 그물에 구멍이 난다(전체 `pre-release`에는 잡히지만 늦다). `make harness-check`의 `check-e2e-tags.mjs`가 미태깅·도메인 태그 누락·어휘 밖 태그를 실패 처리한다.
 - 새 도메인이 필요하면 `scripts/harness/check-e2e-tags.mjs`의 `DOMAIN`과 이 표를 **먼저** 갱신한다.
@@ -66,7 +66,7 @@ test('제목', { tag: ['@calendar', '@schedule'] }, async () => { /* ... */ });
 - **병렬 실행이 기본이다.** `scripts/e2e-run.mjs`가 병렬(`workers` 기본 로컬 4/CI 2) → `@serial` 직렬 꼬리 2단계로 돌린다. 새 test는 병렬 안전해야 한다 — 파일 내 `test` 간 상태 공유 금지(각자 `launchApp()`으로 격리된 인스턴스를 띄운다), OS 전역 자원(전역 단축키·frontmost·클립보드) 의존 금지.
 - **OS 전역 단축키는 E2E에서 기본 비활성**이다(`MINDMAP_DISABLE_GLOBAL_SHORTCUT`). 병렬 인스턴스가 `Alt+Space` 하나를 두고 경쟁하기 때문. 등록 자체를 검증해야 하는 test만 `launchApp({ globalShortcut: true })`로 opt-in하고, 그런 test는 유일해야 한다(둘 이상이면 서로 경쟁).
 - `MINDMAP_USER_DATA`와 `MINDMAP_WORKSPACE` 환경변수로 실제 데이터와 격리한다 (`e2e/helpers.ts`의 `launchApp()` 사용).
-- `launchApp()`은 `MINDMAP_E2E_QUIET=1`도 함께 설정 — Electron 창을 화면 밖(off-screen, x/y만 이동) 위치에 띄워 실행 중 화면을 가리지 않는다. `showInactive()`/포커스 불가 같은 트릭은 쓰지 않는다 — `win.focus()`가 실제로 창을 포커스시켜야 하는 `file-management.spec.ts`의 "regains focus" 테스트가 깨졌었다(CI에서 실제로 겪음). `CI` 환경변수가 있으면(GitHub Actions) 이 값을 끈다 — CI 러너에서는 어차피 화면을 가릴 사람이 없다. `make dev-safe`는 이 값을 설정하지 않는다 — 사람이 직접 보고 조작해야 한다.
+- `launchApp()`은 `MINDMAP_E2E_QUIET=1`도 함께 설정 — Electron 창을 화면 밖(off-screen, x/y만 이동) 위치에 띄우고, macOS에서는 앱 활성화 정책을 `accessory`(LSUIElement 상당)로 바꿔 Dock/Cmd+Tab에도 안 뜨고 실행 중 다른 작업의 키보드 포커스를 뺏지 않는다. `showInactive()`/포커스 불가 같은 트릭은 쓰지 않는다 — `win.focus()`가 실제로 창을 포커스시켜야 하는 `file-management.spec.ts`의 "regains focus" 테스트가 깨졌었다(CI에서 실제로 겪음). `accessory` 정책은 자동 활성화만 막을 뿐 `win.focus()` 같은 명시적 호출은 그대로 동작해 이 테스트에 영향 없다. `CI` 환경변수가 있으면(GitHub Actions) 이 값을 끈다 — CI 러너에서는 어차피 화면을 가릴 사람이 없다. `make dev-safe`는 이 값을 설정하지 않는다 — 사람이 직접 보고 조작해야 한다.
 - 시간 기반 `sleep` 대기 대신 명시적인 준비 상태 확인(`waitForSelector` 등)을 사용한다.
 - VSCode 환경에서는 `ELECTRON_RUN_AS_NODE`를 반드시 제거한다 (`e2e/helpers.ts` 참조).
 

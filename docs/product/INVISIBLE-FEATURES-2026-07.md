@@ -84,7 +84,7 @@
 ### E. 조용한 성능·보안 계층 (빠르고 안전하게, 티 안 나게)
 - **시맨틱 줌 LOD**: 0.42배 이하에서 칩·뱃지 숨겨 대형 맵 성능 확보. ([Canvas.tsx:510](../../src/canvas/Canvas.tsx#L510))
 - **조건부 폴링**: 리마인더 인바운드 폴은 **창이 보일 때 + 추적 노드가 있을 때만** → idle 비용 ~0.
-- **이미지 자동 축소**: 붙여넣기 이미지 최장변 2400px 캡·JPEG 재인코딩. ([imageInsert.ts:7](../../src/note/imageInsert.ts#L7))
+- **이미지 자동 축소**: 붙여넣기 이미지 최장변 2400px 캡·JPEG 재인코딩. ([imageAssets.ts:7](../../src/io/imageAssets.ts#L7))
 - **osascript 직렬화 + 배치 조회**: 동시 호출 wedge 방지, 23s→<1s 속도 개선. ([reminders.ts:55](../../electron/reminders.ts#L55))
 - **safeStorage 키 암호화**(OS 키체인) + **argv 인젝션 방지**(execFile, shell 아님).
 

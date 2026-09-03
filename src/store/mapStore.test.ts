@@ -288,3 +288,36 @@ describe('todo node (decision 0014)', () => {
     }
   });
 });
+
+describe('색상 태그 범례 · setTagLabel', () => {
+  it('sets a label for a tag key', () => {
+    const s = createMapStore();
+    s.getState().setTagLabel('red', '새 아이디어');
+    expect(s.getState().doc.tagLabels).toEqual({ red: '새 아이디어' });
+  });
+
+  it('an empty string removes the key (rolls back to the default label)', () => {
+    const s = createMapStore();
+    s.getState().setTagLabel('red', '새 아이디어');
+    s.getState().setTagLabel('teal', '진행 중');
+    s.getState().setTagLabel('red', '');
+    expect(s.getState().doc.tagLabels).toEqual({ teal: '진행 중' });
+  });
+
+  it('clears tagLabels entirely once the last key is emptied', () => {
+    const s = createMapStore();
+    s.getState().setTagLabel('red', '새 아이디어');
+    s.getState().setTagLabel('red', '');
+    expect(s.getState().doc.tagLabels).toBeUndefined();
+  });
+
+  it('is undoable', () => {
+    const s = createMapStore();
+    s.getState().setTagLabel('red', '새 아이디어');
+    expect(s.getState().doc.tagLabels).toEqual({ red: '새 아이디어' });
+    s.getState().undo();
+    expect(s.getState().doc.tagLabels).toBeUndefined();
+    s.getState().redo();
+    expect(s.getState().doc.tagLabels).toEqual({ red: '새 아이디어' });
+  });
+});

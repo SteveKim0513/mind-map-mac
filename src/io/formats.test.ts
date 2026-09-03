@@ -118,6 +118,47 @@ describe('serialize / deserialize', () => {
     expect(doc.nodes.a.children).toEqual([]);
     expect(doc.nodes.a.collapsed).toBe(false);
   });
+
+  it('round-trips tagLabels without bumping the schema version (색상 태그 범례)', () => {
+    const doc = docWith(
+      { a: { id: 'a', text: 'root', parentId: null, children: [], collapsed: false, color: 'red' } },
+      ['a'],
+    );
+    doc.tagLabels = { red: '새 아이디어', teal: '진행 중' };
+    const back = deserialize(serialize(doc));
+    expect(back.tagLabels).toEqual({ red: '새 아이디어', teal: '진행 중' });
+    expect(back.version).toBe(1);
+  });
+
+  it('loads a legacy doc that predates tagLabels (field simply absent)', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      rootIds: ['a'],
+      nodes: { a: { id: 'a', text: 'old', parentId: null, children: [], collapsed: false } },
+    });
+    expect(deserialize(raw).tagLabels).toBeUndefined();
+  });
+
+  it('sanitizes tagLabels — drops keys outside TAG_KEYS and non-string values', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      rootIds: ['a'],
+      nodes: { a: { id: 'a', text: 'x', parentId: null, children: [], collapsed: false } },
+      tagLabels: { red: '유효', bogus: '알수없는키', orange: 123, yellow: '' },
+    });
+    const doc = deserialize(raw);
+    expect(doc.tagLabels).toEqual({ red: '유효' });
+  });
+
+  it('drops tagLabels entirely when every entry is invalid', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      rootIds: ['a'],
+      nodes: { a: { id: 'a', text: 'x', parentId: null, children: [], collapsed: false } },
+      tagLabels: { bogus: 'x' },
+    });
+    expect(deserialize(raw).tagLabels).toBeUndefined();
+  });
 });
 
 describe('markdown round-trip', () => {

@@ -1,5 +1,7 @@
 import type { MindMapDoc, MindNode } from '../types';
-import { normalizeColor } from '../theme/palette';
+import { normalizeColor, TAG_KEYS } from '../theme/palette';
+
+const TAG_KEY_SET = new Set<string>(TAG_KEYS);
 
 export function newId(): string {
   return crypto.randomUUID();
@@ -43,6 +45,15 @@ export function deserialize(text: string): MindMapDoc {
   }
   for (const s of parsed.sections ?? []) if (s.color) s.color = normalizeColor(s.color);
   parsed.view ??= { zoom: 1, panX: 0, panY: 0 };
+  // 색상 태그 범례: 외부 입력 경계에서 검증 — TAG_KEYS 밖의 키나 문자열이 아닌
+  // 값은 버린다. 필드 자체가 없는 레거시 문서는 그대로 undefined로 둔다.
+  if (parsed.tagLabels) {
+    const clean: Partial<Record<string, string>> = {};
+    for (const [key, label] of Object.entries(parsed.tagLabels)) {
+      if (TAG_KEY_SET.has(key) && typeof label === 'string' && label) clean[key] = label;
+    }
+    parsed.tagLabels = Object.keys(clean).length > 0 ? (clean as MindMapDoc['tagLabels']) : undefined;
+  }
   return parsed;
 }
 

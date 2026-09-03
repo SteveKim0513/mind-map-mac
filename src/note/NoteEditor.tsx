@@ -16,7 +16,7 @@ import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 import { CodeBlock } from './CodeBlock';
 import { EditorToolbar } from './EditorToolbar';
 import { SlashMenu, type SlashItem } from './SlashMenu';
-import { fileToImageData, imageFilesFrom } from './imageInsert';
+import { fileToImageData, imageFilesFrom } from '../io/imageAssets';
 import { SESSION_NOTE_PLACEHOLDER } from '../focus/sessionNote';
 import { WikiLink } from './wikiLink';
 import { DragHandle } from './DragHandle';

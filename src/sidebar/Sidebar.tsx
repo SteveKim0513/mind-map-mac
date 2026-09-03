@@ -8,6 +8,7 @@ import { useTemplates } from '../store/templateStore';
 import { usePins } from '../store/pinStore';
 import { emptyDoc, serialize, newId } from '../io/formats';
 import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
+import { emptyBoard, serializeBoard } from '../io/boardFormat';
 import { fileNameFromTitle } from '../io/autoName';
 import type { NoteStore } from '../store/noteStore';
 import { extractArticle } from '../note/extractArticle';
@@ -35,10 +36,19 @@ function basename(p: string): string {
   return p.slice(p.lastIndexOf('/') + 1);
 }
 function displayName(node: TreeNode): string {
-  return node.type === 'file' ? node.name.replace(/\.(mind|md)$/, '') : node.name;
+  return node.type === 'file' ? node.name.replace(/\.(mind|md|board)$/, '') : node.name;
 }
 function isNoteFile(node: TreeNode): boolean {
   return node.type === 'file' && node.name.endsWith('.md');
+}
+function isBoardFile(node: TreeNode): boolean {
+  return node.type === 'file' && node.name.endsWith('.board');
+}
+function fileKind(node: TreeNode): 'dir' | 'note' | 'board' | 'map' {
+  return node.type === 'dir' ? 'dir' : isNoteFile(node) ? 'note' : isBoardFile(node) ? 'board' : 'map';
+}
+function fileIconName(node: TreeNode): 'folder' | 'note' | 'board' | 'mindmap' {
+  return node.type === 'dir' ? 'folder' : isNoteFile(node) ? 'note' : isBoardFile(node) ? 'board' : 'mindmap';
 }
 
 export function Sidebar({
@@ -72,7 +82,7 @@ export function Sidebar({
   useEffect(() => {
     if (!revealPathReq) return;
     const { path } = revealPathReq;
-    const isFile = path.endsWith('.md') || path.endsWith('.mind');
+    const isFile = path.endsWith('.md') || path.endsWith('.mind') || path.endsWith('.board');
     useWorkspace.getState().expandAncestors(path);
     setSelected({ path, type: isFile ? 'file' : 'dir' });
     // wait for the expand to re-render the tree before the row exists to scroll to
@@ -208,6 +218,16 @@ export function Sidebar({
     // note-title input in the editor serves as the rename entry point for notes
   };
 
+  const newBoard = async () => {
+    const dir = targetDir();
+    const path = await window.api.createFile(dir, '제목 없음', serializeBoard(emptyBoard()), '.board');
+    if (dir !== root) setExpanded(dir, true);
+    await refresh();
+    setSelected({ path, type: 'file' });
+    onOpenFile(path);
+    setRenaming({ path, isFile: true });
+  };
+
   // ── URL → note: fetch the page, extract the article, save as a linked note ──
   const [urlImport, setUrlImport] = useState<{ busy: boolean; error: string | null } | null>(null);
   const importingRef = useRef(false); // synchronous guard — React state update is async
@@ -331,8 +351,9 @@ export function Sidebar({
       return;
     }
 
-    // maps + folders: rename the file/folder directly
-    const newName = node.type === 'file' ? `${trimmed}.mind` : trimmed;
+    // maps + boards + folders: rename the file/folder directly, keeping its extension
+    const ext = isBoardFile(node) ? '.board' : '.mind';
+    const newName = node.type === 'file' ? `${trimmed}${ext}` : trimmed;
     // 충돌 감지
     const dirPath = node.path.substring(0, node.path.lastIndexOf('/'));
     const targetPath = `${dirPath}/${newName}`;
@@ -395,21 +416,26 @@ export function Sidebar({
 
   // Collapsible 마인드맵 / 노트 sections (persisted) so a long list of one kind
   // doesn't push the other off-screen.
-  const [folded, setFolded] = useState<{ maps: boolean; notes: boolean }>(() => {
+  const [folded, setFolded] = useState<{ maps: boolean; notes: boolean; boards: boolean }>(() => {
     try {
-      return { maps: false, notes: false, ...JSON.parse(localStorage.getItem('sidebarFolded') ?? '{}') };
+      return {
+        maps: false,
+        notes: false,
+        boards: false,
+        ...JSON.parse(localStorage.getItem('sidebarFolded') ?? '{}'),
+      };
     } catch {
-      return { maps: false, notes: false };
+      return { maps: false, notes: false, boards: false };
     }
   });
-  const toggleFold = (key: 'maps' | 'notes') =>
+  const toggleFold = (key: 'maps' | 'notes' | 'boards') =>
     setFolded((f) => {
       const next = { ...f, [key]: !f[key] };
       localStorage.setItem('sidebarFolded', JSON.stringify(next));
       return next;
     });
 
-  const sectionHeader = (key: 'maps' | 'notes', label: string, count: number) => (
+  const sectionHeader = (key: 'maps' | 'notes' | 'boards', label: string, count: number) => (
     <button className="tree-section" onClick={() => toggleFold(key)}>
       <Icon name={folded[key] ? 'chevronRight' : 'chevronDown'} />
       <span className="tree-section-lbl">{label}</span>
@@ -424,7 +450,8 @@ export function Sidebar({
     // hide ONLY the focus-session log folder (at the workspace root) — a user's
     // own folder happening to be named "work-log" elsewhere stays visible.
     const dirs = nodes.filter((n) => n.type === 'dir' && n.path !== `${root}/work-log`);
-    const maps = nodes.filter((n) => n.type === 'file' && !isNoteFile(n));
+    const maps = nodes.filter((n) => n.type === 'file' && !isNoteFile(n) && !isBoardFile(n));
+    const boards = nodes.filter((n) => isBoardFile(n));
     const notes = nodes.filter((n) => isNoteFile(n));
     return (
       <>
@@ -433,6 +460,12 @@ export function Sidebar({
           <>
             {sectionHeader('maps', '마인드맵', maps.length)}
             {!folded.maps && renderNodes(maps, 0)}
+          </>
+        )}
+        {boards.length > 0 && (
+          <>
+            {sectionHeader('boards', '보드', boards.length)}
+            {!folded.boards && renderNodes(boards, 0)}
           </>
         )}
         {notes.length > 0 && (
@@ -552,12 +585,8 @@ export function Sidebar({
                 <Icon name={expanded[node.path] ? 'chevronDown' : 'chevronRight'} />
               )}
             </span>
-            <span
-              className={`ficon ficon--${
-                node.type === 'dir' ? 'dir' : isNoteFile(node) ? 'note' : 'map'
-              }`}
-            >
-              <Icon name={node.type === 'dir' ? 'folder' : isNoteFile(node) ? 'note' : 'mindmap'} />
+            <span className={`ficon ficon--${fileKind(node)}`}>
+              <Icon name={fileIconName(node)} />
             </span>
 
             {isRenaming ? (
@@ -657,6 +686,9 @@ export function Sidebar({
           <button className="sb-section-btn" title="새 노트" onClick={() => void newNote()}>
             <Icon name="note" />
           </button>
+          <button className="sb-section-btn" title="새 보드" onClick={() => void newBoard()}>
+            <Icon name="board" />
+          </button>
           <button className="sb-section-btn" title="URL에서 가져오기" onClick={() => setUrlImport({ busy: false, error: null })}>
             <Icon name="link" />
           </button>
@@ -718,6 +750,9 @@ export function Sidebar({
                 </button>
                 <button className="tree-empty-btn" onClick={() => void newNote()}>
                   <Icon name="note" /> 새 노트
+                </button>
+                <button className="tree-empty-btn" onClick={() => void newBoard()}>
+                  <Icon name="board" /> 새 보드
                 </button>
               </div>
             </div>

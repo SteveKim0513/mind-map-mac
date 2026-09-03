@@ -30,6 +30,7 @@
   --state-done: #1aae39; /* completed · saved · progress */
   --state-note: #6e56cf; /* notes identity — tab · linked-note pill · popup (violet) */
   --state-map: #2a9d99; /* map identity · node links · pickers */
+  --state-board: #b6337e; /* board identity — tab · sidebar icon (magenta, distinct from tag-pink pastel) */
   --state-danger: #e5484d; /* delete · destructive actions */
   --state-search: #ffb300; /* search-match highlight (gold) */
 
@@ -46,6 +47,12 @@
   --tag-violet: #9a78cf;
   --tag-pink: #c869b0;
   --tag-brown: #936c45;
+
+  /* Ink for text on a tag-coloured background (board sticky notes) — theme-
+     invariant by design, since tag pastels don't track the app's light/dark
+     canvas. Picked per-note by theme/palette.ts's contrastInk(). */
+  --ink-on-tag-dark: #1a1a1a;
+  --ink-on-tag-light: #fbfbfb;
 
   /* radius */
   --r-xs: 4px;
@@ -102,6 +109,7 @@
   --state-done: #3dd68c;
   --state-note: #a594f5;
   --state-map: #19b3a6;
+  --state-board: #d966ae;
   --state-danger: #ff6369;
   --state-search: #ffc94d;
 
@@ -274,6 +282,7 @@ button {
 .tab-ic .ic { width: 13px; height: 13px; }
 .tab-ic--map { color: var(--state-map); }
 .tab-ic--note { color: var(--state-note); }
+.tab-ic--board { color: var(--state-board); }
 .tab-ic--template { color: var(--state-note); }
 .tab-ic--calendar { color: var(--state-scheduled); }
 .tab-title {
@@ -401,6 +410,174 @@ button {
 .pathbar-ic .ic {
   width: 11px;
   height: 11px;
+}
+
+/* ── Tag bar (per-map color tag legend, sibling row under the path bar) ──────── */
+.tagbar {
+  flex: none;
+  height: 22px;
+  display: flex;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--hairline);
+}
+.tagbar-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+}
+/* Only the chip run clips on overflow — kept separate from .tagbar-add-wrap so its
+   dropdown (absolutely positioned, offset below the row) isn't clipped away too. */
+.tagbar-chips {
+  /* grow:0 — must NOT stretch to fill the row, or it pushes "+" away to the far
+     right edge instead of sitting right after the last chip (shrink:1 still lets
+     it clip via overflow:hidden when the row is too narrow for all chips). */
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+.tagbar-div {
+  flex: none;
+  width: 1px;
+  margin: 4px 0;
+  background: var(--hairline);
+}
+.tagbar-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  border-radius: var(--r-sm);
+}
+.tagbar-chip-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tagbar-chip-main:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.tagbar-chip.on .tagbar-chip-main {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+.tagbar-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  flex: none;
+}
+.tagbar-chip-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.tagbar-chip-edit .ic {
+  width: 11px;
+  height: 11px;
+}
+.tagbar-chip:hover .tagbar-chip-edit {
+  opacity: 1;
+}
+.tagbar-chip-edit:hover {
+  color: var(--primary);
+  background: var(--hover);
+}
+.tagbar-edit-input {
+  width: 88px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--primary);
+  border-radius: var(--r-sm);
+  padding: 1px 4px;
+  outline: none;
+}
+.tagbar-add-wrap {
+  position: relative;
+  flex: none;
+  display: flex;
+}
+.tagbar-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.tagbar-add .ic {
+  width: 11px;
+  height: 11px;
+}
+.tagbar-add:hover {
+  color: var(--primary);
+  background: var(--hover);
+}
+.tagbar-add-pop {
+  position: absolute;
+  top: 22px;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 4px;
+  box-shadow: var(--shadow-1);
+}
+.tagbar-add-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.tagbar-add-option:hover {
+  background: var(--hover);
+}
+.tagbar-add-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px;
 }
 
 /* ── Pane area ──────────────────────────────────────────────────────────────── */
@@ -3408,31 +3585,6 @@ textarea:focus-visible,
   color: var(--state-danger);
 }
 
-/* ── Color filter dots (pane toolbar) ───────────────────────────────────────── */
-.filter-dots {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 4px;
-}
-.filter-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--r-full);
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  cursor: pointer;
-  padding: 0;
-  opacity: 0.8;
-  transition: transform 0.1s ease, opacity 0.1s ease;
-}
-.filter-dot:hover {
-  opacity: 1;
-  transform: scale(1.15);
-}
-.filter-dot.on {
-  opacity: 1;
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary);
-}
 .tool-btn.small {
   font-size: 12px;
   padding: 5px 8px;
@@ -3705,6 +3857,38 @@ textarea:focus-visible,
 }
 /* the swatch buttons themselves are the shared .color-swatch-grid/.color-swatch
    (ColorSwatchGrid.tsx) — this flyout only supplies its own floating position. */
+
+/* two-row flyouts (board align/format) — a pill radius reads oddly once the
+   content is taller than one row, so these override .st-swatches's shape. */
+.st-flyout-col {
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.st-flyout-row {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.st-format-glyph {
+  line-height: 1;
+}
+.st-format-text {
+  margin-left: 4px;
+  font-size: 12.5px;
+}
+.st-link-row {
+  width: 100%;
+  min-width: 168px;
+  justify-content: space-between;
+}
+.st-link-row .st-format-text {
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── Command palette group header (C) ───────────────────────────────────────── */
 .qo-group {
@@ -4041,6 +4225,7 @@ textarea:focus-visible,
 .ficon--dir .ic { color: var(--ink-faint); }
 .ficon--map .ic { color: var(--state-map); }
 .ficon--note .ic { color: var(--state-note); }
+.ficon--board .ic { color: var(--state-board); }
 
 /* settings: A− / A+ become tactile small/large A glyphs */
 .fs-btn { min-width: 28px; height: 24px; }
@@ -6600,4 +6785,377 @@ textarea:focus-visible,
   font-family: var(--font); font-size: 13px;
   background: transparent; color: var(--ink-muted);
   border: 1px solid var(--hairline); border-radius: var(--r-sm); padding: 6px 14px; cursor: pointer;
+}
+
+/* ── Board (moodboard) — decision 0020 ──────────────────────────────────────── */
+.board-canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  outline: none;
+  background-color: var(--canvas);
+  background-image: radial-gradient(var(--dot) 1.1px, transparent 1.1px);
+}
+.board-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.board-toolbar .tool-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.board-toolbar .tool-btn:disabled:hover {
+  background: transparent;
+}
+
+.board-el {
+  position: absolute;
+  box-sizing: border-box;
+  user-select: none;
+}
+.board-el.dimmed {
+  opacity: 0.28;
+  transition: opacity 0.15s ease;
+}
+
+.board-el-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--r-md);
+  cursor: grab;
+}
+.board-el.selected .board-el-body {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.board-sticky {
+  padding: var(--s-xs);
+  box-shadow: var(--shadow-1), 0 1px 2px rgba(0, 0, 0, 0.06); /* subtle lift, Apple-style depth */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s ease, background-color 0.15s ease, transform 0.15s var(--spring);
+}
+.board-el-body:hover {
+  box-shadow: var(--shadow-2), 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+.board-sticky--ellipse {
+  border-radius: 50%;
+  padding: var(--s-md) var(--s-lg);
+}
+.board-el-text-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.board-el-text-main.valign-top { justify-content: flex-start; }
+.board-el-text-main.valign-middle { justify-content: center; }
+.board-el-text-main.valign-bottom { justify-content: flex-end; }
+.board-el-text {
+  flex: none;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow: hidden;
+}
+.board-el-placeholder {
+  opacity: 0.6;
+}
+.board-el-input {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  line-height: 1.4;
+  color: inherit;
+  text-align: inherit;
+  user-select: text;
+  cursor: text;
+}
+
+/* board ↔ mindmap/note link chips — inside the card, below the main text */
+.board-sticky-links {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+}
+.board-sticky-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  color: inherit;
+  border-radius: var(--r-sm);
+  padding: 3px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  max-width: 100%;
+}
+.board-sticky-link:hover {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+.board-sticky-link .ic {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+.board-sticky-link-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-sticky-link-x {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  padding-left: 4px;
+  opacity: 0.6;
+}
+.board-sticky-link-x:hover {
+  opacity: 1;
+}
+.board-sticky-link-x .ic {
+  width: 9px;
+  height: 9px;
+}
+
+/* extra text blocks stacked below the sticky card — fused, not independent
+   elements (2026-09-03 UX feedback) */
+.board-sticky-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.board-sticky-note {
+  position: relative;
+  padding: var(--s-xs);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-1);
+  cursor: grab;
+  transition: box-shadow 0.15s ease;
+}
+.board-sticky-note:hover {
+  box-shadow: var(--shadow-2);
+}
+.board-sticky-note:hover .board-sticky-note-del {
+  opacity: 1;
+}
+.board-sticky-note-del {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--ink-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  cursor: pointer;
+}
+.board-sticky-note-del .ic {
+  width: 9px;
+  height: 9px;
+}
+.board-sticky-note-del:hover {
+  color: var(--state-danger);
+  border-color: color-mix(in srgb, var(--state-danger) 40%, var(--hairline));
+}
+
+.board-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: var(--r-md);
+}
+.board-image--loading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--canvas-soft);
+  color: var(--ink-faint);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+
+.board-anchor {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+  border-radius: var(--r-full);
+  cursor: crosshair;
+  pointer-events: all;
+  z-index: 5;
+  /* No mount animation here on purpose: an entrance `animation` (even
+     opacity-only) can get stuck at its `from` keyframe — unclickable and
+     absent from hit-testing — in a window Chromium treats as non-visible
+     (e.g. E2E's off-screen windows, or a real window that's occluded/
+     backgrounded the instant a sticky is selected). Found via E2E flake
+     chasing (2026-09-03); a transform version of this animation additionally
+     skewed getBoundingClientRect() while it ran. Anchors just appear
+     immediately — still smooth via the transition below on interaction. */
+  transition: background 0.1s ease, box-shadow 0.1s ease;
+}
+.board-anchor--top { top: 0; left: 50%; }
+.board-anchor--bottom { top: 100%; left: 50%; }
+.board-anchor--left { top: 50%; left: 0; }
+.board-anchor--right { top: 50%; left: 100%; }
+.board-anchor:hover {
+  background: var(--primary);
+}
+
+/* the anchor a connector-in-progress will snap onto if dropped now — shown
+   BEFORE mouseup so the user knows where it'll land (2026-09-03 feedback) */
+.board-anchor--snap {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.board-connector {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+.board-connector path {
+  pointer-events: stroke;
+  cursor: pointer;
+  transition: stroke 0.1s ease, stroke-width 0.1s ease;
+}
+.board-connector.selected path {
+  stroke: var(--primary) !important;
+  stroke-width: 3;
+}
+.board-connect-preview {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* draggable ends of a SELECTED connector — grab and drop on a different
+   element/anchor to reattach (2026-09-03) */
+.board-connector-endpoint {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  background: var(--primary);
+  border: 2px solid var(--surface);
+  border-radius: var(--r-full);
+  cursor: grab;
+  pointer-events: all;
+  z-index: 6;
+  box-shadow: var(--shadow-1);
+}
+.board-connector-endpoint:active {
+  cursor: grabbing;
+}
+
+/* short caption attached to a connector, centered on its path (2026-09-03) */
+.board-label-chip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--ink-secondary);
+  box-shadow: var(--shadow-1);
+  cursor: text;
+  white-space: nowrap;
+  pointer-events: all;
+}
+.board-label-chip:hover {
+  color: var(--ink);
+  border-color: var(--primary);
+}
+.board-label-chip.ghost {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.board-label-chip.ghost.selected,
+.board-label-chip.ghost:hover {
+  opacity: 0.55;
+}
+.board-label-input {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: var(--surface);
+  border: 1px solid var(--primary);
+  border-radius: var(--r-full);
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--ink);
+  outline: none;
+  min-width: 40px;
+  text-align: center;
+  pointer-events: all;
+}
+
+.board-resize-handles {
+  position: absolute;
+  pointer-events: none;
+}
+.board-handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -5px 0 0 -5px;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+  border-radius: var(--r-full);
+  pointer-events: all;
+}
+.board-handle--nw { top: 0; left: 0; cursor: nwse-resize; }
+.board-handle--ne { top: 0; left: 100%; cursor: nesw-resize; }
+.board-handle--sw { top: 100%; left: 0; cursor: nesw-resize; }
+.board-handle--se { top: 100%; left: 100%; cursor: nwse-resize; }
+
+.board-marquee {
+  position: absolute;
+  border: 1px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  pointer-events: none;
+}
+
+.board-shape-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.board-shape-picker .tool-btn.on {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+.tool-btn.icon.small {
+  padding: 4px 6px;
+}
+.tool-btn.icon.small .ic {
+  width: 13px;
+  height: 13px;
 }
