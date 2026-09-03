@@ -23,6 +23,7 @@
 ```bash
 make setup                   # npm ci
 make dev-safe                # Electron + Vite 개발 서버 (격리된 임시 환경)
+make dev-safe quiet=1        # 위와 동일 + 화면 밖·포커스 안 뺏음 (사람이 안 볼 때, 에이전트 자체 검증용)
 make verify                  # typecheck + unit test  ← 완료 주장 전 반드시 실행
 make verify-feature tag=@x   # verify + 해당 도메인 E2E만  ← 기능 단위 검증 (개발 루프)
 make verify-full             # typecheck + unit test + build  ← PR 전 반드시 실행
@@ -36,7 +37,7 @@ make harness-check           # 아키텍처·문서·E2E 태그 구조 검사
 
 - `make verify` 없이 완료를 주장하지 않는다.
 - 버그 수정은 가능한 경우 실패를 재현하는 테스트를 먼저 추가한다.
-- UI·Electron 변경은 테스트만으로 끝내지 않고 `make dev-safe`로 실제 동작을 확인한다.
+- UI·Electron 변경은 테스트만으로 끝내지 않고 `make dev-safe`로 실제 동작을 확인한다. 사람이 지켜보지 않고 자동화로만 검증할 때는 `make dev-safe quiet=1`을 써서 다른 세션의 포커스를 뺏지 않는다.
 - **새 기능·UI 변경을 포함한 배포**: `make pre-release` 통과 후 `make bump`.
 - **새 기능·UI 변경 시 E2E 추가 의무**: `e2e/*.spec.ts`에 해당 기능의 핵심 시나리오를 작성한다.
 - 패키지 관리자는 `npm`만 사용한다. `yarn`·`pnpm`·`bun` 금지.

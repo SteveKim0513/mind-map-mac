@@ -54,6 +54,7 @@ docs/                    → 아래 참조
 ```bash
 make setup                    # npm ci (최초 또는 package.json 변경 후)
 make dev-safe                 # Electron + Vite 개발 서버 (격리된 임시 환경)
+make dev-safe quiet=1         # 위와 동일 + 화면 밖·포커스 안 뺏음 (사람이 안 볼 때, 에이전트 자체 검증용)
 make verify                   # typecheck + unit test (완료 전 필수)
 make verify-feature tag=@x    # verify + 해당 도메인 E2E만 (기능 단위 검증 — 개발 루프)
 make verify-full              # typecheck + unit test + build (PR 전 필수)
@@ -69,7 +70,7 @@ make harness-check            # 아키텍처 + 문서 + E2E 태그 무결성 검
 ## 변경 전후 검증 절차
 
 1. `make verify` 실행 → 종료 코드 0 확인
-2. UI·기능 변경 → `make dev-safe`로 실제 앱에서 직접 시나리오 검증
+2. UI·기능 변경 → `make dev-safe`로 실제 앱에서 직접 시나리오 검증 (사람이 지켜보지 않고 에이전트 혼자 자동화로 검증할 때는 `make dev-safe quiet=1`로 실행 — 다른 세션의 포커스를 뺏지 않는다)
 3. 새 기능·UI 변경 → `e2e/*.spec.ts`에 핵심 시나리오 E2E 추가
 4. Reminders 관련 → macOS 리마인더 앱에서 직접 확인
 5. 배포 전 → `make pre-release` (verify-full + E2E) 통과 확인 후 `make bump`

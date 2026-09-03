@@ -33,15 +33,17 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) app.quit();
 // Test/E2E isolation: override the workspace directory directly.
 const E2E_WORKSPACE = process.env.MINDMAP_WORKSPACE ?? null;
-// E2E quiet mode: opens windows off-screen so they don't visually pop up over
-// whatever else is on screen while Playwright drives them over CDP. Only the
-// position changes — `show()`/`showInactive()` behavior is untouched, since
-// showInactive() turned out to break win.focus()/the 'focus' event that
-// e2e/file-management.spec.ts's regains-focus test depends on. Excluded on CI
-// (`CI` is set by GitHub Actions on every runner) as an extra safety margin —
-// nobody's local work is being interrupted by a CI VM, so there's nothing to
-// fix there. `make dev-safe` never sets this (a human needs to actually see
-// that window).
+// Quiet mode: opens windows off-screen (paired with the 'accessory' activation
+// policy below) so they don't visually pop up or steal OS focus from whatever
+// else is on screen. Used by every Playwright E2E run, and opt-in for
+// `make dev-safe quiet=1` — an agent verifying a change on its own via
+// automation, without a human watching the window. Only the position changes —
+// `show()`/`showInactive()` behavior is untouched, since showInactive() turned
+// out to break win.focus()/the 'focus' event that e2e/file-management.spec.ts's
+// regains-focus test depends on. Excluded on CI (`CI` is set by GitHub Actions
+// on every runner) as an extra safety margin — nobody's local work is being
+// interrupted by a CI VM, so there's nothing to fix there. Plain `make dev-safe`
+// never sets this — a human needs to actually see and interact with that window.
 const E2E_QUIET = process.env.MINDMAP_E2E_QUIET === '1' && !process.env.CI;
 
 // vite-plugin-electron injects these env vars during dev
@@ -80,6 +82,7 @@ function buildMenu() {
       submenu: [
         { label: '새로 만들기', accelerator: 'CmdOrCtrl+N', click: () => send('menu', 'new') },
         { label: '새 노트', accelerator: 'CmdOrCtrl+Shift+N', click: () => send('menu', 'new-note') },
+        { label: '새 보드', click: () => send('menu', 'new-board') },
         { label: '열기…', accelerator: 'CmdOrCtrl+O', click: () => send('menu', 'open') },
         { type: 'separator' },
         { label: '저장', accelerator: 'CmdOrCtrl+S', click: () => send('menu', 'save') },
@@ -258,8 +261,8 @@ app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return; // a second instance is quitting — set nothing up
   log.info(`[app] start v${app.getVersion()} on ${process.platform}`);
   // 'accessory' apps (macOS's LSUIElement equivalent) don't appear in the
-  // Dock/Cmd+Tab and aren't auto-activated on launch, so an E2E run doesn't
-  // steal keyboard focus from whatever the developer is doing elsewhere.
+  // Dock/Cmd+Tab and aren't auto-activated on launch, so a quiet-mode launch
+  // doesn't steal keyboard focus from whatever the developer is doing elsewhere.
   // Explicit win.focus() calls (the @serial file-management focus test) still
   // work — accessory only suppresses automatic activation, not an intentional
   // one triggered from within the app itself.

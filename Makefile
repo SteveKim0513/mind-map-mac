@@ -5,8 +5,11 @@ setup:
 	npm ci
 
 # Development server — isolated temp userData + workspace (real data untouched)
+# quiet=1: off-screen + macOS 'accessory' activation policy (same as E2E) — for
+# an agent verifying on its own via automation, not a human watching the window.
+# Plain `make dev-safe` stays visible/focusable, since a human needs to see it.
 dev-safe:
-	MINDMAP_USER_DATA="$$(mktemp -d)" MINDMAP_WORKSPACE="$$(mktemp -d)" npm run dev
+	MINDMAP_USER_DATA="$$(mktemp -d)" MINDMAP_WORKSPACE="$$(mktemp -d)" $(if $(quiet),MINDMAP_E2E_QUIET=1) npm run dev
 
 # TypeScript type check (no emit)
 typecheck:
