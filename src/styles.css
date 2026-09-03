@@ -669,12 +669,14 @@ button {
   gap: 6px;
 }
 .home-new:hover { background: var(--primary-active); }
-.home-new--note {
+.home-new--note,
+.home-new--board {
   background: var(--canvas-soft, var(--hover));
   color: var(--ink);
   border-color: var(--border);
 }
-.home-new--note:hover { background: var(--hover); }
+.home-new--note:hover,
+.home-new--board:hover { background: var(--hover); }
 .home-section {
   margin-top: 8px;
   font-size: 12px;

@@ -1,4 +1,5 @@
 import { Icon } from '../ui/Icon';
+import { fileIconName } from '../io/fileKind';
 import type { RecentFile } from '../store/sessionStore';
 
 function ago(ts: number): string {
@@ -17,10 +18,11 @@ interface Props {
   recent: RecentFile[];
   onNew: () => void;
   onNewNote: () => void;
+  onNewBoard: () => void;
   onOpenRecent: (path: string) => void;
 }
 
-export function Home({ recent, onNew, onNewNote, onOpenRecent }: Props) {
+export function Home({ recent, onNew, onNewNote, onNewBoard, onOpenRecent }: Props) {
   return (
     <div className="home">
       <div className="home-inner">
@@ -36,6 +38,10 @@ export function Home({ recent, onNew, onNewNote, onOpenRecent }: Props) {
             <Icon name="note" />
             새 노트
           </button>
+          <button className="home-new home-new--board" onClick={onNewBoard}>
+            <Icon name="board" />
+            새 보드
+          </button>
         </div>
 
         <div className="home-section">최근 파일</div>
@@ -46,7 +52,7 @@ export function Home({ recent, onNew, onNewNote, onOpenRecent }: Props) {
             {recent.map((r) => (
               <button key={r.path} className="recent-item" onClick={() => onOpenRecent(r.path)}>
                 <span className="recent-icon">
-                  <Icon name="file" />
+                  <Icon name={fileIconName(r.path)} />
                 </span>
                 <span className="recent-name">{r.name}</span>
                 <span className="recent-time">{ago(r.ts)}</span>

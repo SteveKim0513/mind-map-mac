@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace } from '../store/workspaceStore';
+import { fileDisplayName, fileIconName } from '../io/fileKind';
 import { Icon } from './Icon';
 import type { TreeNode } from '../../electron/preload';
 
 function flatten(nodes: TreeNode[], folder: string, out: { path: string; name: string; folder: string }[]) {
   for (const n of nodes) {
     if (n.type === 'file') {
-      out.push({ path: n.path, name: n.name.replace(/\.(mind|md)$/, ''), folder });
+      out.push({ path: n.path, name: fileDisplayName(n.name), folder });
     } else if (n.children) {
       flatten(n.children, folder ? `${folder} / ${n.name}` : n.name, out);
     }
@@ -103,7 +104,7 @@ export function QuickOpen({
                 onClick={() => choose(i)}
               >
                 <span className="qo-name">
-                  <Icon name={f.path.endsWith('.md') ? 'note' : 'mindmap'} />
+                  <Icon name={fileIconName(f.path)} />
                   <span className="qo-name-txt">{f.name}</span>
                 </span>
                 {f.folder && <span className="qo-folder">{f.folder}</span>}

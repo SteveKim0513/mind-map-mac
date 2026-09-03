@@ -47,6 +47,7 @@ import {
   fromOpml,
 } from './io/formats';
 import { emptyNote, serializeNote } from './io/noteFormat';
+import { emptyBoard, serializeBoard } from './io/boardFormat';
 import { requestFocusStart } from './focus/controller';
 import { TAG_KEYS, type TagKey } from './theme/palette';
 
@@ -214,6 +215,13 @@ export default function App() {
     await openByPath(path);
   }, [openByPath]);
 
+  const newBoard = useCallback(async () => {
+    const root = useWorkspace.getState().root;
+    const path = await window.api.createFile(root, '제목 없음', serializeBoard(emptyBoard()), '.board');
+    await useWorkspace.getState().refresh();
+    await openByPath(path);
+  }, [openByPath]);
+
   const createFromDoc = useCallback(
     async (name: string, doc: ReturnType<typeof emptyDoc>) => {
       const root = useWorkspace.getState().root;
@@ -241,6 +249,9 @@ export default function App() {
           break;
         case 'new-note':
           await newNote();
+          break;
+        case 'new-board':
+          await newBoard();
           break;
         case 'open': {
           const res = await window.api.open();
@@ -427,7 +438,13 @@ export default function App() {
       )
     ) : (
       <div className="pane" onPointerDownCapture={() => useSession.getState().setActiveGroup(group)}>
-        <Home recent={recent} onNew={() => void newMindmap()} onNewNote={() => void newNote()} onOpenRecent={(p) => void openByPath(p)} />
+        <Home
+          recent={recent}
+          onNew={() => void newMindmap()}
+          onNewNote={() => void newNote()}
+          onNewBoard={() => void newBoard()}
+          onOpenRecent={(p) => void openByPath(p)}
+        />
       </div>
     );
 
@@ -525,6 +542,8 @@ export default function App() {
             split,
             hasActive: !!activeStore,
             newMindmap: () => void newMindmap(),
+            newNote: () => void newNote(),
+            newBoard: () => void newBoard(),
             fit: () => activeControls.current?.fit(),
             tidy: () => activeControls.current?.tidy(),
             toggleSidebar: () => setSidebarVisible((v) => !v),
@@ -581,6 +600,8 @@ function buildCommands(o: {
   split: boolean;
   hasActive: boolean;
   newMindmap: () => void;
+  newNote: () => void;
+  newBoard: () => void;
   fit: () => void;
   tidy: () => void;
   toggleSidebar: () => void;
@@ -589,6 +610,8 @@ function buildCommands(o: {
 }): Command[] {
   const cmds: Command[] = [
     { id: 'new', icon: 'plus', label: '새 마인드맵', run: o.newMindmap },
+    { id: 'new-note', icon: 'note', label: '새 노트', hint: '⌘⇧N', run: o.newNote },
+    { id: 'new-board', icon: 'board', label: '새 보드', run: o.newBoard },
     { id: 'capture', icon: 'bulb', label: '빠른 메모 열기', hint: '⌥Space', run: () => void window.api.capture.show() },
     { id: 'calendar', icon: 'calendar', label: '캘린더 열기', run: () => useSession.getState().openCalendar() },
     { id: 'history', icon: 'clock', label: '집중 기록 열기', run: () => useUi.getState().openHistory() },
@@ -605,7 +628,7 @@ function buildCommands(o: {
       },
     },
     { id: 'reminders', icon: 'calendar', label: '미리알림 동기화 설정', run: () => useUi.getState().openSettings() },
-    { id: 'globalsearch', icon: 'search', label: '전체 검색 (노드·노트)', hint: '⌘⇧F', run: () => useUi.getState().setGlobalSearch(true) },
+    { id: 'globalsearch', icon: 'search', label: '전체 검색 (노드·노트·보드)', hint: '⌘⇧F', run: () => useUi.getState().setGlobalSearch(true) },
     { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
     { id: 'theme', icon: 'moon', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },
     { id: 'sidebar', icon: 'menu', label: '사이드바 토글', run: o.toggleSidebar },

@@ -1,6 +1,7 @@
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { recentFiles } from '../sidebar/smartViews';
+import { fileDisplayName, fileIconName } from '../io/fileKind';
 import { Icon } from './Icon';
 import { useOverlayEsc } from './useOverlayEsc';
 
@@ -57,10 +58,10 @@ export function RecentView({ onOpen }: { onOpen: (path: string) => void }) {
             {items.map((it) => (
               <div className="trash-row" key={it.path}>
                 <span className="trash-ic file">
-                  <Icon name={it.name.endsWith('.md') ? 'note' : 'mindmap'} />
+                  <Icon name={fileIconName(it.path)} />
                 </span>
                 <span className="trash-info clickable" onClick={() => openOne(it.path)}>
-                  <span className="trash-name">{it.name.replace(/\.(mind|md)$/, '')}</span>
+                  <span className="trash-name">{fileDisplayName(it.name)}</span>
                   <span className="trash-meta">
                     {relTime(it.mtimeMs)} · {root ? dirLabel(it.path, root) : ''}
                   </span>

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace } from '../store/workspaceStore';
-import { loadMindDoc, loadNote, pruneMindCache, pruneNoteCache, type FileRef } from '../io/scanCache';
+import { loadMindDoc, loadNote, loadBoardDoc, pruneMindCache, pruneNoteCache, pruneBoardCache, type FileRef } from '../io/scanCache';
 import { revealNode } from '../note/noteLinks';
+import { openBoardSticky } from '../board/boardLinks';
+import { fileDisplayName } from '../io/fileKind';
 import { Icon } from '../ui/Icon';
 import type { TreeNode } from '../../electron/preload';
 
-const nameOf = (p: string) => (p.split('/').pop() ?? p).replace(/\.(mind|md)$/, '');
+const nameOf = fileDisplayName;
 
 type Hit =
   | {
@@ -19,15 +21,26 @@ type Hit =
       mapId: string;
       nodeId: string;
     }
-  | { kind: 'note'; label: string; path: string; body: string; metaText?: string; snippet?: string };
+  | { kind: 'note'; label: string; path: string; body: string; metaText?: string; snippet?: string }
+  | {
+      kind: 'board';
+      label: string;
+      sub: string;
+      haystack: string; // lowercased sticky text + fused note blocks
+      extraText: string; // raw fused note blocks, for a "where it hit" snippet
+      snippet?: string;
+      boardPath: string;
+      stickyId: string;
+    };
 
-/** Collect .mind and .md files with their tree-reported mtime (the cache key). */
-function collectFiles(tree: TreeNode[], mind: FileRef[], md: FileRef[]) {
+/** Collect .mind/.md/.board files with their tree-reported mtime (the cache key). */
+function collectFiles(tree: TreeNode[], mind: FileRef[], md: FileRef[], board: FileRef[]) {
   for (const n of tree) {
-    if (n.type === 'dir' && n.children) collectFiles(n.children, mind, md);
+    if (n.type === 'dir' && n.children) collectFiles(n.children, mind, md, board);
     else if (n.type === 'file') {
       if (n.path.endsWith('.mind')) mind.push({ path: n.path, mtimeMs: n.mtimeMs });
       else if (n.path.endsWith('.md')) md.push({ path: n.path, mtimeMs: n.mtimeMs });
+      else if (n.path.endsWith('.board')) board.push({ path: n.path, mtimeMs: n.mtimeMs });
     }
   }
 }
@@ -73,9 +86,11 @@ export function GlobalSearch({
     void (async () => {
       const mind: FileRef[] = [];
       const md: FileRef[] = [];
-      collectFiles(tree, mind, md);
+      const board: FileRef[] = [];
+      collectFiles(tree, mind, md, board);
       pruneMindCache(mind.map((f) => f.path));
       pruneNoteCache(md.map((f) => f.path));
+      pruneBoardCache(board.map((f) => f.path));
       const out: Hit[] = [];
       await Promise.all([
         ...mind.map(async ({ path, mtimeMs }) => {
@@ -105,6 +120,25 @@ export function GlobalSearch({
           const metaText = note.metaBlocks?.flatMap((b) => Object.values(b.values ?? {})).join(' ') ?? '';
           out.push({ kind: 'note', label: note.title, path, body: note.body, metaText });
         }),
+        ...board.map(async ({ path, mtimeMs }) => {
+          const doc = await loadBoardDoc(path, mtimeMs);
+          if (!doc) return; // unreadable / corrupt → skip
+          const boardName = nameOf(path);
+          for (const el of Object.values(doc.elements)) {
+            if (el.kind !== 'sticky') continue;
+            const extraText = (el.notes ?? []).filter(Boolean).join('  ');
+            if (!el.text?.trim() && !extraText) continue;
+            out.push({
+              kind: 'board',
+              label: el.text,
+              sub: boardName,
+              haystack: `${el.text ?? ''}\n${extraText}`.toLowerCase(),
+              extraText,
+              boardPath: path,
+              stickyId: el.id,
+            });
+          }
+        }),
       ]);
       if (alive) setEntries(out);
     })();
@@ -117,10 +151,10 @@ export function GlobalSearch({
     if (!entries) return [];
     const s = q.trim().toLowerCase();
     if (!s) {
-      // Show up to 20 files when query is empty (notes first, then maps)
+      // Show up to 20 files when query is empty (notes first, then maps/boards)
       const notes = entries.filter((e) => e.kind === 'note').slice(0, 20);
-      const nodes = entries.filter((e) => e.kind === 'node').slice(0, Math.max(0, 20 - notes.length));
-      return [...notes, ...nodes];
+      const rest = entries.filter((e) => e.kind !== 'note').slice(0, Math.max(0, 20 - notes.length));
+      return [...notes, ...rest];
     }
     const out: Hit[] = [];
     for (const e of entries) {
@@ -131,6 +165,13 @@ export function GlobalSearch({
           const inText = e.label.toLowerCase().includes(s);
           const at = inText ? -1 : e.memoText.toLowerCase().indexOf(s);
           const snippet = at >= 0 ? snippetAround(e.memoText, at, s.length) : undefined;
+          out.push(snippet ? { ...e, snippet } : e);
+        }
+      } else if (e.kind === 'board') {
+        if (e.haystack.includes(s)) {
+          const inText = e.label.toLowerCase().includes(s);
+          const at = inText ? -1 : e.extraText.toLowerCase().indexOf(s);
+          const snippet = at >= 0 ? snippetAround(e.extraText, at, s.length) : undefined;
           out.push(snippet ? { ...e, snippet } : e);
         }
       } else {
@@ -144,7 +185,7 @@ export function GlobalSearch({
       }
       if (out.length >= 80) break;
     }
-    // notes first (usually what people mean by "search"), then nodes
+    // notes first (usually what people mean by "search"), then nodes/stickies
     return out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'note' ? -1 : 1));
   }, [q, entries]);
 
@@ -157,6 +198,7 @@ export function GlobalSearch({
     if (!h) return;
     onClose();
     if (h.kind === 'node') void revealNode({ mapId: h.mapId, nodeId: h.nodeId, mapPath: h.mapPath });
+    else if (h.kind === 'board') void openBoardSticky(h.boardPath, h.stickyId);
     else onOpen(h.path);
   };
 
@@ -166,7 +208,7 @@ export function GlobalSearch({
         <input
           ref={inputRef}
           className="qo-input"
-          placeholder="검색 — 노드, 노트"
+          placeholder="검색 — 노드, 노트, 보드"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -193,19 +235,19 @@ export function GlobalSearch({
           ) : (
             results.map((h, i) => (
               <button
-                key={h.kind === 'node' ? `${h.mapPath}:${h.nodeId}` : h.path}
+                key={h.kind === 'node' ? `${h.mapPath}:${h.nodeId}` : h.kind === 'board' ? `${h.boardPath}:${h.stickyId}` : h.path}
                 className={`qo-item${i === idx ? ' active' : ''}`}
                 onMouseEnter={() => setIdx(i)}
                 onClick={() => choose(i)}
               >
                 <span className="qo-name">
                   <span className={`gs-ic gs-ic--${h.kind}`}>
-                    <Icon name={h.kind === 'note' ? 'note' : 'mindmap'} />
+                    <Icon name={h.kind === 'note' ? 'note' : h.kind === 'board' ? 'board' : 'mindmap'} />
                   </span>
                   <span className="qo-name-txt">{h.label || '제목 없음'}</span>
                 </span>
                 <span className="qo-folder">
-                  {h.kind === 'node' ? h.snippet || h.sub : h.snippet || '노트'}
+                  {h.kind === 'note' ? h.snippet || '노트' : h.snippet || h.sub}
                 </span>
               </button>
             ))

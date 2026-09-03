@@ -14,7 +14,7 @@ function TabDirty({ store }: { store: MapStore | NoteStore | BoardStore }) {
   return dirty ? <span className="tab-dirty" title="저장되지 않음" /> : null;
 }
 
-function tabIconName(kind: Tab['kind']): 'note' | 'board' | 'calendar' | 'mindmap' {
+export function tabIconName(kind: Tab['kind']): 'note' | 'board' | 'calendar' | 'mindmap' {
   return kind === 'note' ? 'note' : kind === 'board' ? 'board' : kind === 'calendar' ? 'calendar' : 'mindmap';
 }
 

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
+import { fileDisplayName } from '../io/fileKind';
 import { Icon } from '../ui/Icon';
+import { tabIconName } from './TabBar';
 import type { Tab } from '../store/sessionStore';
 
 interface Segment {
@@ -19,7 +21,7 @@ function segmentsFor(path: string, root: string): Segment[] {
   return parts.map((part, i) => {
     cur = `${cur}/${part}`;
     const isFile = i === parts.length - 1;
-    return { label: isFile ? part.replace(/\.(mind|md)$/, '') : part, fullPath: cur, isFile };
+    return { label: isFile ? fileDisplayName(part) : part, fullPath: cur, isFile };
   });
 }
 
@@ -57,9 +59,9 @@ function PathBarSide({ tab }: { tab: Tab | null }) {
             </button>
           ) : (
             <button className="pathbar-crumb" onClick={() => useUi.getState().revealInSidebar(seg.fullPath)}>
-              {seg.isFile && (
-                <span className={`pathbar-ic tab-ic--${tab?.kind === 'note' ? 'note' : 'map'}`}>
-                  <Icon name={tab?.kind === 'note' ? 'note' : 'mindmap'} />
+              {seg.isFile && tab && (
+                <span className={`pathbar-ic tab-ic--${tab.kind}`}>
+                  <Icon name={tabIconName(tab.kind)} />
                 </span>
               )}
               {seg.label || '제목 없음'}

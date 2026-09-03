@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUi } from '../store/uiStore';
 import { useTrash } from '../store/trashStore';
 import { useWorkspace } from '../store/workspaceStore';
+import { fileDisplayName, fileExtKind, fileIconName } from '../io/fileKind';
 import { Icon } from './Icon';
 import { useOverlayEsc } from './useOverlayEsc';
 import type { TrashItem } from '../../electron/preload';
@@ -19,11 +20,10 @@ function relTime(iso: string): string {
   return `${dt.getMonth() + 1}/${dt.getDate()}`;
 }
 
-const nameOf = (it: TrashItem) => it.name.replace(/\.(mind|md)$/, '');
-const kindLabel = (it: TrashItem) =>
-  it.type === 'dir' ? '폴더' : it.name.endsWith('.md') ? '노트' : '마인드맵';
-const iconName = (it: TrashItem) =>
-  it.type === 'dir' ? 'folder' : it.name.endsWith('.md') ? 'note' : 'file';
+const nameOf = (it: TrashItem) => fileDisplayName(it.name);
+const KIND_LABEL = { note: '노트', board: '보드', map: '마인드맵' } as const;
+const kindLabel = (it: TrashItem) => (it.type === 'dir' ? '폴더' : KIND_LABEL[fileExtKind(it.name)]);
+const iconName = (it: TrashItem) => (it.type === 'dir' ? 'folder' : fileIconName(it.name));
 
 function originDir(it: TrashItem, root: string): string {
   const parent = it.originalPath.slice(0, it.originalPath.lastIndexOf('/'));

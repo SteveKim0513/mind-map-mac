@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useUi } from '../store/uiStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { usePins } from '../store/pinStore';
+import { fileDisplayName, fileIconName } from '../io/fileKind';
 import { Icon } from './Icon';
 import { useOverlayEsc } from './useOverlayEsc';
 
@@ -50,11 +51,11 @@ export function FavoritesView({ onOpen }: { onOpen: (path: string) => void }) {
         ) : (
           <div className="trash-body">
             {paths.map((p) => {
-              const name = p.slice(p.lastIndexOf('/') + 1).replace(/\.(mind|md)$/, '');
+              const name = fileDisplayName(p);
               return (
                 <div className="trash-row" key={p}>
                   <span className="trash-ic file">
-                    <Icon name={p.endsWith('.md') ? 'note' : 'mindmap'} />
+                    <Icon name={fileIconName(p)} />
                   </span>
                   <span className="trash-info clickable" onClick={() => openOne(p)}>
                     <span className="trash-name">{name}</span>

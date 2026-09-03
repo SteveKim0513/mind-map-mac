@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from 'react';
 import { useBoard, useBoardStore } from '../store/boardStore';
+import { useUi } from '../store/uiStore';
 import { BoardElementView } from './BoardElementView';
 import { BoardSelectionToolbar } from './BoardSelectionToolbar';
 import { BoardNodePicker } from './BoardNodePicker';
@@ -129,6 +130,11 @@ export interface BoardCanvasHandle {
 
 interface Props {
   boardFilePath: string | null;
+  /** Is this the active pane (vs. a background split pane)? Gates focusReq
+   *  centering — a search result opening a board in a background pane
+   *  shouldn't yank the visible one's viewport. Defaults to true so existing
+   *  single-pane callers (e2e helpers, etc.) keep working unchanged. */
+  active?: boolean;
 }
 
 /** The interactive canvas: pan/zoom (mirrors canvas/Canvas.tsx's wheel gestures
@@ -136,7 +142,7 @@ interface Props {
  *  connector drawing with smart routing, and inline text editing for sticky
  *  notes (main text + any number of fused notes stacked below). */
 export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function BoardCanvasArea(
-  { boardFilePath },
+  { boardFilePath, active = true },
   ref,
 ) {
   const store = useBoardStore();
@@ -206,6 +212,23 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     el.addEventListener('wheel', stop, { passive: false });
     return () => el.removeEventListener('wheel', stop);
   }, []);
+
+  // Pan to center a sticky (uiStore.focusNode — generic by id, shared with the
+  // mindmap canvas) — e.g. after opening this board from a global-search hit.
+  // Only the active pane reacts, so a background split pane doesn't get yanked.
+  const focusReq = useUi((s) => s.focusReq);
+  useEffect(() => {
+    if (!focusReq || !active) return;
+    const el = store.getState().board.elements[focusReq.id];
+    if (!el || !isBoxElement(el)) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const v = store.getState().board.view;
+    const cx = el.x + el.width / 2;
+    const cy = el.y + el.height / 2;
+    setView({ panX: rect.width / 2 - cx * v.zoom, panY: rect.height / 2 - cy * v.zoom });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusReq?.nonce, active]);
 
   const onWheel = (e: React.WheelEvent) => {
     const v = store.getState().board.view;

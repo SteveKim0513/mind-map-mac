@@ -15,7 +15,8 @@
 
 import { deserialize } from './formats';
 import { parseNote } from './noteFormat';
-import type { MindMapDoc, NoteDoc } from '../types';
+import { parseBoard } from './boardFormat';
+import type { MindMapDoc, NoteDoc, BoardDoc } from '../types';
 
 /** A workspace file plus the mtime the workspace tree reported for it. */
 export interface FileRef {
@@ -84,6 +85,7 @@ const nameOf = (p: string): string => (p.split('/').pop() ?? p).replace(/\.(mind
 
 const mindCache = new FileScanCache<MindMapDoc | null>();
 const noteCache = new FileScanCache<NoteDoc | null>();
+const boardCache = new FileScanCache<BoardDoc | null>();
 
 /**
  * Parsed .mind document for `path`, cached by mtime. Returns null when the file
@@ -115,6 +117,20 @@ export function loadNote(path: string, mtimeMs: number | undefined): Promise<Not
   });
 }
 
+/**
+ * Parsed .board document for `path`, cached by mtime. Returns null when
+ * unreadable/corrupt. Only global search reads board content (sticky text).
+ */
+export function loadBoardDoc(path: string, mtimeMs: number | undefined): Promise<BoardDoc | null> {
+  return boardCache.load(path, mtimeMs ?? Number.NaN, async (p) => {
+    try {
+      return parseBoard(await window.api.readFile(p));
+    } catch {
+      return null;
+    }
+  });
+}
+
 /** Drop cached .mind entries for files no longer in the workspace. */
 export function pruneMindCache(livePaths: Iterable<string>): number {
   return mindCache.prune(livePaths);
@@ -125,8 +141,14 @@ export function pruneNoteCache(livePaths: Iterable<string>): number {
   return noteCache.prune(livePaths);
 }
 
-/** Test/reset hook — empties both shared caches. */
+/** Drop cached .board entries for files no longer in the workspace. */
+export function pruneBoardCache(livePaths: Iterable<string>): number {
+  return boardCache.prune(livePaths);
+}
+
+/** Test/reset hook — empties all shared caches. */
 export function clearScanCache(): void {
   mindCache.clear();
   noteCache.clear();
+  boardCache.clear();
 }

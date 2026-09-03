@@ -10,6 +10,7 @@ import { emptyDoc, serialize, newId } from '../io/formats';
 import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
 import { emptyBoard, serializeBoard } from '../io/boardFormat';
 import { fileNameFromTitle } from '../io/autoName';
+import { fileExtKind, fileIconName as extIconName, fileDisplayName } from '../io/fileKind';
 import type { NoteStore } from '../store/noteStore';
 import { extractArticle } from '../note/extractArticle';
 import { renameWikiLinks } from '../note/noteLinks';
@@ -36,19 +37,19 @@ function basename(p: string): string {
   return p.slice(p.lastIndexOf('/') + 1);
 }
 function displayName(node: TreeNode): string {
-  return node.type === 'file' ? node.name.replace(/\.(mind|md|board)$/, '') : node.name;
+  return node.type === 'file' ? fileDisplayName(node.name) : node.name;
 }
 function isNoteFile(node: TreeNode): boolean {
-  return node.type === 'file' && node.name.endsWith('.md');
+  return node.type === 'file' && fileExtKind(node.name) === 'note';
 }
 function isBoardFile(node: TreeNode): boolean {
-  return node.type === 'file' && node.name.endsWith('.board');
+  return node.type === 'file' && fileExtKind(node.name) === 'board';
 }
 function fileKind(node: TreeNode): 'dir' | 'note' | 'board' | 'map' {
-  return node.type === 'dir' ? 'dir' : isNoteFile(node) ? 'note' : isBoardFile(node) ? 'board' : 'map';
+  return node.type === 'dir' ? 'dir' : fileExtKind(node.name);
 }
 function fileIconName(node: TreeNode): 'folder' | 'note' | 'board' | 'mindmap' {
-  return node.type === 'dir' ? 'folder' : isNoteFile(node) ? 'note' : isBoardFile(node) ? 'board' : 'mindmap';
+  return node.type === 'dir' ? 'folder' : extIconName(node.name);
 }
 
 export function Sidebar({

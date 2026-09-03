@@ -16,13 +16,13 @@ export function BoardPane({ tab, isActive, onActivate }: Props) {
   return (
     <BoardContext.Provider value={tab.store as BoardStore}>
       <div className={`pane board-pane${isActive ? ' active' : ''}`} onPointerDownCapture={onActivate}>
-        <BoardPaneBody />
+        <BoardPaneBody active={isActive} />
       </div>
     </BoardContext.Provider>
   );
 }
 
-function BoardPaneBody() {
+function BoardPaneBody({ active }: { active: boolean }) {
   const store = useBoardStore();
   const dirty = useBoard((s) => s.dirty);
   const filePath = useBoard((s) => s.filePath);
@@ -46,7 +46,7 @@ function BoardPaneBody() {
   return (
     <>
       <BoardToolbar handle={handle} boardFilePath={filePath} />
-      <BoardCanvasArea ref={setHandle} boardFilePath={filePath} />
+      <BoardCanvasArea ref={setHandle} boardFilePath={filePath} active={active} />
     </>
   );
 }
