@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { autoLayoutPositions, filterGridPositions } from './boardLayout';
+import { layoutConnectedCluster, filterGridPositions } from './boardLayout';
 import type { BoardElement, BoardStickyElement, BoardConnectorElement } from '../types';
 
 function sticky(id: string, x: number, y: number, width = 100, height = 60): BoardStickyElement {
@@ -11,135 +11,86 @@ function connector(id: string, fromId: string, toId: string, fromAnchor: BoardCo
   return { id, kind: 'connector', fromId, fromAnchor, toId, toAnchor: opposite[fromAnchor], arrow: true };
 }
 
-describe('autoLayoutPositions', () => {
-  it('returns [] when the root has no outgoing connectors', () => {
+// These exercise the REAL elkjs `layered` algorithm (dynamically imported,
+// same as production) rather than mocking it — exact pixel coordinates are
+// elkjs's own implementation detail (and could shift across elkjs versions),
+// so assertions stick to BEHAVIOR this function itself is responsible for:
+// which nodes end up positioned, that the root stays anchored, and that no
+// relationship is silently dropped from the graph handed to elkjs.
+describe('layoutConnectedCluster', () => {
+  it('returns [] when the root has no connectors at all', async () => {
     const elements: Record<string, BoardElement> = { root: sticky('root', 0, 0) };
-    expect(autoLayoutPositions('root', elements)).toEqual([]);
+    expect(await layoutConnectedCluster('root', elements)).toEqual([]);
   });
 
-  it('returns [] for an unknown or non-box root id', () => {
-    expect(autoLayoutPositions('missing', {})).toEqual([]);
+  it('returns [] for an unknown or non-box root id', async () => {
+    expect(await layoutConnectedCluster('missing', {})).toEqual([]);
   });
 
-  it('keeps the root in place and places a single child one column over', () => {
+  it('keeps the root at its current position and places a connected child elsewhere', async () => {
     const elements: Record<string, BoardElement> = {
       root: sticky('root', 500, 500, 100, 60),
       child: sticky('child', 999, 999, 120, 80),
       c1: connector('c1', 'root', 'child'),
     };
-    const positions = autoLayoutPositions('root', elements);
+    const positions = await layoutConnectedCluster('root', elements);
     const byId = Object.fromEntries(positions.map((p) => [p.id, p]));
     expect(byId.root).toEqual({ id: 'root', x: 500, y: 500 });
-    expect(byId.child.x).toBe(500 + 100 + 96); // one H_GAP (96) past the root's right edge
-    // vertically centered on the root's own center (500 + 60/2 = 530), child height 80 → y = 530-40
-    expect(byId.child.y).toBe(530 - 40);
+    expect(byId.child).toBeDefined();
+    expect(byId.child.x !== 500 || byId.child.y !== 500).toBe(true); // not stacked on the root
   });
 
-  it('stacks multiple siblings in the same column, centered on the parent', () => {
-    const elements: Record<string, BoardElement> = {
-      root: sticky('root', 0, 0, 100, 60),
-      a: sticky('a', 0, 0, 100, 40),
-      b: sticky('b', 0, 0, 100, 40),
-      c1: connector('c1', 'root', 'a'),
-      c2: connector('c2', 'root', 'b'),
-    };
-    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
-    expect(byId.a.x).toBe(byId.b.x); // same depth column
-    expect(byId.b.y).toBeGreaterThan(byId.a.y); // stacked, not overlapping
-  });
-
-  it('does not revisit an element reachable by two different edges (no infinite loop)', () => {
-    const elements: Record<string, BoardElement> = {
-      root: sticky('root', 0, 0),
-      a: sticky('a', 0, 0),
-      b: sticky('b', 0, 0),
-      shared: sticky('shared', 0, 0),
-      c1: connector('c1', 'root', 'a'),
-      c2: connector('c2', 'root', 'b'),
-      c3: connector('c3', 'a', 'shared'),
-      c4: connector('c4', 'b', 'shared'), // second edge into an already-visited node
-    };
-    const positions = autoLayoutPositions('root', elements);
-    const sharedCount = positions.filter((p) => p.id === 'shared').length;
-    expect(sharedCount).toBe(1);
-  });
-
-  it('ignores a connector pointing at a non-box element', () => {
+  it('ignores a connector pointing at a non-box element', async () => {
     const elements: Record<string, BoardElement> = {
       root: sticky('root', 0, 0),
       child: sticky('child', 0, 0),
       bad: connector('bad', 'root', 'ghost'), // 'ghost' does not exist
       c1: connector('c1', 'root', 'child'),
     };
-    const positions = autoLayoutPositions('root', elements);
+    const positions = await layoutConnectedCluster('root', elements);
     expect(positions.some((p) => p.id === 'ghost')).toBe(false);
     expect(positions.some((p) => p.id === 'child')).toBe(true);
   });
 
-  // ── 2026-09-07 redesign: each of the root's arms follows the anchor
-  //    direction its OWN connector used, instead of always going rightward ──
-
-  it('places a child BELOW the root when connected via a bottom anchor', () => {
+  it('includes a node reachable only via an INCOMING edge, not just outgoing (2026-09-07: this is the whole point of the redesign)', async () => {
     const elements: Record<string, BoardElement> = {
-      root: sticky('root', 500, 500, 100, 60),
-      child: sticky('child', 999, 999, 120, 80),
-      c1: connector('c1', 'root', 'child', 'bottom'),
+      root: sticky('root', 0, 0),
+      upstream: sticky('upstream', 0, 0),
+      c1: connector('c1', 'upstream', 'root'), // points AT root, not from it
     };
-    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
-    expect(byId.child.y).toBe(500 + 60 + 96); // one PRIMARY_GAP (96) below the root's bottom edge
-    // horizontally centered on the root's own center (500 + 100/2 = 550), child width 120 → x = 550-60
-    expect(byId.child.x).toBe(550 - 60);
+    const positions = await layoutConnectedCluster('root', elements);
+    expect(positions.some((p) => p.id === 'upstream')).toBe(true);
   });
 
-  it('places a child to the LEFT when connected via a left anchor', () => {
+  it('keeps every node in a diamond (A→B, A→C, B→D, C→D) — no relationship silently dropped', async () => {
     const elements: Record<string, BoardElement> = {
-      root: sticky('root', 500, 500, 100, 60),
-      child: sticky('child', 999, 999, 120, 80),
-      c1: connector('c1', 'root', 'child', 'left'),
+      a: sticky('a', 500, 500),
+      b: sticky('b', 0, 0),
+      c: sticky('c', 0, 0),
+      d: sticky('d', 0, 0),
+      c1: connector('c1', 'a', 'b'),
+      c2: connector('c2', 'a', 'c'),
+      c3: connector('c3', 'b', 'd'),
+      c4: connector('c4', 'c', 'd'), // second, independent path into d
     };
-    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
-    expect(byId.child.x).toBe(500 - 96 - 120); // one PRIMARY_GAP left of the root's left edge, minus the child's own width
+    const positions = await layoutConnectedCluster('a', elements);
+    const ids = positions.map((p) => p.id).sort();
+    expect(ids).toEqual(['a', 'b', 'c', 'd']);
+    expect(positions.find((p) => p.id === 'a')).toEqual({ id: 'a', x: 500, y: 500 });
   });
 
-  it('places a child ABOVE when connected via a top anchor', () => {
+  it('is deterministic — the same graph laid out twice yields the same positions', async () => {
     const elements: Record<string, BoardElement> = {
-      root: sticky('root', 500, 500, 100, 60),
-      child: sticky('child', 999, 999, 120, 80),
-      c1: connector('c1', 'root', 'child', 'top'),
-    };
-    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
-    expect(byId.child.y).toBe(500 - 96 - 80); // one PRIMARY_GAP above the root's top edge, minus the child's own height
-  });
-
-  it('a whole branch keeps growing in its arm\'s direction, ignoring deeper connectors\' own anchor side', () => {
-    const elements: Record<string, BoardElement> = {
-      root: sticky('root', 0, 0, 100, 60),
+      root: sticky('root', 10, 20, 100, 60),
       a: sticky('a', 0, 0, 100, 40),
       b: sticky('b', 0, 0, 100, 40),
-      c1: connector('c1', 'root', 'a', 'bottom'),
-      // a→b's own connector claims 'right', but b should still land BELOW a
-      // (further down the 'bottom' arm), not to a's right — since it inherits
-      // the arm's direction rather than using its own connector's side.
-      c2: connector('c2', 'a', 'b', 'right'),
+      c1: connector('c1', 'root', 'a'),
+      c2: connector('c2', 'root', 'b'),
+      c3: connector('c3', 'a', 'b'),
     };
-    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
-    expect(byId.b.y).toBeGreaterThan(byId.a.y);
-    expect(byId.a.y).toBeGreaterThan(0); // below the root
-  });
-
-  it('independent arms in different directions from the same root do not interfere with each other', () => {
-    const elements: Record<string, BoardElement> = {
-      root: sticky('root', 0, 0, 100, 60),
-      right1: sticky('right1', 0, 0, 100, 40),
-      down1: sticky('down1', 0, 0, 100, 40),
-      cr: connector('cr', 'root', 'right1', 'right'),
-      cd: connector('cd', 'root', 'down1', 'bottom'),
-    };
-    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
-    expect(byId.right1.x).toBeGreaterThan(0); // to the right of the root
-    expect(byId.right1.y).toBe(30 - 20); // vertically centered on the root (center Y 30), single child in the arm
-    expect(byId.down1.y).toBeGreaterThan(0); // below the root
-    expect(byId.down1.x).toBe(0); // horizontally centered on the root (center X 50), single child in the arm
+    const first = await layoutConnectedCluster('root', elements);
+    const second = await layoutConnectedCluster('root', elements);
+    expect(second).toEqual(first);
   });
 });
 

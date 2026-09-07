@@ -95,6 +95,9 @@ test('"정리"를 누르면 선택한 스티키에서 연결된 자식들이 옆
     const tidyBtn = page.locator('.tool-btn[title*="정리"]');
     await expect(tidyBtn).toBeEnabled();
     await tidyBtn.click();
+    // 2026-09-07: "정리" is now async (elkjs's layout runs as a dynamically-
+    // imported Promise) — give it a beat before reading the result.
+    await page.waitForTimeout(500);
 
     const tidied = await child.boundingBox();
     if (!tidied) throw new Error('위치를 읽지 못함');

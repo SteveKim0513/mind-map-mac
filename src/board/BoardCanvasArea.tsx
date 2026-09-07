@@ -18,7 +18,7 @@ import { BoardNoteLinkPicker } from './BoardNoteLinkPicker';
 import { ensureMapPersisted } from './boardLinks';
 import { elementBBox, boardBounds, isBoxElement, anchorPoint, oppositeAnchor, type BoxElement } from './boardGeometry';
 import { routeWaypoints, roundedPath, pointsBBox, pathMidpoint } from './boardRouting';
-import { autoLayoutPositions, filterGridPositions } from './boardLayout';
+import { layoutConnectedCluster, filterGridPositions } from './boardLayout';
 import { newId } from '../io/formats';
 import { tagVar } from '../theme/palette';
 import type { BoardAnchorSide, BoardConnectorElement, BoardElement, BoardImageElement, BoardStickyElement } from '../types';
@@ -334,8 +334,13 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       },
       tidySelected: () => {
         if (selection.length !== 1) return;
-        const positions = autoLayoutPositions(selection[0], store.getState().board.elements);
-        if (positions.length) store.getState().setElementPositions(positions);
+        // elkjs's layout runs async (dynamically imported — see boardLayout.ts's
+        // doc comment on layoutConnectedCluster); the handle's own signature
+        // stays synchronous (fire-and-forget, matching the button's onClick).
+        void (async () => {
+          const positions = await layoutConnectedCluster(selection[0], store.getState().board.elements);
+          if (positions.length) store.getState().setElementPositions(positions);
+        })();
       },
       viewportCenterWorld: () => {
         const rect = containerRef.current?.getBoundingClientRect();
