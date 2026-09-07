@@ -3,6 +3,7 @@ import { isBoxElement, type BoxElement } from './boardGeometry';
 
 const H_GAP = 96; // px between depth columns
 const V_GAP = 32; // px between siblings in the same column
+const GRID_GAP = 24; // px between cells in the filter grid below
 
 /** Auto-arrange the connected cluster reachable from `rootId` by following
  *  connectors in their `fromId → toId` direction (the same direction a click
@@ -65,5 +66,40 @@ export function autoLayoutPositions(
     x += Math.max(...els.map((el) => el.width)) + H_GAP;
   }
 
+  return positions;
+}
+
+/** View-only grid arrangement for a color/shape filter's matching elements
+ *  (2026-09-06 — "필터가 흐리게 dim만 하고, 마인드맵처럼 재배치하지 않음"). The
+ *  mindmap's color filter excludes non-matching nodes from the tree layout
+ *  itself, so the rest compact together; a board has no tree to compact, so
+ *  this computes an equivalent fresh arrangement for JUST the matching
+ *  elements — left to right, wrapping into rows sized to the current
+ *  viewport's world-space width. Callers render elements at these positions
+ *  WITHOUT writing them back to the document (`board.elements` keeps its real
+ *  x/y untouched) — turning the filter off simply stops using this map and
+ *  the real positions show again. `order` should already be just the
+ *  matching elements, in the order to place them (e.g. board.order filtered
+ *  to matches, so the grid reads in the same back-to-front order as the
+ *  document). */
+export function filterGridPositions(
+  order: string[],
+  elements: Record<string, BoardElement>,
+  viewportWidth: number,
+): Record<string, { x: number; y: number }> {
+  const els = order.map((id) => elements[id]).filter((el): el is BoxElement => !!el && isBoxElement(el));
+  if (els.length === 0) return {};
+
+  const colWidth = Math.max(...els.map((el) => el.width)) + GRID_GAP;
+  const cols = Math.max(1, Math.floor(viewportWidth / colWidth));
+  const positions: Record<string, { x: number; y: number }> = {};
+  let y = 0;
+  for (let i = 0; i < els.length; i += cols) {
+    const row = els.slice(i, i + cols);
+    row.forEach((el, j) => {
+      positions[el.id] = { x: j * colWidth, y };
+    });
+    y += Math.max(...row.map((el) => el.height)) + GRID_GAP;
+  }
   return positions;
 }

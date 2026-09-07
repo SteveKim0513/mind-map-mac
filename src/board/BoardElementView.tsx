@@ -9,13 +9,22 @@ import { Icon } from '../ui/Icon';
 const ANCHORS: BoardAnchorSide[] = ['top', 'right', 'bottom', 'left'];
 const FONT_PX: Record<string, number> = { small: 12, medium: 13.5, large: 16.5 };
 
+/** Short display label for an external link chip — the hostname, or the raw
+ *  string if it doesn't parse as a URL (e.g. still mid-typing). */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname || url;
+  } catch {
+    return url;
+  }
+}
+
 interface Props {
   el: BoardElement;
   selected: boolean;
   editingField: 'text' | 'note' | null;
   editingNoteIndex: number | null; // meaningful only when editingField === 'note'
-  dimmed: boolean; // hidden by the active color/shape filter
-  showAnchors: boolean; // selected, hovered, or the live target of a connector drag
+  showAnchors: boolean; // selected, hovered, or the live target of a connector drag — anchors are always mounted, this just toggles their "active" (big/opaque/clickable) CSS state
   snapAnchor: BoardAnchorSide | null; // which anchor an in-progress connector would land on if dropped now
   imageSrc: string | undefined; // resolved data: URI for image elements (undefined while loading)
   onPointerDown: (e: ReactPointerEvent) => void;
@@ -49,7 +58,6 @@ export function BoardElementView({
   selected,
   editingField,
   editingNoteIndex,
-  dimmed,
   showAnchors,
   snapAnchor,
   imageSrc,
@@ -66,6 +74,7 @@ export function BoardElementView({
   const theme = useUi((s) => s.theme);
   const setNodeLink = useBoard((s) => s.setNodeLink);
   const setNoteLink = useBoard((s) => s.setNoteLink);
+  const updateElement = useBoard((s) => s.updateElement);
 
   const style: React.CSSProperties = {
     left: el.x,
@@ -82,7 +91,7 @@ export function BoardElementView({
 
   return (
     <div
-      className={`board-el board-el--${el.kind}${selected ? ' selected' : ''}${dimmed ? ' dimmed' : ''}`}
+      className={`board-el board-el--${el.kind}${selected ? ' selected' : ''}`}
       style={style}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
@@ -115,7 +124,7 @@ export function BoardElementView({
             )}
           </div>
 
-          {(el.nodeLink || el.noteLink) && (
+          {(el.nodeLink || el.noteLink || el.link) && (
             <div className="board-sticky-links" data-board-region="links">
               {el.nodeLink && (
                 <button
@@ -163,6 +172,29 @@ export function BoardElementView({
                   </span>
                 </button>
               )}
+              {el.link && (
+                <button
+                  className="board-sticky-link"
+                  title={`링크 열기: ${el.link}`}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => window.open(el.link, '_blank')}
+                >
+                  <Icon name="external" />
+                  <span className="board-sticky-link-text">{hostOf(el.link)}</span>
+                  <span
+                    className="board-sticky-link-x"
+                    role="button"
+                    title="연결 해제"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateElement(el.id, { link: '' });
+                    }}
+                  >
+                    <Icon name="close" />
+                  </span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -180,14 +212,20 @@ export function BoardElementView({
         </div>
       )}
 
-      {showAnchors &&
-        ANCHORS.map((side) => (
-          <div
-            key={side}
-            className={`board-anchor board-anchor--${side}${snapAnchor === side ? ' board-anchor--snap' : ''}`}
-            onPointerDown={(e) => onAnchorPointerDown(side, e)}
-          />
-        ))}
+      {ANCHORS.map((side) => (
+        <div
+          key={side}
+          // Always mounted (2026-09-06) — a conditionally-mounted anchor needs
+          // an entrance animation to fade in, and that class of animation was
+          // already found to get stuck mid-frame in some window states
+          // (2026-09-03, see .board-anchor's CSS comment). Instead the anchor
+          // is always present but nearly invisible + inert (pointer-events:
+          // none) until `active`, which is a plain CSS transition, not a
+          // keyframe animation with its own timeline to desync.
+          className={`board-anchor board-anchor--${side}${showAnchors ? ' active' : ''}${snapAnchor === side ? ' board-anchor--snap' : ''}`}
+          onPointerDown={(e) => onAnchorPointerDown(side, e)}
+        />
+      ))}
 
       {el.kind === 'sticky' && el.notes && el.notes.length > 0 && (
         <div className="board-sticky-notes" style={{ width: el.width }}>

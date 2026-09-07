@@ -39,6 +39,7 @@ export type BoardElementPatch = Partial<{
   toAnchor: BoardAnchorSide;
   arrow: boolean;
   label: string;
+  link: string;
 }>;
 
 interface BoardState {

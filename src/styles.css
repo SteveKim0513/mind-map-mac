@@ -3891,6 +3891,20 @@ textarea:focus-visible,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.st-link-input {
+  width: 100%;
+  min-width: 168px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas-soft, var(--hover));
+  color: var(--ink);
+  border-radius: var(--r-sm);
+  padding: 5px 8px;
+  font-size: 12.5px;
+  outline: none;
+}
+.st-link-input:focus {
+  border-color: var(--primary);
+}
 
 /* ── Command palette group header (C) ───────────────────────────────────────── */
 .qo-group {
@@ -6818,10 +6832,6 @@ textarea:focus-visible,
   box-sizing: border-box;
   user-select: none;
 }
-.board-el.dimmed {
-  opacity: 0.28;
-  transition: opacity 0.15s ease;
-}
 
 .board-el-body {
   position: relative;
@@ -7004,29 +7014,35 @@ textarea:focus-visible,
 
 .board-anchor {
   position: absolute;
-  width: 10px;
-  height: 10px;
-  margin: -5px 0 0 -5px;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
   background: var(--surface);
   border: 2px solid var(--primary);
   border-radius: var(--r-full);
   cursor: crosshair;
-  pointer-events: all;
   z-index: 5;
-  /* No mount animation here on purpose: an entrance `animation` (even
-     opacity-only) can get stuck at its `from` keyframe — unclickable and
-     absent from hit-testing — in a window Chromium treats as non-visible
-     (e.g. E2E's off-screen windows, or a real window that's occluded/
-     backgrounded the instant a sticky is selected). Found via E2E flake
-     chasing (2026-09-03); a transform version of this animation additionally
-     skewed getBoundingClientRect() while it ran. Anchors just appear
-     immediately — still smooth via the transition below on interaction. */
-  transition: background 0.1s ease, box-shadow 0.1s ease;
+  /* Always mounted (2026-09-06), never conditionally rendered — an entrance
+     `animation` (even opacity-only) can get stuck at its `from` keyframe —
+     unclickable and absent from hit-testing — in a window Chromium treats as
+     non-visible (e.g. E2E's off-screen windows, or a real window that's
+     occluded/backgrounded the instant a sticky is selected). Found via E2E
+     flake chasing (2026-09-03). A faint always-present dot doubles as a
+     discoverability hint ("there's a connection point here") even before
+     hover, and `.active` is a plain CSS transition off existing state, not a
+     keyframe animation with its own timeline to get stuck on. */
+  opacity: 0.16;
+  pointer-events: none;
+  transition: opacity 0.15s ease, background 0.1s ease, box-shadow 0.1s ease;
 }
 .board-anchor--top { top: 0; left: 50%; }
 .board-anchor--bottom { top: 100%; left: 50%; }
 .board-anchor--left { top: 50%; left: 0; }
 .board-anchor--right { top: 50%; left: 100%; }
+.board-anchor.active {
+  opacity: 1;
+  pointer-events: all;
+}
 .board-anchor:hover {
   background: var(--primary);
 }

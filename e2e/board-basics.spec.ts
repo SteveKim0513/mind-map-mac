@@ -167,7 +167,7 @@ test('스티키를 삭제하면 거기 연결된 화살표도 함께 삭제된�
   }
 });
 
-test('스티키를 선택하면 위에 뜨는 메뉴에서 색·모양을 바꿀 수 있고, 상단 태그바 필터를 켜면 다른 색은 흐려진다', { tag: ['@board'] }, async () => {
+test('스티키를 선택하면 위에 뜨는 메뉴에서 색·모양을 바꿀 수 있고, 상단 태그바 필터를 켜면 다른 색은 숨겨진다', { tag: ['@board'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {
     await newBoard(page);
@@ -188,8 +188,16 @@ test('스티키를 선택하면 위에 뜨는 메뉴에서 색·모양을 바꿀
 
     // color filter lives in the top TagBar (마인드맵과 동일), not the bottom toolbar
     await expect(page.locator('.tagbar-chip')).toHaveCount(2); // green + violet used
+    await expect(page.locator('.board-el--sticky')).toHaveCount(2);
+    // 2026-09-06: a filter re-arranges the matching subset into a fresh grid
+    // and hides the rest entirely (mindmap-like "exclude", not a CSS dim) —
+    // so exactly one sticky renders while filtered.
     await page.locator('.tagbar-chip .tagbar-chip-main').first().click();
-    await expect(page.locator('.board-el--sticky.dimmed')).toHaveCount(1);
+    await expect(page.locator('.board-el--sticky')).toHaveCount(1);
+    await expect(page.locator('.board-el--sticky.dimmed')).toHaveCount(0); // not a dim — a hide
+    // turning the filter off restores both, at their real positions
+    await page.locator('.tagbar-chip .tagbar-chip-main').first().click();
+    await expect(page.locator('.board-el--sticky')).toHaveCount(2);
   } finally {
     await cleanup();
   }

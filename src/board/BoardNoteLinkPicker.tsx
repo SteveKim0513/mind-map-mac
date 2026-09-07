@@ -77,8 +77,13 @@ export function BoardNoteLinkPicker({ boardFilePath, onPick, onClose }: Props) {
   };
 
   return (
-    <div className="picker-backdrop" onMouseDown={onClose}>
-      <div className="picker" onMouseDown={(e) => e.stopPropagation()}>
+    // 2026-09-06: see BoardNodePicker.tsx's identical comment — this picker is
+    // a child of .board-canvas, whose own onPointerDown captures the pointer
+    // on a plain background click. Stopping onMouseDown doesn't stop the
+    // separate native pointerdown from bubbling there first, which broke
+    // click-to-pick and let scroll-wheel events reach the board underneath.
+    <div className="picker-backdrop" onPointerDown={onClose} onWheel={(e) => e.stopPropagation()}>
+      <div className="picker" onPointerDown={(e) => e.stopPropagation()}>
         <div className="picker-head">
           <Icon name="link" />
           <span>노트 연결</span>

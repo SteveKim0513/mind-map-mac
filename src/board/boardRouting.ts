@@ -30,31 +30,28 @@ function dedupe(pts: Point[]): Point[] {
 }
 
 /** Waypoints for a connector between two anchors, adapting the route to their
- *  relative position instead of always drawing a straight line (2026-09-03
- *  UX feedback — Miro/Lucidchart-style "smart" orthogonal routing). A
- *  straight line is still used when the anchors already face each other
- *  head-on and are roughly aligned — no point manufacturing a bend that
- *  isn't there. */
+ *  relative position (2026-09-03 UX feedback — Miro/Lucidchart-style "smart"
+ *  orthogonal routing).
+ *
+ *  Always runs the same general bent-path construction below — there is
+ *  deliberately no "if aligned, shortcut to a raw 2-point line" special case.
+ *  An earlier version had one (guarded by a `< 2px` alignment threshold), but
+ *  that made a connector's shape a DISCONTINUOUS function of the endpoints:
+ *  dragging a sticky so its anchor drifts past the threshold made the path
+ *  visibly *pop* between a straight line and a bent one instead of easing
+ *  through it (2026-09-06 feedback — "화살표가 안 자연스럽다"). The general
+ *  construction already degrades to a straight line on its own when the
+ *  anchors face each other and are exactly aligned: the two midpoints it
+ *  inserts collapse to the same coordinate and get deduped away, leaving
+ *  colinear points that render identically to a raw line. Near-alignment (a
+ *  1px offset, say) now produces an almost-imperceptibly bent path instead of
+ *  an exact line, which is the point — it varies continuously as the offset
+ *  grows, with no threshold to snap across. */
 export function routeWaypoints(a: Point, fromSide: BoardAnchorSide, b: Point, toSide: BoardAnchorSide): Point[] {
   const da = dir(fromSide);
   const db = dir(toSide);
   const horizA = da.y === 0;
   const horizB = db.y === 0;
-
-  // Straight line only when the sides face each other AND b actually sits in
-  // the direction `a` exits toward — two 'right' anchors 26px apart facing
-  // the same way, or a target BEHIND the exit direction, must still bend
-  // (a literal straight line there would cut back through the source box).
-  if (horizA && horizB) {
-    const facing = Math.sign(db.x) === -Math.sign(da.x);
-    const ahead = a.x === b.x || Math.sign(b.x - a.x) === Math.sign(da.x);
-    if (facing && ahead && Math.abs(a.y - b.y) < 2) return [a, b];
-  }
-  if (!horizA && !horizB) {
-    const facing = Math.sign(db.y) === -Math.sign(da.y);
-    const ahead = a.y === b.y || Math.sign(b.y - a.y) === Math.sign(da.y);
-    if (facing && ahead && Math.abs(a.x - b.x) < 2) return [a, b];
-  }
 
   const e = { x: a.x + da.x * EXIT_GAP, y: a.y + da.y * EXIT_GAP }; // pushed out from `a`
   const n = { x: b.x + db.x * EXIT_GAP, y: b.y + db.y * EXIT_GAP }; // pushed out from `b`

@@ -4,6 +4,21 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.13.2] - 2026-09-07
+
+### 추가
+- **보드 스티키에 외부 링크(URL) 연결** — 노드 연결·노트 연결 다음 세 번째 연동 옵션. `BoardStickyElement.link` 필드, 플라이아웃 인라인 입력, 카드 칩(호스트명 표시), `window.open` + Electron `setWindowOpenHandler`로 외부 브라우저에서 열림(마인드맵 노드 링크와 동일 경로).
+- **보드 빈 캔버스 더블클릭 → 스티키 생성** — `elementAt()` 가드로 기존 요소 위 더블클릭은 무시(그 요소 자신의 편집 진입에 맡김).
+
+### 수정
+- **분할 화면에서 새 스티키/이미지 스폰 위치** — `BoardToolbar`의 `nextSpot()`이 `window.innerWidth/innerHeight`(창 전체) 기준이라 분할 화면에서 반대쪽 비활성 패널에 생기던 문제. `BoardCanvasHandle.viewportCenterWorld()`를 추가해 캔버스 자기 컨테이너 rect 기준으로 계산하도록 교체.
+- **화살표가 스티키 위에 그려지던 z-order** — 연결선(svg path)만 스티키보다 먼저(뒤에), 라벨 칩·재배선 손잡이는 스티키 다음(위에) 그리는 두 패스 렌더로 분리.
+- **연결 포인트(앵커) 크기·discoverability** — 10px→14px로 확대, 항상 마운트한 채 기본 상태를 흐리게(`opacity: 0.16`, `pointer-events: none`) 하고 hover·선택·드래그 타깃일 때만 CSS 클래스로 진해지고 커지도록 전환(상태 기반 transition — 2026-09-03에 발견했던 마운트-애니메이션 정지 버그의 재발 위험 없음).
+- **드래그 중 화살표 경로의 불연속 팝(pop)** — `boardRouting.ts`의 `routeWaypoints()`가 두 앵커 정렬 시 직선 2점으로 단락하는 특수 케이스를 갖고 있어, 정렬이 살짝 깨지는 순간 경로가 순간적으로 점프했다. 이 특수 케이스를 제거하고 항상 일반 꺾은선 계산을 쓰도록 변경 — 정렬 시 중간 waypoint가 `dedupe()`로 자연히 합쳐져 시각적으로는 동일한 직선이 되면서 연속적으로 변형된다.
+- **노드/노트 연결 피커에서 항목을 클릭해도 연결이 안 되던 버그** — 근본 원인: `.picker`/`.picker-backdrop`이 `onMouseDown`으로만 배경 클릭을 막았는데, `.board-canvas`(자체 `onPointerDown`으로 `setPointerCapture`+마퀴 선택 시작)의 DOM 자손으로 렌더링돼 별도의 네이티브 `pointerdown` 이벤트가 막히지 않고 캔버스까지 버블링 → 이후 `pointerup`이 캔버스로 리다이렉트되며 클릭 합성이 깨져 피커 항목의 `onClick`이 발화하지 않음. `onMouseDown` → `onPointerDown`으로 교체해 해결.
+- **피커가 열린 채 스크롤하면 뒤 보드도 같이 팬되던 문제** — 같은 원인(`position: fixed`인 `.picker-backdrop`도 이벤트 버블링 트리에서는 `.board-canvas`의 자손). 피커에 `onWheel={(e) => e.stopPropagation()}` 추가.
+- **색 필터가 dim만 하고 재배치하지 않던 것** — 마인드맵의 색 필터(레이아웃 계산에서 제외 → 남은 노드 압축)를 참고해, 보드 전용의 뷰 전용(비영속) 그리드 재배치 `filterGridPositions()`를 구현. 필터 활성 시 일치 요소만 화면에 남기고(숨김, dim 아님) 그리드로 재배치, 해제 시 저장된 실제 좌표로 즉시 복귀(문서 x/y는 불변).
+
 ## [0.13.1] - 2026-09-03
 
 ### 수정

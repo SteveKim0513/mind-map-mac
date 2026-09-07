@@ -2,9 +2,26 @@ import { describe, it, expect } from 'vitest';
 import { routeWaypoints, roundedPath, pointsBBox, pathMidpoint } from './boardRouting';
 
 describe('routeWaypoints', () => {
-  it('draws a straight line when anchors face each other head-on and are aligned', () => {
+  it('is visually straight (all points colinear) when anchors face each other head-on and are aligned', () => {
+    // No shortcut to a raw 2-point line anymore (2026-09-06 — see the
+    // function's own doc comment on why): the general construction should
+    // still degrade to a straight line on its own, just via more waypoints
+    // that happen to share the same y.
     const pts = routeWaypoints({ x: 0, y: 50 }, 'right', { x: 200, y: 50 }, 'left');
-    expect(pts).toEqual([{ x: 0, y: 50 }, { x: 200, y: 50 }]);
+    expect(pts[0]).toEqual({ x: 0, y: 50 });
+    expect(pts[pts.length - 1]).toEqual({ x: 200, y: 50 });
+    expect(pts.every((p) => p.y === 50)).toBe(true);
+  });
+
+  it('bends only slightly (near-straight) for a near-aligned pair — no threshold to snap across', () => {
+    // 1.5px of vertical offset used to fall inside the old `< 2px` shortcut
+    // and render as an exact straight line; a 2.5px offset used to just miss
+    // it and bend — a visible pop at that boundary. Now both cases go
+    // through the same construction and differ only by that same 1px, i.e.
+    // continuously.
+    const a = routeWaypoints({ x: 0, y: 50 }, 'right', { x: 200, y: 51.5 }, 'left');
+    const b = routeWaypoints({ x: 0, y: 50 }, 'right', { x: 200, y: 52.5 }, 'left');
+    expect(a.length).toBe(b.length); // same shape/point-count either side of the old threshold
   });
 
   it('bends when the target is behind the source (same-ish side, not aligned)', () => {

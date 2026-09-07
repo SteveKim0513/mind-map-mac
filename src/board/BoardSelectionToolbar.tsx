@@ -43,7 +43,11 @@ export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode,
   const setNodeLink = useBoard((s) => s.setNodeLink);
   const setNoteLink = useBoard((s) => s.setNoteLink);
   const [flyout, setFlyout] = useState<Flyout>(null);
-  const toggle = (f: Flyout) => setFlyout((v) => (v === f ? null : f));
+  const [linkInputOpen, setLinkInputOpen] = useState(false);
+  const toggle = (f: Flyout) => {
+    setLinkInputOpen(false);
+    setFlyout((v) => (v === f ? null : f));
+  };
 
   const primary = stickies[0];
   const ids = stickies.map((s) => s.id);
@@ -81,7 +85,7 @@ export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode,
             <Icon name="plus" />
           </button>
           <span className="st-sep" />
-          <button className={`st-btn${primary.nodeLink || primary.noteLink ? ' on' : ''}`} title="연동" onClick={() => toggle('link')}>
+          <button className={`st-btn${primary.nodeLink || primary.noteLink || primary.link ? ' on' : ''}`} title="연동" onClick={() => toggle('link')}>
             <Icon name="link" />
           </button>
         </>
@@ -183,6 +187,35 @@ export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode,
               <button className="st-btn st-link-row" title="노트 연결" onClick={() => { setFlyout(null); onLinkNote(); }}>
                 <Icon name="note" />
                 <span className="st-format-text">노트 연결</span>
+              </button>
+            )}
+          </div>
+          <div className="st-flyout-row">
+            {primary.link ? (
+              <button className="st-btn st-link-row" title="링크 연결 해제" onClick={() => apply({ link: '' })}>
+                <Icon name="external" />
+                <span className="st-format-text">{primary.link}</span>
+                <Icon name="close" />
+              </button>
+            ) : linkInputOpen ? (
+              <input
+                className="st-link-input"
+                autoFocus
+                placeholder="https://…"
+                onPointerDown={(e) => e.stopPropagation()}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v) apply({ link: v });
+                  setLinkInputOpen(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
+                }}
+              />
+            ) : (
+              <button className="st-btn st-link-row" title="외부 링크 연결" onClick={() => setLinkInputOpen(true)}>
+                <Icon name="external" />
+                <span className="st-format-text">링크 연결</span>
               </button>
             )}
           </div>

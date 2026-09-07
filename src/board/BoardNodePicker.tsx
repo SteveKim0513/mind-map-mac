@@ -74,8 +74,20 @@ export function BoardNodePicker({ onPick, onClose }: Props) {
   };
 
   return (
-    <div className="picker-backdrop" onMouseDown={onClose}>
-      <div className="picker" onMouseDown={(e) => e.stopPropagation()}>
+    // 2026-09-06 bug fix: this picker renders as a CHILD of .board-canvas,
+    // which has its own onPointerDown that calls setPointerCapture on a plain
+    // background click. stopPropagation on `onMouseDown` does NOT stop that —
+    // pointerdown and mousedown are separate native events (pointer events
+    // fire first), so a click on a picker item still bubbled `pointerdown`
+    // up to the canvas, which captured the pointer for itself. The
+    // subsequent pointerup then got redirected to the CAPTURING element
+    // instead of the button, so the browser's click-synthesis broke and the
+    // item's onClick never fired — "select an item, nothing happens" (the
+    // exact bug reported). Stopping the SAME event type the ancestor listens
+    // for fixes it. onWheel is stopped too so scrolling the list doesn't also
+    // pan/zoom the board underneath (same root cause, same fix shape).
+    <div className="picker-backdrop" onPointerDown={onClose} onWheel={(e) => e.stopPropagation()}>
+      <div className="picker" onPointerDown={(e) => e.stopPropagation()}>
         <div className="picker-head">
           <Icon name="link" />
           <span>노드 연결</span>

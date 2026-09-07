@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { useBoard, useBoardStore } from '../store/boardStore';
+import { useBoard } from '../store/boardStore';
 import { newId } from '../io/formats';
 import { fileToImageData } from '../io/imageAssets';
 import type { BoardElement, BoardStickyElement, StickyShape } from '../types';
@@ -25,7 +25,6 @@ interface Props {
 }
 
 export function BoardToolbar({ handle, boardFilePath }: Props) {
-  const store = useBoardStore();
   const board = useBoard((s) => s.board);
   const dirty = useBoard((s) => s.dirty);
   const selection = useBoard((s) => s.selection);
@@ -48,11 +47,11 @@ export function BoardToolbar({ handle, boardFilePath }: Props) {
   }, [stickies]);
 
   // Cascade each new sticky slightly so repeated adds don't stack exactly on
-  // top of each other; anchored near the current viewport center.
+  // top of each other; anchored near THIS canvas's own viewport center (not
+  // the full window — a split-screen pane is only half the window, so a
+  // window-wide center could land in the other, unfocused pane).
   const nextSpot = () => {
-    const v = store.getState().board.view;
-    const cx = (window.innerWidth / 2 - v.panX) / v.zoom;
-    const cy = (window.innerHeight / 2 - v.panY) / v.zoom;
+    const { x: cx, y: cy } = handle?.viewportCenterWorld() ?? { x: 0, y: 0 };
     const n = dropCount.current++;
     const jitter = (n % 8) * 24;
     return { x: cx - 90 + jitter, y: cy - 70 + jitter };

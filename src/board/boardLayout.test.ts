@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { autoLayoutPositions } from './boardLayout';
+import { autoLayoutPositions, filterGridPositions } from './boardLayout';
 import type { BoardElement, BoardStickyElement, BoardConnectorElement } from '../types';
 
 function sticky(id: string, x: number, y: number, width = 100, height = 60): BoardStickyElement {
@@ -73,5 +73,51 @@ describe('autoLayoutPositions', () => {
     const positions = autoLayoutPositions('root', elements);
     expect(positions.some((p) => p.id === 'ghost')).toBe(false);
     expect(positions.some((p) => p.id === 'child')).toBe(true);
+  });
+});
+
+describe('filterGridPositions', () => {
+  it('returns {} for an empty order list', () => {
+    expect(filterGridPositions([], {}, 1000)).toEqual({});
+  });
+
+  it('places one element at the origin', () => {
+    const elements: Record<string, BoardElement> = { a: sticky('a', 999, 999, 100, 60) };
+    expect(filterGridPositions(['a'], elements, 1000)).toEqual({ a: { x: 0, y: 0 } });
+  });
+
+  it('wraps to a new row when elements no longer fit the viewport width', () => {
+    const elements: Record<string, BoardElement> = {
+      a: sticky('a', 0, 0, 100, 60),
+      b: sticky('b', 0, 0, 100, 60),
+      c: sticky('c', 0, 0, 100, 60),
+    };
+    // colWidth = 100 + 24 = 124; viewport 300 fits 2 columns (floor(300/124)=2)
+    const pos = filterGridPositions(['a', 'b', 'c'], elements, 300);
+    expect(pos.a).toEqual({ x: 0, y: 0 });
+    expect(pos.b).toEqual({ x: 124, y: 0 });
+    expect(pos.c).toEqual({ x: 0, y: 60 + 24 }); // wrapped to row 2
+  });
+
+  it('sizes each row by its tallest element', () => {
+    const elements: Record<string, BoardElement> = {
+      tall: sticky('tall', 0, 0, 100, 200),
+      short: sticky('short', 0, 0, 100, 40),
+      next: sticky('next', 0, 0, 100, 40),
+    };
+    // 1 column (viewport only fits one 124px-wide cell)
+    const pos = filterGridPositions(['tall', 'short', 'next'], elements, 150);
+    expect(pos.tall).toEqual({ x: 0, y: 0 });
+    expect(pos.short).toEqual({ x: 0, y: 200 + 24 });
+    expect(pos.next).toEqual({ x: 0, y: 200 + 24 + 40 + 24 });
+  });
+
+  it('ignores connectors and unknown ids in the order list', () => {
+    const elements: Record<string, BoardElement> = {
+      a: sticky('a', 0, 0),
+      c1: { id: 'c1', kind: 'connector', fromId: 'a', fromAnchor: 'right', toId: 'a', toAnchor: 'left' },
+    };
+    const pos = filterGridPositions(['a', 'c1', 'missing'], elements, 1000);
+    expect(Object.keys(pos)).toEqual(['a']);
   });
 });

@@ -217,6 +217,7 @@ export interface BoardStickyElement extends BoardBoxElement {
   // "stale hint, fall back, toast on failure" shape as NoteLink.mapPath).
   nodeLink?: NoteLink; // links this sticky to a mindmap node
   noteLink?: BoardNoteRef; // links this sticky to a note file
+  link?: string; // external URL (2026-09-06) — same concept as MindNode.link
 }
 
 /** A sticky's forward reference to a note file — see `BoardStickyElement.noteLink`. */

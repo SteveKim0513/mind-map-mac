@@ -17,7 +17,7 @@ import { BoardNoteLinkPicker } from './BoardNoteLinkPicker';
 import { ensureMapPersisted } from './boardLinks';
 import { elementBBox, boardBounds, isBoxElement, anchorPoint, oppositeAnchor, type BoxElement } from './boardGeometry';
 import { routeWaypoints, roundedPath, pointsBBox, pathMidpoint } from './boardRouting';
-import { autoLayoutPositions } from './boardLayout';
+import { autoLayoutPositions, filterGridPositions } from './boardLayout';
 import { newId } from '../io/formats';
 import { tagVar } from '../theme/palette';
 import type { BoardAnchorSide, BoardConnectorElement, BoardElement, BoardStickyElement } from '../types';
@@ -126,6 +126,11 @@ export interface BoardCanvasHandle {
    *  element (see board/boardLayout.ts). No-op unless exactly one sticky is
    *  selected and it has outgoing connectors. */
   tidySelected: () => void;
+  /** World-space point at the center of THIS canvas's own viewport — not
+   *  `window.innerWidth/Height` (2026-09-06: a split-screen pane is only half
+   *  the window, so a spawn spot computed from the full window could land in
+   *  the OTHER pane, off-screen from the one the user is looking at). */
+  viewportCenterWorld: () => { x: number; y: number };
 }
 
 interface Props {
@@ -158,6 +163,14 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const setView = useBoard((s) => s.setView);
   const setNodeLink = useBoard((s) => s.setNodeLink);
   const setNoteLink = useBoard((s) => s.setNoteLink);
+
+  // A color/shape filter is active — see the `filterPositions` block further
+  // down for what this changes about rendering. Computed early because the
+  // pointer handlers below (defined before that block) also need to disable
+  // position-mutating interactions while it's on: dragging/resizing/marquee
+  // would move REAL coordinates while the user is looking at grid-view
+  // positions, which would not match what's on screen.
+  const activeFilter = colorFilter !== null || shapeFilter !== null;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -286,19 +299,41 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
         const positions = autoLayoutPositions(selection[0], store.getState().board.elements);
         if (positions.length) store.getState().setElementPositions(positions);
       },
+      viewportCenterWorld: () => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        const v = store.getState().board.view;
+        if (!rect) return { x: -v.panX / v.zoom, y: -v.panY / v.zoom };
+        return { x: (rect.width / 2 - v.panX) / v.zoom, y: (rect.height / 2 - v.panY) / v.zoom };
+      },
     }),
     [store, setView, selection],
   );
+
+  // Double-clicking truly empty canvas creates a sticky right there — a
+  // background double-click retargets fine natively (unlike an element's,
+  // see the comment above onElementPointerDown): the pointer capture from
+  // onBackgroundPointerDown lands on .board-canvas itself either way, so
+  // there's no capturing-element mismatch to break the synthesized dblclick.
+  const onCanvasDoubleClick = (e: React.MouseEvent) => {
+    if (activeFilter) return; // world coords under the cursor don't match what's on screen in grid view
+    const w = toWorld(e.clientX, e.clientY);
+    const { elements, order } = store.getState().board;
+    if (elementAt(elements, order, w, '')) return; // hit a sticky/image — its own dblclick-to-edit handles this
+    const sticky = newSticky(w.x - NEW_STICKY_W / 2, w.y - NEW_STICKY_H / 2);
+    addElements([sticky]);
+    setEditingTarget({ id: sticky.id, field: 'text' });
+  };
 
   const onBackgroundPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     containerRef.current?.setPointerCapture(e.pointerId);
     containerRef.current?.focus();
-    const w = toWorld(e.clientX, e.clientY);
     if (!e.shiftKey) setSelection([]);
+    setEditingTarget(null);
+    if (activeFilter) return; // no marquee — hit-testing is in real coords, display is the filtered grid
+    const w = toWorld(e.clientX, e.clientY);
     dragRef.current = { mode: 'marquee', startWorld: w, additive: e.shiftKey };
     setMarquee({ x0: w.x, y0: w.y, x1: w.x, y1: w.y });
-    setEditingTarget(null);
   };
 
   // Manual double-click detection (pointerdown-based) instead of the native
@@ -338,7 +373,11 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     const already = selection.includes(id);
     const next = e.shiftKey ? (already ? selection.filter((x) => x !== id) : [...selection, id]) : already ? selection : [id];
     setSelection(next);
-    dragRef.current = { mode: 'move', ids: next, lastClientX: e.clientX, lastClientY: e.clientY };
+    // No move-drag in filter grid view — the on-screen position is a
+    // temporary view-only layout, not the element's real coordinates, so a
+    // drag delta computed from screen pixels would silently displace the
+    // REAL position while the user is looking at the grid.
+    if (!activeFilter) dragRef.current = { mode: 'move', ids: next, lastClientX: e.clientX, lastClientY: e.clientY };
   };
 
   const beginResize = (e: React.PointerEvent, id: string, handle: Handle) => {
@@ -613,9 +652,65 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       }
     : null;
 
-  const dimmed = (el: BoxElement) =>
+  // A sticky the active color/shape filter would exclude — no longer dimmed
+  // in place (2026-09-06), just left out of the filtered grid view below.
+  const excludedByFilter = (el: BoxElement) =>
     (colorFilter !== null && el.kind === 'sticky' && el.color !== colorFilter) ||
     (shapeFilter !== null && el.kind === 'sticky' && (el.shape ?? 'rect') !== shapeFilter);
+
+  // Filtered VIEW re-layout (2026-09-06 — "필터가 흐리게 dim만 하고, 마인드맵처럼
+  // 재배치하지 않음"): the mindmap's color filter excludes non-matching nodes
+  // from the tree layout itself, so the rest compact together — a plain dim
+  // (what board did before) doesn't give that same "just show me these,
+  // tidied up" read. Board has no tree to compact, so instead: while a filter
+  // is active, matching stickies/images render at a fresh grid position
+  // (`filterGridPositions`, view-only — `board.elements` keeps its real x/y,
+  // nothing is written back) and non-matching ones don't render at all.
+  // Turning the filter off just stops consulting this map. Interactions that
+  // would only make sense against real coordinates (move-drag, resize,
+  // marquee, anchor-drag) are suppressed while a filter is active — see the
+  // `activeFilter` guards below and in the pointer handlers above.
+  const filterPositions = activeFilter
+    ? filterGridPositions(
+        board.order.filter((id) => {
+          const el = board.elements[id];
+          return !!el && isBoxElement(el) && !excludedByFilter(el);
+        }),
+        board.elements,
+        (containerRef.current?.getBoundingClientRect().width ?? 1000) / zoom,
+      )
+    : null;
+  const displayBox = (el: BoxElement): BoxElement => {
+    const p = filterPositions?.[el.id];
+    return p ? ({ ...el, x: p.x, y: p.y } as BoxElement) : el;
+  };
+  const visibleBoxIds = activeFilter ? boxIds.filter((id) => filterPositions?.[id]) : boxIds;
+
+  // Precomputed once, rendered in two passes: the line itself goes BEHIND every
+  // sticky/image (2026-09-06 — arrows drawn on top of cards read as clutter and
+  // make it hard to tell which card an arrow actually terminates at), while the
+  // label chip and (when selected) reattach handles render AFTER stickies so
+  // they stay clickable instead of getting covered by a card.
+  const connectorRenders = connectorIds
+    .map((id) => {
+      const el = board.elements[id] as BoardConnectorElement;
+      const fromElRaw = board.elements[el.fromId];
+      const toElRaw = board.elements[el.toId];
+      if (!fromElRaw || !isBoxElement(fromElRaw) || !toElRaw || !isBoxElement(toElRaw)) return null;
+      if (activeFilter && (!filterPositions?.[fromElRaw.id] || !filterPositions?.[toElRaw.id])) return null;
+      const fromEl = displayBox(fromElRaw);
+      const toEl = displayBox(toElRaw);
+      const a = anchorPoint(fromEl, el.fromAnchor);
+      const b = anchorPoint(toEl, el.toAnchor);
+      const pts = routeWaypoints(a, el.fromAnchor, b, el.toAnchor);
+      const box = pointsBBox(pts);
+      const d = roundedPath(
+        pts.map((p) => ({ x: p.x - box.x0, y: p.y - box.y0 })),
+        10,
+      );
+      return { id, el, a, b, box, d, selected: selection.includes(id), mid: pathMidpoint(pts) };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 
   const worldStyle: CSSProperties = { transform: `translate(${panX}px, ${panY}px) scale(${zoom})` };
   const isEmpty = board.order.length === 0;
@@ -630,6 +725,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onDoubleClick={onCanvasDoubleClick}
       onKeyDown={onKeyDown}
       style={{ backgroundPosition: `${panX}px ${panY}px`, backgroundSize: `${24 * zoom}px ${24 * zoom}px` }}
     >
@@ -642,8 +738,26 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       </svg>
 
       <div className="board-world" style={worldStyle}>
-        {boxIds.map((id) => {
-          const el = board.elements[id] as BoxElement;
+        {connectorRenders.map((r) => (
+          <svg
+            key={r.id}
+            className={`board-connector${r.selected ? ' selected' : ''}`}
+            style={{ left: r.box.x0, top: r.box.y0, width: r.box.w, height: r.box.h }}
+            onPointerDown={(e) => onConnectorPointerDown(e, r.id)}
+          >
+            <path
+              d={r.d}
+              fill="none"
+              stroke={tagVar(r.el.color) ?? 'var(--ink-muted)'}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              markerEnd={r.el.arrow !== false ? 'url(#board-arrow)' : undefined}
+            />
+          </svg>
+        ))}
+
+        {visibleBoxIds.map((id) => {
+          const el = displayBox(board.elements[id] as BoxElement);
           const isConnectTarget = connectPreview?.targetId === id;
           return (
             <BoardElementView
@@ -652,8 +766,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
               selected={selection.includes(id)}
               editingField={editingTarget?.id === id ? editingTarget.field : null}
               editingNoteIndex={editingTarget?.id === id && editingTarget.field === 'note' ? editingTarget.index : null}
-              dimmed={dimmed(el)}
-              showAnchors={selection.includes(id) || hoveredId === id || isConnectTarget}
+              showAnchors={!activeFilter && (selection.includes(id) || hoveredId === id || isConnectTarget)}
               snapAnchor={isConnectTarget ? connectPreview.snapAnchor : null}
               imageSrc={el.kind === 'image' ? imageCache[el.src] : undefined}
               onPointerDown={(e) => onElementPointerDown(e, id)}
@@ -677,94 +790,63 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
           );
         })}
 
-        {connectorIds.map((id) => {
-          const el = board.elements[id] as BoardConnectorElement;
-          const fromEl = board.elements[el.fromId];
-          const toEl = board.elements[el.toId];
-          if (!fromEl || !isBoxElement(fromEl) || !toEl || !isBoxElement(toEl)) return null;
-          const a = anchorPoint(fromEl, el.fromAnchor);
-          const b = anchorPoint(toEl, el.toAnchor);
-          const pts = routeWaypoints(a, el.fromAnchor, b, el.toAnchor);
-          const box = pointsBBox(pts);
-          const d = roundedPath(
-            pts.map((p) => ({ x: p.x - box.x0, y: p.y - box.y0 })),
-            10,
-          );
-          const selected = selection.includes(id);
-          const mid = pathMidpoint(pts);
-          return (
-            <Fragment key={id}>
-              <svg
-                className={`board-connector${selected ? ' selected' : ''}`}
-                style={{ left: box.x0, top: box.y0, width: box.w, height: box.h }}
-                onPointerDown={(e) => onConnectorPointerDown(e, id)}
+        {connectorRenders.map(({ id, el, a, b, mid, selected }) => (
+          <Fragment key={id}>
+            {editingLabelId === id ? (
+              <input
+                className="board-label-input"
+                style={{ left: mid.x, top: mid.y }}
+                autoFocus
+                defaultValue={el.label ?? ''}
+                onPointerDown={(e) => e.stopPropagation()}
+                onBlur={(e) => {
+                  updateElement(id, { label: e.target.value.trim() });
+                  setEditingLabelId(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
+                }}
+              />
+            ) : el.label ? (
+              <button
+                className="board-label-chip"
+                style={{ left: mid.x, top: mid.y }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => {
+                  setSelection([id]);
+                  setEditingLabelId(id);
+                }}
               >
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={tagVar(el.color) ?? 'var(--ink-muted)'}
-                  strokeWidth={2.5}
-                  strokeLinecap="round"
-                  markerEnd={el.arrow !== false ? 'url(#board-arrow)' : undefined}
-                />
-              </svg>
+                {el.label}
+              </button>
+            ) : selected ? (
+              <button
+                className="board-label-chip ghost selected"
+                style={{ left: mid.x, top: mid.y }}
+                title="라벨 추가"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => setEditingLabelId(id)}
+              >
+                +
+              </button>
+            ) : null}
 
-              {editingLabelId === id ? (
-                <input
-                  className="board-label-input"
-                  style={{ left: mid.x, top: mid.y }}
-                  autoFocus
-                  defaultValue={el.label ?? ''}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onBlur={(e) => {
-                    updateElement(id, { label: e.target.value.trim() });
-                    setEditingLabelId(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
-                  }}
+            {selected && (
+              <>
+                <div
+                  className="board-connector-endpoint"
+                  style={{ left: a.x, top: a.y }}
+                  onPointerDown={(e) => beginEndpointDrag(id, 'from', el.toId, el.toAnchor, e)}
                 />
-              ) : el.label ? (
-                <button
-                  className="board-label-chip"
-                  style={{ left: mid.x, top: mid.y }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => {
-                    setSelection([id]);
-                    setEditingLabelId(id);
-                  }}
-                >
-                  {el.label}
-                </button>
-              ) : selected ? (
-                <button
-                  className="board-label-chip ghost selected"
-                  style={{ left: mid.x, top: mid.y }}
-                  title="라벨 추가"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => setEditingLabelId(id)}
-                >
-                  +
-                </button>
-              ) : null}
-
-              {selected && (
-                <>
-                  <div
-                    className="board-connector-endpoint"
-                    style={{ left: a.x, top: a.y }}
-                    onPointerDown={(e) => beginEndpointDrag(id, 'from', el.toId, el.toAnchor, e)}
-                  />
-                  <div
-                    className="board-connector-endpoint"
-                    style={{ left: b.x, top: b.y }}
-                    onPointerDown={(e) => beginEndpointDrag(id, 'to', el.fromId, el.fromAnchor, e)}
-                  />
-                </>
-              )}
-            </Fragment>
-          );
-        })}
+                <div
+                  className="board-connector-endpoint"
+                  style={{ left: b.x, top: b.y }}
+                  onPointerDown={(e) => beginEndpointDrag(id, 'to', el.fromId, el.fromAnchor, e)}
+                />
+              </>
+            )}
+          </Fragment>
+        ))}
 
         {connectPreview &&
           (() => {
@@ -795,7 +877,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
             );
           })()}
 
-        {singleBoxSelected && !editingTarget && (
+        {singleBoxSelected && !editingTarget && !activeFilter && (
           <div
             className="board-resize-handles"
             style={{ left: singleBoxSelected.x, top: singleBoxSelected.y, width: singleBoxSelected.width, height: singleBoxSelected.height }}
