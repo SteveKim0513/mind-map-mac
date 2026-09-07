@@ -4,6 +4,15 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.13.4] - 2026-09-07
+
+### 추가
+- **텍스트 편집 중 Escape로 취소** — 편집 시작 시점의 트랜잭션 스냅샷을 그대로 복원하는 `cancelTransaction()` 추가(마인드맵 노드 편집의 Escape=취소와 동등한 동작, 별도 "원래 값" 저장 없이 구현).
+
+### 수정
+- **텍스트 편집 중 텍스트 영역 스크롤이 캔버스 pan까지 새어나가던 버그** — 스티키 메인 텍스트·`notes[]` 블록 두 `<textarea>` 모두 `onWheel` stopPropagation 추가. 이전 라운드의 피커 pointerdown/keydown 버그와 같은 이벤트-버블링 클래스의 세 번째 사례.
+- **텍스트 편집이 키 입력마다 실행취소 기록을 하나씩 쌓던 문제** — 제어 컴포넌트(`value={el.text}`)라 `onChange`가 키 입력마다 발화해 `updateElement`를 호출하고, 그때마다 히스토리를 쌓았음. `boardStore.ts`의 드래그 트랜잭션 장치(`beginDrag`/`endDrag`)를 `beginTransaction`/`endTransaction`으로 일반화해 텍스트 편집 세션에도 재사용 — 편집 전체가 undo 한 스텝이 되도록 수정.
+
 ## [0.13.3] - 2026-09-07
 
 ### 추가
