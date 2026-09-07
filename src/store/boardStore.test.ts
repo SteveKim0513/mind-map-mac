@@ -159,6 +159,88 @@ describe('boardStore — selection/filters are not persisted state', () => {
   });
 });
 
+describe('boardStore — undo/redo', () => {
+  it('undo reverts a one-shot mutation (addElement)', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    s.getState().undo();
+    expect(s.getState().board.elements.s1).toBeUndefined();
+    expect(s.getState().board.order).toEqual([]);
+  });
+
+  it('redo re-applies an undone mutation', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    s.getState().undo();
+    s.getState().redo();
+    expect(s.getState().board.elements.s1).toBeDefined();
+  });
+
+  it('undo restores a deleted element and reselects it (mirrors mapStore A6)', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    s.getState().removeElements(['s1']);
+    expect(s.getState().board.elements.s1).toBeUndefined();
+    s.getState().undo();
+    expect(s.getState().board.elements.s1).toBeDefined();
+    expect(s.getState().selection).toEqual(['s1']);
+  });
+
+  it('undo with empty history is a no-op', () => {
+    const s = createBoardStore();
+    const before = s.getState().board;
+    s.getState().undo();
+    expect(s.getState().board).toBe(before);
+  });
+
+  it('a whole drag gesture (beginDrag + many moveElements + endDrag) undoes in ONE step', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1', 0, 0));
+    // simulates ~20 pointermove frames of a real drag
+    s.getState().beginDrag();
+    for (let i = 0; i < 20; i++) s.getState().moveElements(['s1'], 1, 1);
+    s.getState().endDrag();
+    const el = s.getState().board.elements.s1 as BoardStickyElement;
+    expect(el.x).toBe(20);
+    expect(el.y).toBe(20);
+    expect(s.getState().past.length).toBe(2); // addElement, then the whole drag as one entry
+    s.getState().undo();
+    const back = s.getState().board.elements.s1 as BoardStickyElement;
+    expect(back.x).toBe(0);
+    expect(back.y).toBe(0);
+  });
+
+  it('a click with no movement (beginDrag immediately followed by endDrag) pushes no history', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    const pastAfterAdd = s.getState().past.length;
+    s.getState().beginDrag();
+    s.getState().endDrag(); // no moveElements/updateElement call in between — nothing changed
+    expect(s.getState().past.length).toBe(pastAfterAdd);
+  });
+
+  it('mutations during a transaction (beginDrag..endDrag) push no per-call history', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    s.getState().beginDrag();
+    s.getState().moveElements(['s1'], 5, 5);
+    s.getState().moveElements(['s1'], 5, 5);
+    expect(s.getState().past.length).toBe(1); // still just the addElement entry
+    s.getState().endDrag();
+    expect(s.getState().past.length).toBe(2); // endDrag adds exactly one more
+  });
+
+  it('a one-shot action after undo clears redo history', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    s.getState().addElement(sticky('s2'));
+    s.getState().undo();
+    expect(s.getState().future.length).toBe(1);
+    s.getState().addElement(sticky('s3'));
+    expect(s.getState().future.length).toBe(0);
+  });
+});
+
 describe('boardStore — view', () => {
   it('setView merges into board.view and marks dirty', () => {
     const s = createBoardStore();

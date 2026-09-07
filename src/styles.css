@@ -1999,6 +1999,15 @@ button {
   color: var(--state-note);
 }
 
+/* board chip — "referenced from a board" backlink (2026-09-07) */
+.gchip.board {
+  border-color: color-mix(in srgb, var(--state-board) 28%, var(--hairline));
+  background: color-mix(in srgb, var(--state-board) 6%, var(--surface));
+}
+.gchip.board .ic {
+  color: var(--state-board);
+}
+
 /* link chip — web link (blue), with hover ✕ to remove */
 .gchip.link {
   padding: 0;
@@ -5024,6 +5033,16 @@ textarea:focus-visible,
   background: color-mix(in srgb, var(--state-note) 16%, var(--surface));
   color: var(--ink);
 }
+/* board backlink variant — "referenced from a board" (2026-09-07) */
+.note-backlink.board {
+  border-color: color-mix(in srgb, var(--state-board) 30%, var(--hairline));
+  background: color-mix(in srgb, var(--state-board) 8%, var(--surface));
+}
+.note-backlink.board .ic { color: var(--state-board); }
+.note-backlink.board:hover {
+  background: color-mix(in srgb, var(--state-board) 16%, var(--surface));
+  color: var(--ink);
+}
 /* the connected-nodes row, now nested inside .note-info, sheds its own framing */
 .note-info .note-links {
   padding: 0;
@@ -6870,7 +6889,11 @@ textarea:focus-visible,
 .board-el-text-main.valign-middle { justify-content: center; }
 .board-el-text-main.valign-bottom { justify-content: flex-end; }
 .board-el-text {
-  flex: none;
+  /* shrink (not `flex: none`) so long text yields to the link-chip row below
+     instead of overflowing on top of it — overflow:hidden only clips once the
+     box actually has a height constraint to shrink into. */
+  flex: 0 1 auto;
+  min-height: 0;
   line-height: 1.4;
   white-space: pre-wrap;
   overflow-wrap: break-word;
@@ -7066,6 +7089,12 @@ textarea:focus-visible,
 }
 .board-connector.selected path {
   stroke: var(--primary) !important;
+  stroke-width: 3;
+}
+/* hover highlight so overlapping/nearby connectors can be told apart without
+   selecting one (2026-09-07 feedback: paths were indistinguishable) */
+.board-connector:not(.selected):hover path {
+  stroke: var(--ink) !important;
   stroke-width: 3;
 }
 .board-connect-preview {

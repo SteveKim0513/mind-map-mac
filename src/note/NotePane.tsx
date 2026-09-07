@@ -9,10 +9,11 @@ import { NodePicker } from './NodePicker';
 import { NoteMetaBlocks } from './NoteMetaBlock';
 import { addLinkToNoteFile, reindexFromNote, renameWikiLinks, revealNode } from './noteLinks';
 import { useSession } from '../store/sessionStore';
-import { useWorkspace } from '../store/workspaceStore';
+import { useWorkspace, openBoardSticky } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
 import { useMetaStore } from '../store/metaStore';
 import { Icon } from '../ui/Icon';
+import { fileDisplayName } from '../io/fileKind';
 import { fmtDuration } from '../focus/aggregate';
 import { endFocusSession, closeStaleSession } from '../focus/controller';
 import type { FocusSession } from '../types';
@@ -88,6 +89,19 @@ function NotePaneBody() {
     () => (filePath && !note.session ? useWorkspace.getState().backlinks(note.title, filePath) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [noteIndex, note.title, filePath, note.session],
+  );
+  // boards whose sticky(ies) reference THIS note (2026-09-07 backlink; see
+  // types.ts's BoardMeta) — same "filter the workspace index" shape as the
+  // wiki backlinks above, just reversed (board → note instead of note → note).
+  const boardIndex = useWorkspace((s) => s.boardIndex);
+  const boardBacklinks = useMemo(
+    () =>
+      filePath
+        ? boardIndex.flatMap((m) =>
+            m.noteLinks.filter((l) => l.notePath === filePath).map((l) => ({ path: m.path, stickyId: l.stickyId })),
+          )
+        : [],
+    [boardIndex, filePath],
   );
   // open a peek of a related note, anchored to the clicked chip (same model as a
   // body wiki-link: glance first, "열기" promotes to the opposite pane)
@@ -326,6 +340,24 @@ function NotePaneBody() {
                   >
                     <Icon name="note" />
                     <span className="nlc-text">{m.title || '제목 없음'}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {boardBacklinks.length > 0 && (
+            <div className="note-info-sec">
+              <div className="note-info-label">보드에서 참조됨 <span className="note-info-label-count">{boardBacklinks.length}</span></div>
+              <div className="note-backlinks">
+                {boardBacklinks.map((b) => (
+                  <button
+                    key={`${b.path}:${b.stickyId}`}
+                    className="note-backlink board"
+                    title="보드 열기"
+                    onClick={() => void openBoardSticky(b.path, b.stickyId)}
+                  >
+                    <Icon name="board" />
+                    <span className="nlc-text">{fileDisplayName(b.path)}</span>
                   </button>
                 ))}
               </div>

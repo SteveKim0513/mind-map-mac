@@ -2,12 +2,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { PositionedNode } from '../types';
 import { useMap, useMapStore } from '../store/mapStore';
 import { useUi } from '../store/uiStore';
-import { useWorkspace } from '../store/workspaceStore';
+import { useWorkspace, openBoardSticky } from '../store/workspaceStore';
 import { measureNode } from '../layout/measure';
 import { scheduleInfo } from './scheduleInfo';
 import { fmtDuration } from '../focus/aggregate';
 import { Icon, isIconName } from '../ui/Icon';
 import { tagVar } from '../theme/palette';
+import { fileDisplayName } from '../io/fileKind';
 
 interface Props {
   p: PositionedNode;
@@ -59,6 +60,21 @@ export function NodeView({
         : [],
     [noteIndex, docId, node.id],
   );
+  // boards whose sticky(ies) reference this node (2026-09-07 backlink; see
+  // types.ts's BoardMeta) — same "filter the workspace index" shape as
+  // linkedNotes above, just reversed (board → node instead of note → node).
+  const boardIndex = useWorkspace((s) => s.boardIndex);
+  const linkedBoards = useMemo(
+    () =>
+      docId
+        ? boardIndex.flatMap((m) =>
+            m.nodeLinks
+              .filter((l) => l.link.mapId === docId && l.link.nodeId === node.id)
+              .map((l) => ({ path: m.path, stickyId: l.stickyId })),
+          )
+        : [],
+    [boardIndex, docId, node.id],
+  );
   // cumulative focus time on this node + its whole subtree — computed against the
   // CURRENT tree (live descendant set), so moving a node re-attributes its time.
   const nodes = useMap((s) => s.doc.nodes);
@@ -100,7 +116,7 @@ export function NodeView({
   const memoTitles = linkedNotes.map((m) => m.title).join('');
   const metaSig = `${node.note ? 1 : 0}|${memoEditing ? 1 : 0}|${sched?.label ?? ''}|${
     sched?.urg ?? ''
-  }|${p.childDone}/${p.childTotal}|${node.collapsed ? p.hiddenCount : 0}|${linkedNotes.length}|${allLinks.length}|${memoTitles}|${focusStat?.sec ?? 0}`;
+  }|${p.childDone}/${p.childTotal}|${node.collapsed ? p.hiddenCount : 0}|${linkedNotes.length}|${allLinks.length}|${memoTitles}|${focusStat?.sec ?? 0}|${linkedBoards.length}`;
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -250,7 +266,7 @@ export function NodeView({
 
       {/* ②③ STATUS GUTTER — one compact row: schedule (urgency) · links · notes · focus.
           집중 통계는 실행 지표라 할 일(todo) 노드에서만 — 생각 노드로 새어나가지 않게(누수 수정). */}
-      {!editing && (sched || allLinks.length > 0 || linkedNotes.length > 0 || (focusStat && node.todo)) && (
+      {!editing && (sched || allLinks.length > 0 || linkedNotes.length > 0 || linkedBoards.length > 0 || (focusStat && node.todo)) && (
         <div className="node-gutter" onPointerDown={(e) => e.stopPropagation()}>
           {sched && (
             <button
@@ -310,6 +326,20 @@ export function NodeView({
             >
               <Icon name="note" />
               <span className="gchip-t">{m.title}</span>
+            </button>
+          ))}
+          {linkedBoards.map((b) => (
+            <button
+              key={`${b.path}:${b.stickyId}`}
+              className="gchip board"
+              title={`${fileDisplayName(b.path)} 보드에서 참조됨`}
+              onClick={(e) => {
+                e.stopPropagation();
+                void openBoardSticky(b.path, b.stickyId);
+              }}
+            >
+              <Icon name="board" />
+              <span className="gchip-t">{fileDisplayName(b.path)}</span>
             </button>
           ))}
           {focusStat && node.todo && (

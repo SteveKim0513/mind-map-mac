@@ -123,6 +123,20 @@ export interface NoteMeta {
   refs?: string[]; // lowercased titles this note's body wiki-links to ([[ ]]) — powers backlinks
 }
 
+/** Lightweight board record for the workspace link index (2026-09-07) — the
+ *  reverse of `BoardStickyElement.nodeLink`/`noteLink`: which board(s)
+ *  reference a given mindmap node or note file, so those can show a "referenced
+ *  from a board" indicator. Same "index built at refresh + upserted on save"
+ *  freshness as `NoteMeta` (not live while the board is only open, unsaved). */
+export interface BoardMeta {
+  path: string;
+  // stickyId carried alongside each link so a backlink chip can select the
+  // EXACT sticky that references the node/note (a board can have more than
+  // one sticky linking the same target).
+  nodeLinks: { stickyId: string; link: NoteLink }[];
+  noteLinks: { stickyId: string; notePath: string }[];
+}
+
 /** A node with its computed on-canvas position. `x` is the node's LEFT edge;
  * `y` is its vertical center. `width` is the measured (or estimated) box width. */
 export interface PositionedNode {
@@ -211,10 +225,13 @@ export interface BoardStickyElement extends BoardBoxElement {
   // independent, separately-positioned element. Any number, stacking downward.
   notes?: string[];
   // ── Board ↔ mindmap linking (2026-09-03) ── forward references stored on
-  // the sticky itself, mirroring the note↔node "연동" entry point but
-  // one-directional and un-indexed: no reverse lookup, no rename/delete GC
-  // hooks (board/boardLinks.ts resolves lazily and degrades gracefully — same
-  // "stale hint, fall back, toast on failure" shape as NoteLink.mapPath).
+  // the sticky itself, mirroring the note↔node "연동" entry point. No
+  // rename/delete GC hooks (board/boardLinks.ts resolves lazily and degrades
+  // gracefully — same "stale hint, fall back, toast on failure" shape as
+  // NoteLink.mapPath). A read-only REVERSE index (BoardMeta, workspaceStore)
+  // was added 2026-09-07 so the linked node/note can show "referenced from a
+  // board" — that index is rebuilt at workspace refresh + upserted on save,
+  // not live while only this board is open and unsaved.
   nodeLink?: NoteLink; // links this sticky to a mindmap node
   noteLink?: BoardNoteRef; // links this sticky to a note file
   link?: string; // external URL (2026-09-06) — same concept as MindNode.link

@@ -59,6 +59,14 @@ export function BoardNodePicker({ onPick, onClose }: Props) {
   const pick = (it: Item) => onPick({ mapId: it.mapId, nodeId: it.nodeId, nodeText: it.text, mapPath: it.mapPath });
 
   const onKey = (e: React.KeyboardEvent) => {
+    // 2026-09-07 bug fix: this input renders inside .board-canvas, which has
+    // a global onKeyDown that deletes the selected sticky on Backspace/Delete
+    // (selection.length is always 1 while this picker is open, since it only
+    // opens for a single-selected sticky). Without stopping propagation here,
+    // backspacing the search query also bubbled up and deleted the sticky
+    // being linked — same event-bubbling root cause as the pointerdown fix
+    // above, just for keydown instead.
+    e.stopPropagation();
     if (e.key === 'Escape') return onClose();
     if (e.key === 'ArrowDown') {
       e.preventDefault();

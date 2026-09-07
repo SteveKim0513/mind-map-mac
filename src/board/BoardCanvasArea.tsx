@@ -38,6 +38,25 @@ function newSticky(x: number, y: number): BoardStickyElement {
   return { id: newId(), kind: 'sticky', x, y, width: NEW_STICKY_W, height: NEW_STICKY_H, text: '', color: 'yellow' };
 }
 
+/** An existing connector already joining these two elements (either
+ *  direction), if any — used to avoid drawing a second, exactly-overlapping
+ *  connector between the same pair (2026-09-07 feedback: overlapping paths
+ *  were impossible to tell apart). `excludeId` skips the connector being
+ *  reattached itself when checking its new target. */
+function findConnectorBetween(
+  elements: Record<string, BoardElement>,
+  aId: string,
+  bId: string,
+  excludeId?: string,
+): BoardConnectorElement | undefined {
+  return Object.values(elements).find(
+    (el): el is BoardConnectorElement =>
+      el.kind === 'connector' &&
+      el.id !== excludeId &&
+      ((el.fromId === aId && el.toId === bId) || (el.fromId === bId && el.toId === aId)),
+  );
+}
+
 /** Nearest of an element's 4 anchor sides to a world point (used to pick
  *  where an in-progress connector should land when dropped on it). */
 function nearestAnchorSide(el: BoxElement, point: { x: number; y: number }): BoardAnchorSide {
@@ -158,6 +177,8 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const setSelection = useBoard((s) => s.setSelection);
   const moveElements = useBoard((s) => s.moveElements);
   const updateElement = useBoard((s) => s.updateElement);
+  const beginDrag = useBoard((s) => s.beginDrag);
+  const endDrag = useBoard((s) => s.endDrag);
   const removeElements = useBoard((s) => s.removeElements);
   const addElements = useBoard((s) => s.addElements);
   const setView = useBoard((s) => s.setView);
@@ -377,7 +398,10 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     // temporary view-only layout, not the element's real coordinates, so a
     // drag delta computed from screen pixels would silently displace the
     // REAL position while the user is looking at the grid.
-    if (!activeFilter) dragRef.current = { mode: 'move', ids: next, lastClientX: e.clientX, lastClientY: e.clientY };
+    if (!activeFilter) {
+      beginDrag(); // one undo step for the whole gesture, not one per pointermove
+      dragRef.current = { mode: 'move', ids: next, lastClientX: e.clientX, lastClientY: e.clientY };
+    }
   };
 
   const beginResize = (e: React.PointerEvent, id: string, handle: Handle) => {
@@ -385,6 +409,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     containerRef.current?.setPointerCapture(e.pointerId);
     const el = board.elements[id];
     if (!el || !isBoxElement(el)) return;
+    beginDrag(); // one undo step for the whole gesture, not one per pointermove
     dragRef.current = {
       mode: 'resize',
       id,
@@ -541,18 +566,25 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
           if (targetId) {
             const targetEl = elements[targetId];
             if (targetEl && isBoxElement(targetEl)) {
-              const toAnchor = nearestAnchorSide(targetEl, w);
-              const connector: BoardConnectorElement = {
-                id: newId(),
-                kind: 'connector',
-                fromId: d.fromId,
-                fromAnchor: d.fromAnchor,
-                toId: targetId,
-                toAnchor,
-                arrow: true,
-              };
-              addElements([connector]);
-              setSelection([connector.id]);
+              // already connected — select the existing connector instead of
+              // drawing a second, indistinguishable one on top of it
+              const dup = findConnectorBetween(elements, d.fromId, targetId);
+              if (dup) {
+                setSelection([dup.id]);
+              } else {
+                const toAnchor = nearestAnchorSide(targetEl, w);
+                const connector: BoardConnectorElement = {
+                  id: newId(),
+                  kind: 'connector',
+                  fromId: d.fromId,
+                  fromAnchor: d.fromAnchor,
+                  toId: targetId,
+                  toAnchor,
+                  arrow: true,
+                };
+                addElements([connector]);
+                setSelection([connector.id]);
+              }
             }
           } else {
             // dropped on empty canvas — spawn a new sticky right there, connected
@@ -579,11 +611,21 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       const targetId = elementAt(elements, order, w, d.otherId);
       const targetEl = targetId ? elements[targetId] : null;
       if (targetId && targetEl && isBoxElement(targetEl)) {
-        const anchor = nearestAnchorSide(targetEl, w);
-        updateElement(d.connectorId, d.end === 'from' ? { fromId: targetId, fromAnchor: anchor } : { toId: targetId, toAnchor: anchor });
+        // reattaching onto a pair that's already connected would create a
+        // second, exactly-overlapping connector — select the existing one
+        // and leave this connector's original attachment alone instead
+        const dup = findConnectorBetween(elements, d.otherId, targetId, d.connectorId);
+        if (dup) {
+          setSelection([dup.id]);
+        } else {
+          const anchor = nearestAnchorSide(targetEl, w);
+          updateElement(d.connectorId, d.end === 'from' ? { fromId: targetId, fromAnchor: anchor } : { toId: targetId, toAnchor: anchor });
+        }
       }
       // no target → cancelled, original attachment kept
       setConnectPreview(null);
+    } else if (d?.mode === 'move' || d?.mode === 'resize') {
+      endDrag(); // commits the whole drag/resize gesture as one undo step
     }
     try {
       containerRef.current?.releasePointerCapture(e.pointerId);
@@ -804,6 +846,11 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
                   setEditingLabelId(null);
                 }}
                 onKeyDown={(e) => {
+                  // defense-in-depth: this input is safe today because
+                  // editingLabelId gates the canvas's own onKeyDown (below),
+                  // but stop propagation directly too so it can't regress the
+                  // way the link-input surfaces did (2026-09-07).
+                  e.stopPropagation();
                   if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
                 }}
               />

@@ -63,6 +63,11 @@ export function BoardNoteLinkPicker({ boardFilePath, onPick, onClose }: Props) {
     else linkExisting(notes[active - 1].path, notes[active - 1].title);
   };
   const onKey = (e: React.KeyboardEvent) => {
+    // 2026-09-07: see BoardNodePicker.tsx's identical comment — Backspace in
+    // this search input must not bubble to .board-canvas's global delete-key
+    // handler, which would delete the sticky being linked (selection.length
+    // is always 1 while this picker is open).
+    e.stopPropagation();
     if (e.key === 'Escape') return onClose();
     if (e.key === 'ArrowDown') {
       e.preventDefault();

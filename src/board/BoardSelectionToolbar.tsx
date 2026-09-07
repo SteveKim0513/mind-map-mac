@@ -209,6 +209,11 @@ export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode,
                   setLinkInputOpen(false);
                 }}
                 onKeyDown={(e) => {
+                  // 2026-09-07: Backspace here must not bubble to
+                  // .board-canvas's global delete-key handler, which would
+                  // delete the selected sticky mid-edit (same bug class as
+                  // BoardNodePicker/BoardNoteLinkPicker's identical fix).
+                  e.stopPropagation();
                   if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
                 }}
               />

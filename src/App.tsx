@@ -274,10 +274,14 @@ export default function App() {
           }
           break;
         case 'undo':
-          st?.undo();
+          // sess.activeStore() only resolves map tabs (its type is map-only,
+          // used elsewhere for MapState-specific fields like .doc/.filePath),
+          // so a board tab's undo silently no-op'd here otherwise — fall back
+          // to the board store, which has its own undo of the same shape.
+          st ? st.undo() : sess.activeBoardStore()?.getState().undo();
           break;
         case 'redo':
-          st?.redo();
+          st ? st.redo() : sess.activeBoardStore()?.getState().redo();
           break;
         case 'find':
           // ⌘F: in a map → in-canvas node find; in a note / home → workspace search

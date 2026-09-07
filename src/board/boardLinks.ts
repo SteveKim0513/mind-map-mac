@@ -4,7 +4,14 @@ import { useSession } from '../store/sessionStore';
 import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
 import type { MapStore } from '../store/mapStore';
-import type { BoardStore } from '../store/boardStore';
+
+/** "Open a board and select a sticky" now lives in store/workspaceStore.ts —
+ *  it only touches store/ state, so canvas/NodeView.tsx and note/NotePane.tsx
+ *  can call it too (for the "referenced from a board" backlink chip) without
+ *  importing board/ directly, which the domain-boundary rule forbids. Re-
+ *  exported here so this module's existing callers (search/GlobalSearch.tsx)
+ *  don't need to change their import path. */
+export { openBoardSticky } from '../store/workspaceStore';
 
 /** Persist an open map to disk so its (backfilled) doc.id survives — required
  *  before a sticky can durably link to one of its nodes. No-op if not open.
@@ -79,30 +86,6 @@ export async function revealBoardNodeLink(link: NoteLink): Promise<void> {
   if (!tab) return;
   (tab.store as MapStore).getState().select(link.nodeId);
   setTimeout(() => useUi.getState().focusNode(link.nodeId), 0);
-}
-
-/** Open a board (by path) and select + pan to a specific sticky — the board
- *  equivalent of note/noteLinks.ts's revealNode, used by global search hits
- *  on sticky text. Boards are opened by path (not a stable doc id) since the
- *  caller already scanned the workspace tree and has the path in hand. */
-export async function openBoardSticky(boardPath: string, stickyId: string): Promise<void> {
-  const sess = useSession.getState();
-  const open = sess.tabs.find((t) => t.kind === 'board' && t.path === boardPath);
-  if (open) {
-    sess.openPath(boardPath, '');
-  } else {
-    try {
-      const content = await window.api.readFile(boardPath);
-      sess.openPath(boardPath, content);
-    } catch {
-      useUi.getState().toast('연결된 보드를 찾을 수 없습니다 — 이동되었거나 삭제된 것 같아요');
-      return;
-    }
-  }
-  const tab = useSession.getState().tabs.find((t) => t.kind === 'board' && t.path === boardPath);
-  if (!tab) return;
-  (tab.store as BoardStore).getState().setSelection([stickyId]);
-  setTimeout(() => useUi.getState().focusNode(stickyId), 0);
 }
 
 /** Open a sticky's linked note file beside the board. */

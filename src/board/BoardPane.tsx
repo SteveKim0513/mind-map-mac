@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { BoardContext, useBoard, useBoardStore, type BoardStore } from '../store/boardStore';
 import { serializeBoard } from '../io/boardFormat';
 import { useSession } from '../store/sessionStore';
+import { useWorkspace } from '../store/workspaceStore';
 import { BoardCanvasArea, type BoardCanvasHandle } from './BoardCanvasArea';
 import { BoardToolbar } from './BoardToolbar';
 import type { Tab } from '../store/sessionStore';
+import type { BoardMeta } from '../types';
 
 interface Props {
   tab: Tab;
@@ -37,7 +39,19 @@ function BoardPaneBody({ active }: { active: boolean }) {
       if (!target) return;
       if (useSession.getState().isDeleting(target)) return;
       void window.api.save(target, serializeBoard(store.getState().board)).then((p) => {
-        if (p) markSaved(p);
+        if (p) {
+          markSaved(p);
+          // keep the "referenced from a board" reverse index fresh — read-only,
+          // no rename/delete GC (see types.ts's BoardMeta doc comment)
+          const nodeLinks: BoardMeta['nodeLinks'] = [];
+          const noteLinks: BoardMeta['noteLinks'] = [];
+          for (const el of Object.values(store.getState().board.elements)) {
+            if (el.kind !== 'sticky') continue;
+            if (el.nodeLink) nodeLinks.push({ stickyId: el.id, link: el.nodeLink });
+            if (el.noteLink) noteLinks.push({ stickyId: el.id, notePath: el.noteLink.notePath });
+          }
+          useWorkspace.getState().reindexBoard({ path: p, nodeLinks, noteLinks });
+        }
       });
     }, 1000);
     return () => clearTimeout(t);
