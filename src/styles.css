@@ -7109,9 +7109,16 @@ textarea:focus-visible,
   stroke-width: 3;
 }
 /* hover highlight so overlapping/nearby connectors can be told apart without
-   selecting one (2026-09-07 feedback: paths were indistinguishable) */
+   selecting one (2026-09-07 feedback: paths were indistinguishable).
+   `filter` (not overriding `stroke`) so a connector's own color — default
+   muted gray OR a custom color, 2026-09-07 — gets emphasized rather than
+   replaced; the group (not just the path) is filtered so the arrowhead
+   marker darkens along with the line instead of staying its unfiltered
+   color. */
+.board-connector:not(.selected):hover {
+  filter: brightness(0.72) saturate(1.35);
+}
 .board-connector:not(.selected):hover path {
-  stroke: var(--ink) !important;
   stroke-width: 3;
 }
 .board-connect-preview {

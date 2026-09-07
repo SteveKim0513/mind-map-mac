@@ -12,6 +12,7 @@ import { useBoard, useBoardStore } from '../store/boardStore';
 import { useUi } from '../store/uiStore';
 import { BoardElementView } from './BoardElementView';
 import { BoardSelectionToolbar } from './BoardSelectionToolbar';
+import { BoardConnectorToolbar } from './BoardConnectorToolbar';
 import { BoardNodePicker } from './BoardNodePicker';
 import { BoardNoteLinkPicker } from './BoardNoteLinkPicker';
 import { ensureMapPersisted } from './boardLinks';
@@ -177,6 +178,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const setSelection = useBoard((s) => s.setSelection);
   const moveElements = useBoard((s) => s.moveElements);
   const updateElement = useBoard((s) => s.updateElement);
+  const updateElements = useBoard((s) => s.updateElements);
   const beginTransaction = useBoard((s) => s.beginTransaction);
   const endTransaction = useBoard((s) => s.endTransaction);
   const cancelTransaction = useBoard((s) => s.cancelTransaction);
@@ -780,6 +782,18 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
+  // color toolbar for a connector-only selection (2026-09-07) — screen-space
+  // position (world mid * zoom + pan), same conversion as the sticky
+  // toolbar's sx/sy, since this renders outside .board-world's transform.
+  const selectedConnectorIds = selection.filter((id) => board.elements[id]?.kind === 'connector');
+  const allConnectorsSelected = selectedConnectorIds.length > 0 && selectedConnectorIds.length === selection.length;
+  const connectorToolbarMid = allConnectorsSelected
+    ? connectorRenders.find((r) => r.id === selectedConnectorIds[0])?.mid
+    : undefined;
+  const connectorToolbarPos = connectorToolbarMid
+    ? { sx: connectorToolbarMid.x * zoom + panX, sy: connectorToolbarMid.y * zoom + panY }
+    : null;
+
   const worldStyle: CSSProperties = { transform: `translate(${panX}px, ${panY}px) scale(${zoom})` };
   const isEmpty = board.order.length === 0;
 
@@ -799,8 +813,13 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     >
       <svg width="0" height="0" style={{ position: 'absolute' }}>
         <defs>
+          {/* 2026-09-07: fill="context-stroke" (Chromium 121+ — this app bundles
+              Electron 33/Chromium 130+, safe) makes the arrowhead always match
+              the CURRENT stroke of the path it's attached to, instead of a
+              hardcoded gray — so it follows a custom connector color, hover,
+              and selection highlighting automatically with no extra markup. */}
           <marker id="board-arrow" markerWidth="8" markerHeight="8" refX="6.5" refY="4" orient="auto">
-            <path d="M0,0 L8,4 L0,8 z" fill="var(--ink-muted)" />
+            <path d="M0,0 L8,4 L0,8 z" fill="context-stroke" />
           </marker>
         </defs>
       </svg>
@@ -989,6 +1008,16 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
           }}
           onLinkNode={() => setLinkPicker('node')}
           onLinkNote={() => setLinkPicker('note')}
+        />
+      )}
+
+      {allConnectorsSelected && connectorToolbarPos && (
+        <BoardConnectorToolbar
+          key={selectedConnectorIds.join(',')}
+          color={(board.elements[selectedConnectorIds[0]] as BoardConnectorElement).color}
+          sx={connectorToolbarPos.sx}
+          sy={connectorToolbarPos.sy}
+          onChange={(color) => updateElements(selectedConnectorIds, { color })}
         />
       )}
 

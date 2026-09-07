@@ -6,8 +6,9 @@ function sticky(id: string, x: number, y: number, width = 100, height = 60): Boa
   return { id, kind: 'sticky', x, y, width, height, text: id };
 }
 
-function connector(id: string, fromId: string, toId: string): BoardConnectorElement {
-  return { id, kind: 'connector', fromId, fromAnchor: 'right', toId, toAnchor: 'left', arrow: true };
+function connector(id: string, fromId: string, toId: string, fromAnchor: BoardConnectorElement['fromAnchor'] = 'right'): BoardConnectorElement {
+  const opposite = { right: 'left', left: 'right', bottom: 'top', top: 'bottom' } as const;
+  return { id, kind: 'connector', fromId, fromAnchor, toId, toAnchor: opposite[fromAnchor], arrow: true };
 }
 
 describe('autoLayoutPositions', () => {
@@ -73,6 +74,72 @@ describe('autoLayoutPositions', () => {
     const positions = autoLayoutPositions('root', elements);
     expect(positions.some((p) => p.id === 'ghost')).toBe(false);
     expect(positions.some((p) => p.id === 'child')).toBe(true);
+  });
+
+  // ── 2026-09-07 redesign: each of the root's arms follows the anchor
+  //    direction its OWN connector used, instead of always going rightward ──
+
+  it('places a child BELOW the root when connected via a bottom anchor', () => {
+    const elements: Record<string, BoardElement> = {
+      root: sticky('root', 500, 500, 100, 60),
+      child: sticky('child', 999, 999, 120, 80),
+      c1: connector('c1', 'root', 'child', 'bottom'),
+    };
+    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
+    expect(byId.child.y).toBe(500 + 60 + 96); // one PRIMARY_GAP (96) below the root's bottom edge
+    // horizontally centered on the root's own center (500 + 100/2 = 550), child width 120 → x = 550-60
+    expect(byId.child.x).toBe(550 - 60);
+  });
+
+  it('places a child to the LEFT when connected via a left anchor', () => {
+    const elements: Record<string, BoardElement> = {
+      root: sticky('root', 500, 500, 100, 60),
+      child: sticky('child', 999, 999, 120, 80),
+      c1: connector('c1', 'root', 'child', 'left'),
+    };
+    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
+    expect(byId.child.x).toBe(500 - 96 - 120); // one PRIMARY_GAP left of the root's left edge, minus the child's own width
+  });
+
+  it('places a child ABOVE when connected via a top anchor', () => {
+    const elements: Record<string, BoardElement> = {
+      root: sticky('root', 500, 500, 100, 60),
+      child: sticky('child', 999, 999, 120, 80),
+      c1: connector('c1', 'root', 'child', 'top'),
+    };
+    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
+    expect(byId.child.y).toBe(500 - 96 - 80); // one PRIMARY_GAP above the root's top edge, minus the child's own height
+  });
+
+  it('a whole branch keeps growing in its arm\'s direction, ignoring deeper connectors\' own anchor side', () => {
+    const elements: Record<string, BoardElement> = {
+      root: sticky('root', 0, 0, 100, 60),
+      a: sticky('a', 0, 0, 100, 40),
+      b: sticky('b', 0, 0, 100, 40),
+      c1: connector('c1', 'root', 'a', 'bottom'),
+      // a→b's own connector claims 'right', but b should still land BELOW a
+      // (further down the 'bottom' arm), not to a's right — since it inherits
+      // the arm's direction rather than using its own connector's side.
+      c2: connector('c2', 'a', 'b', 'right'),
+    };
+    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
+    expect(byId.b.y).toBeGreaterThan(byId.a.y);
+    expect(byId.a.y).toBeGreaterThan(0); // below the root
+  });
+
+  it('independent arms in different directions from the same root do not interfere with each other', () => {
+    const elements: Record<string, BoardElement> = {
+      root: sticky('root', 0, 0, 100, 60),
+      right1: sticky('right1', 0, 0, 100, 40),
+      down1: sticky('down1', 0, 0, 100, 40),
+      cr: connector('cr', 'root', 'right1', 'right'),
+      cd: connector('cd', 'root', 'down1', 'bottom'),
+    };
+    const byId = Object.fromEntries(autoLayoutPositions('root', elements).map((p) => [p.id, p]));
+    expect(byId.right1.x).toBeGreaterThan(0); // to the right of the root
+    expect(byId.right1.y).toBe(30 - 20); // vertically centered on the root (center Y 30), single child in the arm
+    expect(byId.down1.y).toBeGreaterThan(0); // below the root
+    expect(byId.down1.x).toBe(0); // horizontally centered on the root (center X 50), single child in the arm
   });
 });
 
