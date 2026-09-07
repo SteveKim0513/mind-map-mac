@@ -177,8 +177,9 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const setSelection = useBoard((s) => s.setSelection);
   const moveElements = useBoard((s) => s.moveElements);
   const updateElement = useBoard((s) => s.updateElement);
-  const beginDrag = useBoard((s) => s.beginDrag);
-  const endDrag = useBoard((s) => s.endDrag);
+  const beginTransaction = useBoard((s) => s.beginTransaction);
+  const endTransaction = useBoard((s) => s.endTransaction);
+  const cancelTransaction = useBoard((s) => s.cancelTransaction);
   const removeElements = useBoard((s) => s.removeElements);
   const addElements = useBoard((s) => s.addElements);
   const setView = useBoard((s) => s.setView);
@@ -204,6 +205,20 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     snapAnchor: BoardAnchorSide | null;
   } | null>(null);
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
+  // Wraps every text-edit entry/exit so the WHOLE typing session becomes one
+  // undo step (2026-09-07 — a controlled <textarea> otherwise calls
+  // updateElement per keystroke, flooding history one entry per character,
+  // unlike a mindmap node's uncontrolled contentEditable which only commits
+  // once on blur). Mirrors the drag begin/end wiring above, just for text
+  // instead of position.
+  const beginEditingTarget = (t: EditingTarget) => {
+    beginTransaction();
+    setEditingTarget(t);
+  };
+  const endEditingTarget = () => {
+    endTransaction();
+    setEditingTarget(null);
+  };
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [linkPicker, setLinkPicker] = useState<'node' | 'note' | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -342,7 +357,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     if (elementAt(elements, order, w, '')) return; // hit a sticky/image — its own dblclick-to-edit handles this
     const sticky = newSticky(w.x - NEW_STICKY_W / 2, w.y - NEW_STICKY_H / 2);
     addElements([sticky]);
-    setEditingTarget({ id: sticky.id, field: 'text' });
+    beginEditingTarget({ id: sticky.id, field: 'text' });
   };
 
   const onBackgroundPointerDown = (e: React.PointerEvent) => {
@@ -350,7 +365,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     containerRef.current?.setPointerCapture(e.pointerId);
     containerRef.current?.focus();
     if (!e.shiftKey) setSelection([]);
-    setEditingTarget(null);
+    endEditingTarget(); // safety-net clear — onFieldBlur normally already closed any open transaction
     if (activeFilter) return; // no marquee — hit-testing is in real coords, display is the filtered grid
     const w = toWorld(e.clientX, e.clientY);
     dragRef.current = { mode: 'marquee', startWorld: w, additive: e.shiftKey };
@@ -386,7 +401,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     const el = board.elements[id];
     if (isDoubleClick && el && el.kind === 'sticky') {
       setSelection([id]);
-      setEditingTarget(region.startsWith('note-') ? { id, field: 'note', index: Number(region.slice(5)) } : { id, field: 'text' });
+      beginEditingTarget(region.startsWith('note-') ? { id, field: 'note', index: Number(region.slice(5)) } : { id, field: 'text' });
       return; // the click that opened editing shouldn't also start a move-drag
     }
     containerRef.current?.setPointerCapture(e.pointerId);
@@ -399,7 +414,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     // drag delta computed from screen pixels would silently displace the
     // REAL position while the user is looking at the grid.
     if (!activeFilter) {
-      beginDrag(); // one undo step for the whole gesture, not one per pointermove
+      beginTransaction(); // one undo step for the whole gesture, not one per pointermove
       dragRef.current = { mode: 'move', ids: next, lastClientX: e.clientX, lastClientY: e.clientY };
     }
   };
@@ -409,7 +424,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     containerRef.current?.setPointerCapture(e.pointerId);
     const el = board.elements[id];
     if (!el || !isBoxElement(el)) return;
-    beginDrag(); // one undo step for the whole gesture, not one per pointermove
+    beginTransaction(); // one undo step for the whole gesture, not one per pointermove
     dragRef.current = {
       mode: 'resize',
       id,
@@ -485,7 +500,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       arrow: true,
     };
     addElements([connector, sticky]);
-    setEditingTarget({ id: sticky.id, field: 'text' });
+    beginEditingTarget({ id: sticky.id, field: 'text' });
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -600,7 +615,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
               arrow: true,
             };
             addElements([connector, sticky]);
-            setEditingTarget({ id: sticky.id, field: 'text' });
+            beginEditingTarget({ id: sticky.id, field: 'text' });
           }
         }
       }
@@ -625,7 +640,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       // no target → cancelled, original attachment kept
       setConnectPreview(null);
     } else if (d?.mode === 'move' || d?.mode === 'resize') {
-      endDrag(); // commits the whole drag/resize gesture as one undo step
+      endTransaction(); // commits the whole drag/resize gesture as one undo step
     }
     try {
       containerRef.current?.releasePointerCapture(e.pointerId);
@@ -670,7 +685,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     }
     if (e.key === 'Enter' && sel) {
       e.preventDefault();
-      if (sel.kind === 'sticky') setEditingTarget({ id: sel.id, field: 'text' });
+      if (sel.kind === 'sticky') beginEditingTarget({ id: sel.id, field: 'text' });
       else if (sel.kind === 'connector') setEditingLabelId(sel.id);
     }
   };
@@ -822,7 +837,8 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
                 notes[index] = value;
                 updateElement(id, { notes });
               }}
-              onFieldBlur={() => setEditingTarget(null)}
+              onFieldBlur={endEditingTarget}
+              onCancelEdit={cancelTransaction}
               onRemoveNote={(index) => {
                 if (el.kind !== 'sticky') return;
                 const notes = (el.notes ?? []).filter((_, i) => i !== index);
@@ -958,7 +974,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
             const s = selectedStickies[0];
             const notes = [...(s.notes ?? []), ''];
             updateElement(s.id, { notes });
-            setEditingTarget({ id: s.id, field: 'note', index: notes.length - 1 });
+            beginEditingTarget({ id: s.id, field: 'note', index: notes.length - 1 });
           }}
           onLinkNode={() => setLinkPicker('node')}
           onLinkNote={() => setLinkPicker('note')}

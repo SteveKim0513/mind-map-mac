@@ -193,13 +193,13 @@ describe('boardStore — undo/redo', () => {
     expect(s.getState().board).toBe(before);
   });
 
-  it('a whole drag gesture (beginDrag + many moveElements + endDrag) undoes in ONE step', () => {
+  it('a whole drag gesture (beginTransaction + many moveElements + endTransaction) undoes in ONE step', () => {
     const s = createBoardStore();
     s.getState().addElement(sticky('s1', 0, 0));
     // simulates ~20 pointermove frames of a real drag
-    s.getState().beginDrag();
+    s.getState().beginTransaction();
     for (let i = 0; i < 20; i++) s.getState().moveElements(['s1'], 1, 1);
-    s.getState().endDrag();
+    s.getState().endTransaction();
     const el = s.getState().board.elements.s1 as BoardStickyElement;
     expect(el.x).toBe(20);
     expect(el.y).toBe(20);
@@ -210,24 +210,24 @@ describe('boardStore — undo/redo', () => {
     expect(back.y).toBe(0);
   });
 
-  it('a click with no movement (beginDrag immediately followed by endDrag) pushes no history', () => {
+  it('a click with no movement (beginTransaction immediately followed by endTransaction) pushes no history', () => {
     const s = createBoardStore();
     s.getState().addElement(sticky('s1'));
     const pastAfterAdd = s.getState().past.length;
-    s.getState().beginDrag();
-    s.getState().endDrag(); // no moveElements/updateElement call in between — nothing changed
+    s.getState().beginTransaction();
+    s.getState().endTransaction(); // no moveElements/updateElement call in between — nothing changed
     expect(s.getState().past.length).toBe(pastAfterAdd);
   });
 
-  it('mutations during a transaction (beginDrag..endDrag) push no per-call history', () => {
+  it('mutations during a transaction (beginTransaction..endTransaction) push no per-call history', () => {
     const s = createBoardStore();
     s.getState().addElement(sticky('s1'));
-    s.getState().beginDrag();
+    s.getState().beginTransaction();
     s.getState().moveElements(['s1'], 5, 5);
     s.getState().moveElements(['s1'], 5, 5);
     expect(s.getState().past.length).toBe(1); // still just the addElement entry
-    s.getState().endDrag();
-    expect(s.getState().past.length).toBe(2); // endDrag adds exactly one more
+    s.getState().endTransaction();
+    expect(s.getState().past.length).toBe(2); // endTransaction adds exactly one more
   });
 
   it('a one-shot action after undo clears redo history', () => {
@@ -238,6 +238,56 @@ describe('boardStore — undo/redo', () => {
     expect(s.getState().future.length).toBe(1);
     s.getState().addElement(sticky('s3'));
     expect(s.getState().future.length).toBe(0);
+  });
+
+  it('a whole text-edit session (beginTransaction + per-keystroke updateElement + endTransaction) undoes in ONE step — not one per keystroke', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    const pastAfterAdd = s.getState().past.length;
+    s.getState().beginTransaction();
+    // simulates typing "hi" — a controlled <textarea>'s onChange fires per keystroke
+    for (const partial of ['h', 'hi']) s.getState().updateElement('s1', { text: partial });
+    expect(s.getState().past.length).toBe(pastAfterAdd); // no per-keystroke history push
+    s.getState().endTransaction();
+    expect(s.getState().past.length).toBe(pastAfterAdd + 1); // exactly one entry for the whole session
+    expect((s.getState().board.elements.s1 as BoardStickyElement).text).toBe('hi');
+    s.getState().undo();
+    expect((s.getState().board.elements.s1 as BoardStickyElement).text).toBe(''); // back to pre-edit, in one step
+  });
+
+  it('cancelTransaction reverts to the pre-edit text and pushes no history (Escape-to-cancel)', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    s.getState().updateElement('s1', { text: '원본' });
+    const pastBefore = s.getState().past.length;
+    s.getState().beginTransaction();
+    s.getState().updateElement('s1', { text: '원본 수정중' });
+    expect((s.getState().board.elements.s1 as BoardStickyElement).text).toBe('원본 수정중');
+    s.getState().cancelTransaction();
+    expect((s.getState().board.elements.s1 as BoardStickyElement).text).toBe('원본');
+    expect(s.getState().past.length).toBe(pastBefore); // no history entry from the cancelled edit
+    expect(s.getState().future.length).toBe(0);
+  });
+
+  it('cancelTransaction with no open transaction is a no-op', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    const before = s.getState().board;
+    s.getState().cancelTransaction();
+    expect(s.getState().board).toBe(before);
+  });
+
+  it('endTransaction after cancelTransaction is a harmless no-op (Escape then blur both fire)', () => {
+    const s = createBoardStore();
+    s.getState().addElement(sticky('s1'));
+    s.getState().updateElement('s1', { text: '원본' });
+    const pastBefore = s.getState().past.length;
+    s.getState().beginTransaction();
+    s.getState().updateElement('s1', { text: '수정중' });
+    s.getState().cancelTransaction();
+    s.getState().endTransaction(); // the textarea's onBlur still fires after Escape's programmatic blur()
+    expect(s.getState().past.length).toBe(pastBefore);
+    expect((s.getState().board.elements.s1 as BoardStickyElement).text).toBe('원본');
   });
 });
 

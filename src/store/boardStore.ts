@@ -92,32 +92,45 @@ interface BoardState {
   // history
   undo: () => void;
   redo: () => void;
-  /** Marks the start of a continuous drag gesture (move/resize) — captures a
-   *  baseline snapshot so the WHOLE gesture becomes one undo step, instead of
-   *  one per `moveElements`/`updateElement` call (those fire on every
-   *  pointermove, unlike a mindmap node's tree-layout position which is never
-   *  free-dragged). Call once at pointerdown. */
-  beginDrag: () => void;
-  /** Ends a drag gesture started by `beginDrag`. Pushes the baseline into
-   *  history only if something actually moved (a click with no movement
-   *  pushes no-op history noise otherwise). Call once at pointerup. */
-  endDrag: () => void;
+  /** Marks the start of a continuous multi-mutation gesture — a drag
+   *  (move/resize) OR a text-edit session (sticky text / a notes[] block) —
+   *  and captures a baseline snapshot so the WHOLE gesture becomes one undo
+   *  step, instead of one per `moveElements`/`updateElement` call (those fire
+   *  on every pointermove/keystroke, unlike a mindmap node's position, which
+   *  is never free-dragged, or its text, which is edited in an uncontrolled
+   *  contentEditable and only committed once via `commitText`). Call once at
+   *  the gesture's start (pointerdown, or entering text-edit mode). */
+  beginTransaction: () => void;
+  /** Ends a transaction started by `beginTransaction`, committing it. Pushes
+   *  the baseline into history only if something actually changed (a click
+   *  with no movement, or a text edit that was blurred without typing, pushes
+   *  no-op history noise otherwise). Call once at the gesture's end
+   *  (pointerup, or blurring the text field). */
+  endTransaction: () => void;
+  /** Aborts a transaction started by `beginTransaction`, REVERTING to the
+   *  baseline snapshot instead of committing it — no history entry either
+   *  way. Used by Escape-to-cancel while text-editing: the baseline captured
+   *  at edit-start is exactly the pre-edit text, so this restores it for
+   *  free without a separate "original value" stash. */
+  cancelTransaction: () => void;
 }
 
 export type BoardStore = StoreApi<BoardState>;
 
 export function createBoardStore(): BoardStore {
-  // Drag-transaction state — NOT part of the reactive store (mirrors
-  // mapStore's `pendingCreate` closure-held pattern). A continuous move/resize
-  // gesture calls beginDrag() once at pointerdown (capturing a baseline) and
-  // endDrag() once at pointerup (pushing that baseline as ONE history entry,
-  // only if something actually changed). While a transaction is open, the
-  // one-shot actions below skip their own history push via `historyPatch` —
-  // otherwise every intermediate pointermove would ALSO commit a step, since
-  // (unlike mapStore's single funneled `commit()`) each action here pushes
-  // history independently.
+  // Transaction state — NOT part of the reactive store (mirrors mapStore's
+  // `pendingCreate` closure-held pattern). A continuous multi-mutation
+  // gesture — a move/resize drag, OR a text-edit session — calls
+  // beginTransaction() once at the gesture's start (capturing a baseline) and
+  // endTransaction() once at its end (pushing that baseline as ONE history
+  // entry, only if something actually changed), or cancelTransaction() to
+  // abort and revert to the baseline instead. While a transaction is open,
+  // the one-shot actions below skip their own history push via
+  // `historyPatch` — otherwise every intermediate pointermove/keystroke would
+  // ALSO commit a step, since (unlike mapStore's single funneled `commit()`)
+  // each action here pushes history independently.
   let inTransaction = false;
-  let dragBaseline: BoardDoc | null = null;
+  let transactionBaseline: BoardDoc | null = null;
 
   return createStore<BoardState>((set, get) => {
     /** Pushes `prevBoard` — the board as it was immediately BEFORE the
@@ -313,21 +326,30 @@ export function createBoardStore(): BoardStore {
         });
       },
 
-      beginDrag: () => {
+      beginTransaction: () => {
         if (inTransaction) return; // guard against a nested/duplicate start
         inTransaction = true;
-        dragBaseline = get().board;
+        transactionBaseline = get().board;
       },
 
-      endDrag: () => {
+      endTransaction: () => {
         if (!inTransaction) return;
         inTransaction = false;
-        const baseline = dragBaseline;
-        dragBaseline = null;
+        const baseline = transactionBaseline;
+        transactionBaseline = null;
         if (!baseline) return;
         const { board, past } = get();
-        if (board === baseline) return; // nothing actually moved — no history noise
+        if (board === baseline) return; // nothing actually changed — no history noise
         set({ past: [...past.slice(-HISTORY_LIMIT + 1), baseline], future: [] });
+      },
+
+      cancelTransaction: () => {
+        if (!inTransaction) return;
+        inTransaction = false;
+        const baseline = transactionBaseline;
+        transactionBaseline = null;
+        if (!baseline) return;
+        set({ board: baseline }); // revert — no history entry, nothing to commit
       },
     };
   });

@@ -34,6 +34,11 @@ interface Props {
   onTextChange: (value: string) => void;
   onNoteChange: (index: number, value: string) => void;
   onFieldBlur: () => void;
+  /** Escape while editing text/notes — reverts to the pre-edit value (via the
+   *  store's transaction baseline) instead of committing. The field then
+   *  blurs as usual, which still calls `onFieldBlur` (harmless no-op on the
+   *  now-closed transaction) to close editing. */
+  onCancelEdit: () => void;
   onRemoveNote: (index: number) => void;
 }
 
@@ -68,6 +73,7 @@ export function BoardElementView({
   onTextChange,
   onNoteChange,
   onFieldBlur,
+  onCancelEdit,
   onRemoveNote,
 }: Props) {
   if (el.kind === 'connector') return null; // connectors render in the shared SVG overlay
@@ -108,6 +114,14 @@ export function BoardElementView({
         >
           <div className={`board-el-text-main valign-${el.valign ?? 'top'}`} data-board-region="text">
             {editingField === 'text' ? (
+              // 2026-09-07: a <textarea> scrolls internally once its content
+              // overflows (native behavior, independent of CSS overflow) —
+              // without stopping onWheel, scrolling long text also panned the
+              // board underneath (same event-bubbling shape as the picker
+              // pointerdown/keydown bugs fixed in earlier rounds, just for
+              // wheel this time). Escape reverts to the pre-edit text via the
+              // store's transaction baseline (onCancelEdit) instead of
+              // committing — mirrors the mindmap node editor's Escape=cancel.
               <textarea
                 className="board-el-input"
                 style={textStyle}
@@ -116,6 +130,13 @@ export function BoardElementView({
                 onChange={(e) => onTextChange(e.target.value)}
                 onBlur={onFieldBlur}
                 onPointerDown={(e) => e.stopPropagation()}
+                onWheel={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    onCancelEdit();
+                    e.currentTarget.blur();
+                  }
+                }}
               />
             ) : (
               <div className="board-el-text" style={textStyle}>
@@ -242,6 +263,7 @@ export function BoardElementView({
               onPointerDown={onPointerDown}
             >
               {editingField === 'note' && editingNoteIndex === i ? (
+                // see the main-text textarea's comment above — same wheel/Escape fix
                 <textarea
                   className="board-el-input"
                   style={textStyle}
@@ -250,6 +272,13 @@ export function BoardElementView({
                   onChange={(e) => onNoteChange(i, e.target.value)}
                   onBlur={onFieldBlur}
                   onPointerDown={(e) => e.stopPropagation()}
+                  onWheel={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      onCancelEdit();
+                      e.currentTarget.blur();
+                    }
+                  }}
                 />
               ) : (
                 <div className="board-el-text" style={textStyle}>
