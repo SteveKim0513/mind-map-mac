@@ -4,6 +4,11 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.13.5] - 2026-09-07
+
+### 추가
+- **보드 이미지에도 색·연동(노드/노트/외부 링크) 추가** — 스티키 노트가 갖고 있던 "연동"(마인드맵 노드/노트/외부 URL 연결)과 색 지정을 이미지 요소에도 확장. `BoardImageElement`에 `color`/`nodeLink`/`noteLink`/`link` 필드 추가, `boardStore.ts`의 `setNodeLink`/`setNoteLink` 가드를 `'sticky'|'image'`로 확장. 이미지는 배경을 채우면 사진 자체를 가리므로 색은 대신 사진 테두리에 얇게(1.5px) 표시하며 기본값은 스티키와 동일한 노란색. `BoardSelectionToolbar`는 이제 스티키/이미지 어느 쪽이 전체 선택됐는지에 따라 색·연동은 공통으로, 모양·정렬·서식·텍스트박스 추가는 스티키 전용으로 노출한다(`isSticky` 가드). `e2e/board-image-color-link.spec.ts` 신규.
+
 ## [0.13.4] - 2026-09-07
 
 ### 추가
