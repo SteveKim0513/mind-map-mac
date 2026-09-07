@@ -1,8 +1,8 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import type { BoardAnchorSide, BoardElement } from '../types';
+import type { BoardAnchorSide, BoardElement, BoardImageElement, BoardStickyElement } from '../types';
 import { tagVar, contrastInk } from '../theme/palette';
 import { useUi } from '../store/uiStore';
-import { useBoard } from '../store/boardStore';
+import { useBoard, type BoardElementPatch } from '../store/boardStore';
 import { revealBoardNodeLink, revealBoardNoteLink } from './boardLinks';
 import { Icon } from '../ui/Icon';
 
@@ -17,6 +17,95 @@ function hostOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** The 노드/노트/외부 링크 chip row shared by sticky and image elements — both
+ *  kinds carry the same `nodeLink`/`noteLink`/`link` fields (2026-09-07: image
+ *  gained them alongside sticky) and open/unlink identically. */
+function LinkChips({
+  el,
+  setNodeLink,
+  setNoteLink,
+  updateElement,
+}: {
+  el: BoardStickyElement | BoardImageElement;
+  setNodeLink: (id: string, link: null) => void;
+  setNoteLink: (id: string, ref: null) => void;
+  updateElement: (id: string, patch: BoardElementPatch) => void;
+}) {
+  return (
+    <>
+      {el.nodeLink && (
+        <button
+          className="board-sticky-link"
+          title={el.nodeLink.nodeText ? `노드로 이동: ${el.nodeLink.nodeText}` : '노드로 이동'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => void revealBoardNodeLink(el.nodeLink!)}
+        >
+          <Icon name="mindmap" />
+          <span className="board-sticky-link-text">{el.nodeLink.nodeText || '노드'}</span>
+          <span
+            className="board-sticky-link-x"
+            role="button"
+            title="연결 해제"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              setNodeLink(el.id, null);
+            }}
+          >
+            <Icon name="close" />
+          </span>
+        </button>
+      )}
+      {el.noteLink && (
+        <button
+          className="board-sticky-link"
+          title={el.noteLink.title ? `노트 열기: ${el.noteLink.title}` : '노트 열기'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => void revealBoardNoteLink(el.noteLink!.notePath)}
+        >
+          <Icon name="note" />
+          <span className="board-sticky-link-text">{el.noteLink.title || '노트'}</span>
+          <span
+            className="board-sticky-link-x"
+            role="button"
+            title="연결 해제"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              setNoteLink(el.id, null);
+            }}
+          >
+            <Icon name="close" />
+          </span>
+        </button>
+      )}
+      {el.link && (
+        <button
+          className="board-sticky-link"
+          title={`링크 열기: ${el.link}`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => window.open(el.link, '_blank')}
+        >
+          <Icon name="external" />
+          <span className="board-sticky-link-text">{hostOf(el.link)}</span>
+          <span
+            className="board-sticky-link-x"
+            role="button"
+            title="연결 해제"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              updateElement(el.id, { link: '' });
+            }}
+          >
+            <Icon name="close" />
+          </span>
+        </button>
+      )}
+    </>
+  );
 }
 
 interface Props {
@@ -147,75 +236,7 @@ export function BoardElementView({
 
           {(el.nodeLink || el.noteLink || el.link) && (
             <div className="board-sticky-links" data-board-region="links">
-              {el.nodeLink && (
-                <button
-                  className="board-sticky-link"
-                  title={el.nodeLink.nodeText ? `노드로 이동: ${el.nodeLink.nodeText}` : '노드로 이동'}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => void revealBoardNodeLink(el.nodeLink!)}
-                >
-                  <Icon name="mindmap" />
-                  <span className="board-sticky-link-text">{el.nodeLink.nodeText || '노드'}</span>
-                  <span
-                    className="board-sticky-link-x"
-                    role="button"
-                    title="연결 해제"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setNodeLink(el.id, null);
-                    }}
-                  >
-                    <Icon name="close" />
-                  </span>
-                </button>
-              )}
-              {el.noteLink && (
-                <button
-                  className="board-sticky-link"
-                  title={el.noteLink.title ? `노트 열기: ${el.noteLink.title}` : '노트 열기'}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => void revealBoardNoteLink(el.noteLink!.notePath)}
-                >
-                  <Icon name="note" />
-                  <span className="board-sticky-link-text">{el.noteLink.title || '노트'}</span>
-                  <span
-                    className="board-sticky-link-x"
-                    role="button"
-                    title="연결 해제"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setNoteLink(el.id, null);
-                    }}
-                  >
-                    <Icon name="close" />
-                  </span>
-                </button>
-              )}
-              {el.link && (
-                <button
-                  className="board-sticky-link"
-                  title={`링크 열기: ${el.link}`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => window.open(el.link, '_blank')}
-                >
-                  <Icon name="external" />
-                  <span className="board-sticky-link-text">{hostOf(el.link)}</span>
-                  <span
-                    className="board-sticky-link-x"
-                    role="button"
-                    title="연결 해제"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updateElement(el.id, { link: '' });
-                    }}
-                  >
-                    <Icon name="close" />
-                  </span>
-                </button>
-              )}
+              <LinkChips el={el} setNodeLink={setNodeLink} setNoteLink={setNoteLink} updateElement={updateElement} />
             </div>
           )}
         </div>
@@ -224,12 +245,29 @@ export function BoardElementView({
       {el.kind === 'image' && (
         <div className="board-el-body" onPointerDown={onPointerDown}>
           {imageSrc ? (
-            <img className="board-image" src={imageSrc} alt={el.alt ?? ''} draggable={false} />
+            <img
+              className="board-image"
+              src={imageSrc}
+              alt={el.alt ?? ''}
+              draggable={false}
+              style={{ borderColor: tagVar(el.color) ?? 'var(--tag-yellow)' }}
+            />
           ) : (
-            <div className="board-image board-image--loading">
+            <div
+              className="board-image board-image--loading"
+              style={{ borderColor: tagVar(el.color) ?? 'var(--tag-yellow)' }}
+            >
               <Icon name="board" />
             </div>
           )}
+        </div>
+      )}
+
+      {el.kind === 'image' && (el.nodeLink || el.noteLink || el.link) && (
+        // 스티키의 notes[]와 같은 자리(카드 아래, normal flow) — 사진 높이를 침범하지
+        // 않고 그 아래로 쌓인다 (2026-09-07).
+        <div className="board-image-links" style={{ width: el.width }} data-board-region="links">
+          <LinkChips el={el} setNodeLink={setNodeLink} setNoteLink={setNoteLink} updateElement={updateElement} />
         </div>
       )}
 

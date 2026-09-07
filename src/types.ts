@@ -244,11 +244,18 @@ export interface BoardNoteRef {
 }
 
 /** `src` is a path relative to the board file, resolved against its own
- *  `.{stem}.assets/` hidden folder — same convention as note images (decision 0010). */
+ *  `.{stem}.assets/` hidden folder — same convention as note images (decision 0010).
+ *  `color`/`nodeLink`/`noteLink`/`link` mirror `BoardStickyElement`'s fields
+ *  (2026-09-07) — same "연동" concept, just rendered as a thin border tint
+ *  instead of a fill (an image already shows its own content). */
 export interface BoardImageElement extends BoardBoxElement {
   kind: 'image';
   src: string;
   alt?: string;
+  color?: string; // tag-palette key (border tint) — see theme/palette.ts
+  nodeLink?: NoteLink; // links this image to a mindmap node
+  noteLink?: BoardNoteRef; // links this image to a note file
+  link?: string; // external URL
 }
 
 /** One of a connector's four attachment points on an element's bounding box

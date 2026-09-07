@@ -283,7 +283,7 @@ export function createBoardStore(): BoardStore {
       setNodeLink: (id, link) => {
         const { board } = get();
         const el = board.elements[id];
-        if (!el || el.kind !== 'sticky') return;
+        if (!el || (el.kind !== 'sticky' && el.kind !== 'image')) return;
         const next = { ...el, nodeLink: link ?? undefined };
         set({ board: { ...board, elements: { ...board.elements, [id]: next } }, dirty: true, ...historyPatch(board) });
       },
@@ -291,7 +291,7 @@ export function createBoardStore(): BoardStore {
       setNoteLink: (id, ref) => {
         const { board } = get();
         const el = board.elements[id];
-        if (!el || el.kind !== 'sticky') return;
+        if (!el || (el.kind !== 'sticky' && el.kind !== 'image')) return;
         const next = { ...el, noteLink: ref ?? undefined };
         set({ board: { ...board, elements: { ...board.elements, [id]: next } }, dirty: true, ...historyPatch(board) });
       },

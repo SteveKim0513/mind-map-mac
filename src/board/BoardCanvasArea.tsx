@@ -20,7 +20,7 @@ import { routeWaypoints, roundedPath, pointsBBox, pathMidpoint } from './boardRo
 import { autoLayoutPositions, filterGridPositions } from './boardLayout';
 import { newId } from '../io/formats';
 import { tagVar } from '../theme/palette';
-import type { BoardAnchorSide, BoardConnectorElement, BoardElement, BoardStickyElement } from '../types';
+import type { BoardAnchorSide, BoardConnectorElement, BoardElement, BoardImageElement, BoardStickyElement } from '../types';
 
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 3;
@@ -696,16 +696,27 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const singleBoxSelected = singleSelected && isBoxElement(singleSelected) ? singleSelected : undefined;
 
   // Bulk editing (2026-09-03): the floating menu shows whenever every
-  // selected element is a sticky (one or many) — mixed sticky+image/connector
-  // selections hide it rather than guess a partial-apply behavior.
+  // selected element is a sticky (one or many) OR every selected element is
+  // an image (one or many, 2026-09-07 — images gained color + 연동 too) —
+  // mixed sticky+image/connector selections hide it rather than guess a
+  // partial-apply behavior.
   const selectedStickies = selection
     .map((id) => board.elements[id])
     .filter((el): el is BoardStickyElement => !!el && el.kind === 'sticky');
+  const selectedImages = selection
+    .map((id) => board.elements[id])
+    .filter((el): el is BoardImageElement => !!el && el.kind === 'image');
   const allStickiesSelected = selectedStickies.length > 0 && selectedStickies.length === selection.length;
-  const toolbarPos = allStickiesSelected
+  const allImagesSelected = selectedImages.length > 0 && selectedImages.length === selection.length;
+  const toolbarElements: (BoardStickyElement | BoardImageElement)[] | null = allStickiesSelected
+    ? selectedStickies
+    : allImagesSelected
+      ? selectedImages
+      : null;
+  const toolbarPos = toolbarElements
     ? {
-        sx: ((Math.min(...selectedStickies.map((s) => s.x)) + Math.max(...selectedStickies.map((s) => s.x + s.width))) / 2) * zoom + panX,
-        sy: Math.min(...selectedStickies.map((s) => s.y)) * zoom + panY,
+        sx: ((Math.min(...toolbarElements.map((s) => s.x)) + Math.max(...toolbarElements.map((s) => s.x + s.width))) / 2) * zoom + panX,
+        sy: Math.min(...toolbarElements.map((s) => s.y)) * zoom + panY,
       }
     : null;
 
@@ -964,10 +975,10 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
         )}
       </div>
 
-      {allStickiesSelected && toolbarPos && (
+      {toolbarElements && toolbarPos && (
         <BoardSelectionToolbar
-          key={selectedStickies.map((s) => s.id).join(',')}
-          stickies={selectedStickies}
+          key={toolbarElements.map((s) => s.id).join(',')}
+          elements={toolbarElements}
           sx={toolbarPos.sx}
           sy={toolbarPos.sy}
           onAddNote={() => {

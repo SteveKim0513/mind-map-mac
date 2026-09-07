@@ -3,7 +3,9 @@ import { useBoard } from '../store/boardStore';
 import { ColorSwatchGrid } from '../ui/ColorSwatchGrid';
 import { tagVar } from '../theme/palette';
 import { Icon, type IconName } from '../ui/Icon';
-import type { BoardStickyElement, StickyAlign, StickyFontSize, StickyShape, StickyValign } from '../types';
+import type { BoardImageElement, BoardStickyElement, StickyAlign, StickyFontSize, StickyShape, StickyValign } from '../types';
+
+type LinkableElement = BoardStickyElement | BoardImageElement;
 
 const ALIGNS: StickyAlign[] = ['left', 'center', 'right'];
 const ALIGN_ICON: Record<StickyAlign, IconName> = { left: 'alignLeft', center: 'alignCenter', right: 'alignRight' };
@@ -24,21 +26,24 @@ const SIZE_PX: Record<StickyFontSize, number> = { small: 11, medium: 14, large: 
 type Flyout = 'color' | 'shape' | 'align' | 'format' | 'link' | null;
 
 interface Props {
-  stickies: BoardStickyElement[]; // 1+ selected stickies — edits apply to all at once
+  elements: LinkableElement[]; // 1+ selected stickies OR 1+ selected images (never mixed — see BoardCanvasArea) — edits apply to all at once
   sx: number;
   sy: number;
-  onAddNote: () => void; // single-selection only: appends a fused note block + enters edit mode
+  onAddNote: () => void; // single sticky selection only: appends a fused note block + enters edit mode
   onLinkNode: () => void; // single-selection only: opens the node picker
   onLinkNote: () => void; // single-selection only: opens the note picker
 }
 
-/** Floating action bar shown above the selected sticky note(s) — mirrors
- *  canvas/SelectionToolbar.tsx's pattern (screen-space position passed in,
- *  rendered outside the pan/zoom transform, .sel-toolbar/.st-* shared CSS).
- *  With multiple stickies selected, every action applies to all of them at
- *  once (`updateElements`); preview glyphs (current color/shape/etc.) show
- *  the first selected sticky's value as a representative default. */
-export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode, onLinkNote }: Props) {
+/** Floating action bar shown above the selected sticky note(s) or image(s) —
+ *  mirrors canvas/SelectionToolbar.tsx's pattern (screen-space position
+ *  passed in, rendered outside the pan/zoom transform, .sel-toolbar/.st-*
+ *  shared CSS). Color and 연동(node/note/external link) apply to both kinds
+ *  (2026-09-07: image gained the same fields as sticky); shape/align/format/
+ *  "텍스트 박스 추가" stay sticky-only (text-card concepts an image has no use
+ *  for). With multiple elements selected, every action applies to all of
+ *  them at once (`updateElements`); preview glyphs (current color/shape/etc.)
+ *  show the first selected element's value as a representative default. */
+export function BoardSelectionToolbar({ elements, sx, sy, onAddNote, onLinkNode, onLinkNote }: Props) {
   const updateElements = useBoard((s) => s.updateElements);
   const setNodeLink = useBoard((s) => s.setNodeLink);
   const setNoteLink = useBoard((s) => s.setNoteLink);
@@ -49,9 +54,10 @@ export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode,
     setFlyout((v) => (v === f ? null : f));
   };
 
-  const primary = stickies[0];
-  const ids = stickies.map((s) => s.id);
-  const single = stickies.length === 1;
+  const primary = elements[0];
+  const ids = elements.map((s) => s.id);
+  const single = elements.length === 1;
+  const isSticky = primary.kind === 'sticky';
   const apply = (patch: Parameters<typeof updateElements>[1]) => updateElements(ids, patch);
 
   return (
@@ -64,26 +70,34 @@ export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode,
       <button className="st-btn" title="색 변경" onClick={() => toggle('color')}>
         <span className="st-dot" style={{ background: tagVar(primary.color) ?? 'var(--tag-yellow)' }} />
       </button>
-      <span className="st-sep" />
-      <button className="st-btn" title="모양 변경" onClick={() => toggle('shape')}>
-        <Icon name={SHAPE_ICON[primary.shape ?? 'rect']} />
-      </button>
-      <span className="st-sep" />
-      <button className="st-btn" title="정렬" onClick={() => toggle('align')}>
-        <Icon name={ALIGN_ICON[primary.align ?? 'left']} />
-      </button>
-      <span className="st-sep" />
-      <button className={`st-btn${primary.bold ? ' on' : ''}`} title="글자 서식" onClick={() => toggle('format')}>
-        <span className="st-format-glyph" style={{ fontWeight: primary.bold ? 700 : 400 }}>
-          가
-        </span>
-      </button>
-      {single && (
+      {isSticky && (
+        <>
+          <span className="st-sep" />
+          <button className="st-btn" title="모양 변경" onClick={() => toggle('shape')}>
+            <Icon name={SHAPE_ICON[primary.shape ?? 'rect']} />
+          </button>
+          <span className="st-sep" />
+          <button className="st-btn" title="정렬" onClick={() => toggle('align')}>
+            <Icon name={ALIGN_ICON[primary.align ?? 'left']} />
+          </button>
+          <span className="st-sep" />
+          <button className={`st-btn${primary.bold ? ' on' : ''}`} title="글자 서식" onClick={() => toggle('format')}>
+            <span className="st-format-glyph" style={{ fontWeight: primary.bold ? 700 : 400 }}>
+              가
+            </span>
+          </button>
+        </>
+      )}
+      {single && isSticky && (
         <>
           <span className="st-sep" />
           <button className="st-btn" title="텍스트 박스 추가" onClick={onAddNote}>
             <Icon name="plus" />
           </button>
+        </>
+      )}
+      {single && (
+        <>
           <span className="st-sep" />
           <button className={`st-btn${primary.nodeLink || primary.noteLink || primary.link ? ' on' : ''}`} title="연동" onClick={() => toggle('link')}>
             <Icon name="link" />
@@ -96,7 +110,7 @@ export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode,
           <ColorSwatchGrid value={primary.color} onChange={(c) => { apply({ color: c ?? 'yellow' }); setFlyout(null); }} />
         </div>
       )}
-      {flyout === 'shape' && (
+      {flyout === 'shape' && isSticky && (
         <div className="st-swatches">
           {SHAPES.map((sh) => (
             <button
@@ -110,7 +124,7 @@ export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode,
           ))}
         </div>
       )}
-      {flyout === 'align' && (
+      {flyout === 'align' && isSticky && (
         <div className="st-swatches st-flyout-col">
           <div className="st-flyout-row">
             {ALIGNS.map((a) => (
@@ -138,7 +152,7 @@ export function BoardSelectionToolbar({ stickies, sx, sy, onAddNote, onLinkNode,
           </div>
         </div>
       )}
-      {flyout === 'format' && (
+      {flyout === 'format' && isSticky && (
         <div className="st-swatches st-flyout-col">
           <div className="st-flyout-row">
             {SIZES.map((sz) => (

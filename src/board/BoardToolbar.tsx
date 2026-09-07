@@ -71,7 +71,7 @@ export function BoardToolbar({ handle, boardFilePath }: Props) {
           const { buffer, filename } = await fileToImageData(file);
           const src = await window.api.imagesWrite({ notePath: boardFilePath, filename, buffer });
           const { x, y } = nextSpot();
-          addElement({ id: newId(), kind: 'image', x, y, width: 240, height: 180, src });
+          addElement({ id: newId(), kind: 'image', x, y, width: 240, height: 180, src, color: 'yellow' });
         } catch {
           /* skip unreadable/unwritable image */
         }
