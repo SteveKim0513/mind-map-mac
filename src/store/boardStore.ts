@@ -13,8 +13,28 @@ import type {
 } from '../types';
 import type { TagKey } from '../theme/palette';
 import { emptyBoard } from '../io/boardFormat';
+import { newId } from '../io/formats';
 
 const HISTORY_LIMIT = 100;
+
+/** px added to the copied elements' original position on each successive
+ *  paste (reset to 0 by a fresh `copyElements`) — prevents pasted copies
+ *  from landing exactly on top of the originals, and lets repeated ⌘V
+ *  fan them out instead of stacking (no offset concept exists in mapStore's
+ *  copyNode/pasteNode since that's a tree paste, not a free-placement one). */
+const PASTE_OFFSET_STEP = 20;
+
+/** In-app clipboard for board elements — a module-level variable (mirrors
+ *  mapStore's `let clipboard`), NOT React state and NOT the OS clipboard, so
+ *  it survives outside any single board's store and is shared across every
+ *  open board tab (copy in one board, paste into another). Holds full
+ *  elements (including their now-stale original ids) exactly as they were at
+ *  copy time; `pasteElements` remaps ids and offsets positions fresh on each
+ *  call. No reminder fields to strip here (unlike mapStore's ClipNode) —
+ *  BoardElement has no reminderOn/reminderId/etc., those only exist on
+ *  MindNode. */
+let boardClipboard: BoardElement[] | null = null;
+let pasteOffsetCount = 0;
 
 /** Patchable fields across every element kind (union of all kind-specific
  *  fields, minus `id`/`kind`) — avoids the keyof-intersection trap of
@@ -76,8 +96,13 @@ interface BoardState {
   /** Removes the given elements AND any connector attached to one of them
    *  (a connector can't dangle on a deleted endpoint). */
   removeElements: (ids: string[]) => void;
-  bringToFront: (id: string) => void;
-  sendToBack: (id: string) => void;
+  /** Reorders the given ids to the front/back of `board.order`, preserving
+   *  their relative order among themselves (so a multi-select bring-to-front
+   *  doesn't scramble which of the selected elements ends up "more front"
+   *  than the others). Ids not currently in `board.order` are ignored; a
+   *  no-op (empty array, or none present) skips the write entirely. */
+  bringToFront: (ids: string[]) => void;
+  sendToBack: (ids: string[]) => void;
   setSelection: (ids: string[]) => void;
   setColorFilter: (color: string | null) => void;
   setShapeFilter: (shape: StickyShape | null) => void;
@@ -88,6 +113,40 @@ interface BoardState {
    *  omitted" — see BoardStickyElement.nodeLink/noteLink. */
   setNodeLink: (id: string, link: NoteLink | null) => void;
   setNoteLink: (id: string, ref: BoardNoteRef | null) => void;
+
+  // clipboard (⌘/Ctrl+C / ⌘/Ctrl+V)
+  /** Copies the currently selected elements into the in-app clipboard, plus
+   *  any connector whose BOTH endpoints are in the selection (a connector
+   *  with only one endpoint selected is never copied — pasting it would
+   *  either dangle or silently reattach to the original, untouched element).
+   *  No-op on an empty selection. */
+  copyElements: () => void;
+  /** Pastes the clipboard's elements as brand-new elements (fresh ids, never
+   *  reusing the copied ones) at an offset from their original position,
+   *  selects only the pasted elements, and records one undo step. No-op if
+   *  nothing has been copied yet. */
+  pasteElements: () => void;
+  hasClipboard: () => boolean;
+  /** ⌘/Ctrl+X — copies the current selection then removes it, in one call.
+   *  `copyElements` never calls `set()` (the clipboard is a module-level
+   *  variable, not store state), so it contributes nothing to history —
+   *  the only history push here is `removeElements`'s own, making cut a
+   *  single undo step for free (no `beginTransaction`/`endTransaction`
+   *  needed). No-op on an empty selection (mirrors `copyElements`). */
+  cutElements: () => void;
+  /** ⌘/Ctrl+A — selects every sticky/image on the board, excluding
+   *  connectors (mirrors marquee-select, which also only hit-tests box
+   *  elements). Selection is ephemeral state, so this does not mark dirty
+   *  or push history (same as `setSelection`). */
+  selectAll: () => void;
+  /** Right-click "복제" — copies the current selection and immediately
+   *  pastes it, reusing `copyElements`/`pasteElements` as-is (same id
+   *  remap/offset/undo behavior as a manual ⌘C ⌘V). Callers set `selection`
+   *  to the target id(s) before calling this (the context menu does that
+   *  itself so a right-click on an element outside the current selection
+   *  duplicates just that element). Overwrites the in-app clipboard, same
+   *  as a real copy would. */
+  duplicateElements: () => void;
 
   // history
   undo: () => void;
@@ -238,21 +297,29 @@ export function createBoardStore(): BoardStore {
         });
       },
 
-      bringToFront: (id) => {
+      bringToFront: (ids) => {
         const { board } = get();
-        if (!board.order.includes(id)) return;
+        const idSet = new Set(ids);
+        // preserve the ids' own relative order (as they already sit in
+        // board.order), not the order they were passed in — a multi-select
+        // bring-to-front shouldn't scramble which selected element ends up
+        // topmost relative to the others.
+        const moving = board.order.filter((x) => idSet.has(x));
+        if (!moving.length) return;
         set({
-          board: { ...board, order: [...board.order.filter((x) => x !== id), id] },
+          board: { ...board, order: [...board.order.filter((x) => !idSet.has(x)), ...moving] },
           dirty: true,
           ...historyPatch(board),
         });
       },
 
-      sendToBack: (id) => {
+      sendToBack: (ids) => {
         const { board } = get();
-        if (!board.order.includes(id)) return;
+        const idSet = new Set(ids);
+        const moving = board.order.filter((x) => idSet.has(x));
+        if (!moving.length) return;
         set({
-          board: { ...board, order: [id, ...board.order.filter((x) => x !== id)] },
+          board: { ...board, order: [...moving, ...board.order.filter((x) => !idSet.has(x))] },
           dirty: true,
           ...historyPatch(board),
         });
@@ -294,6 +361,68 @@ export function createBoardStore(): BoardStore {
         if (!el || (el.kind !== 'sticky' && el.kind !== 'image')) return;
         const next = { ...el, noteLink: ref ?? undefined };
         set({ board: { ...board, elements: { ...board.elements, [id]: next } }, dirty: true, ...historyPatch(board) });
+      },
+
+      copyElements: () => {
+        const { board, selection } = get();
+        if (!selection.length) return;
+        const selSet = new Set(selection);
+        const elements = Object.values(board.elements).filter((el) =>
+          el.kind === 'connector' ? selSet.has(el.fromId) && selSet.has(el.toId) : selSet.has(el.id),
+        );
+        if (!elements.length) return;
+        boardClipboard = elements.map((el) => structuredClone(el));
+        pasteOffsetCount = 0;
+      },
+
+      pasteElements: () => {
+        if (!boardClipboard || !boardClipboard.length) return;
+        pasteOffsetCount += 1;
+        const offset = PASTE_OFFSET_STEP * pasteOffsetCount;
+        const idMap = new Map<string, string>();
+        for (const el of boardClipboard) idMap.set(el.id, newId());
+        const pasted: BoardElement[] = boardClipboard.map((el) => {
+          const id = idMap.get(el.id)!;
+          if (el.kind === 'connector') {
+            return {
+              ...structuredClone(el),
+              id,
+              fromId: idMap.get(el.fromId) ?? el.fromId,
+              toId: idMap.get(el.toId) ?? el.toId,
+            };
+          }
+          return { ...structuredClone(el), id, x: el.x + offset, y: el.y + offset };
+        });
+        const { board } = get();
+        const elements = { ...board.elements };
+        for (const el of pasted) elements[el.id] = el;
+        set({
+          board: { ...board, elements, order: [...board.order, ...pasted.map((e) => e.id)] },
+          dirty: true,
+          selection: pasted.map((e) => e.id),
+          ...historyPatch(board),
+        });
+      },
+
+      hasClipboard: () => boardClipboard !== null,
+
+      cutElements: () => {
+        const { selection } = get();
+        if (!selection.length) return;
+        get().copyElements();
+        get().removeElements(selection);
+      },
+
+      selectAll: () => {
+        const { board } = get();
+        const ids = board.order.filter((id) => board.elements[id]?.kind !== 'connector');
+        set({ selection: ids });
+      },
+
+      duplicateElements: () => {
+        if (!get().selection.length) return;
+        get().copyElements();
+        get().pasteElements();
       },
 
       undo: () => {

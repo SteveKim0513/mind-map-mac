@@ -115,10 +115,10 @@ export function BoardToolbar({ handle, boardFilePath }: Props) {
       />
 
       <span className="sep" />
-      <button className="tool-btn icon" title="맨 앞으로" disabled={selection.length !== 1} onClick={() => bringToFront(selection[0])}>
+      <button className="tool-btn icon" title="맨 앞으로" disabled={!hasSelection} onClick={() => bringToFront(selection)}>
         <Icon name="chevronUp" />
       </button>
-      <button className="tool-btn icon" title="맨 뒤로" disabled={selection.length !== 1} onClick={() => sendToBack(selection[0])}>
+      <button className="tool-btn icon" title="맨 뒤로" disabled={!hasSelection} onClick={() => sendToBack(selection)}>
         <Icon name="chevronDown" />
       </button>
       <button className="tool-btn icon" title="삭제" disabled={!hasSelection} onClick={() => removeElements(selection)}>

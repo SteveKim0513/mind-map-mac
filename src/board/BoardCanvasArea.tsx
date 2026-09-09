@@ -13,6 +13,7 @@ import { useUi } from '../store/uiStore';
 import { BoardElementView } from './BoardElementView';
 import { BoardSelectionToolbar } from './BoardSelectionToolbar';
 import { BoardConnectorToolbar } from './BoardConnectorToolbar';
+import { BoardContextMenu } from './BoardContextMenu';
 import { BoardNodePicker } from './BoardNodePicker';
 import { BoardNoteLinkPicker } from './BoardNoteLinkPicker';
 import { ensureMapPersisted } from './boardLinks';
@@ -187,6 +188,11 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const setView = useBoard((s) => s.setView);
   const setNodeLink = useBoard((s) => s.setNodeLink);
   const setNoteLink = useBoard((s) => s.setNoteLink);
+  const copyElements = useBoard((s) => s.copyElements);
+  const pasteElements = useBoard((s) => s.pasteElements);
+  const hasClipboard = useBoard((s) => s.hasClipboard);
+  const cutElements = useBoard((s) => s.cutElements);
+  const selectAll = useBoard((s) => s.selectAll);
 
   // A color/shape filter is active — see the `filterPositions` block further
   // down for what this changes about rendering. Computed early because the
@@ -223,6 +229,11 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   };
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [linkPicker, setLinkPicker] = useState<'node' | 'note' | null>(null);
+  // Right-click menu on a sticky/image (2026-09-09) — local state, not
+  // uiStore's `contextMenu` (that one's shape/consumer is mindmap-specific,
+  // single-id only; a board menu needs to act on a whole multi-selection).
+  // Mirrors panes/TabBar.tsx's own independent right-click menu state.
+  const [elementContextMenu, setElementContextMenu] = useState<{ ids: string[]; x: number; y: number } | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [imageCache, setImageCache] = useState<Record<string, string>>({});
   const fetchingRef = useRef<Set<string>>(new Set());
@@ -440,6 +451,20 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       startClientY: e.clientY,
       startBox: { x: el.x, y: el.y, width: el.width, height: el.height },
     };
+  };
+
+  // Right-click a sticky/image → select it (unless it's already part of a
+  // larger multi-selection, in which case the WHOLE selection is the menu's
+  // target — mirrors canvas/NodeView.tsx's onContextMenu) and open the menu
+  // at the cursor. `duplicateElements`/`removeElements` in the menu then act
+  // on exactly this id list, since it's set as the current `selection`.
+  const onElementContextMenu = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const alreadyInMultiSelection = selection.length > 1 && selection.includes(id);
+    const ids = alreadyInMultiSelection ? selection : [id];
+    if (!alreadyInMultiSelection) setSelection([id]);
+    setElementContextMenu({ ids, x: e.clientX, y: e.clientY });
   };
 
   const onConnectorPointerDown = (e: React.PointerEvent, id: string) => {
@@ -669,7 +694,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   // already-connected neighbor in that direction, or — if there isn't one —
   // creates and connects a new one (same as clicking that anchor).
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (editingTarget || editingLabelId) return; // let the textarea/input handle its own keys
+    if (editingTarget || editingLabelId) return; // let the textarea/input handle its own keys, incl. native text copy/paste
     if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length) {
       e.preventDefault();
       removeElements(selection);
@@ -677,6 +702,36 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     }
     if (e.key === 'Escape') {
       setSelection([]);
+      return;
+    }
+    // ⌘/Ctrl+C / ⌘/Ctrl+V / ⌘/Ctrl+X — copy/paste/cut selected elements (+
+    // connectors whose both ends are selected). Mirrors mapStore's
+    // copyNode/pasteNode UX (toast feedback) but stores an in-app clipboard
+    // scoped to boardStore.ts, not the OS clipboard — same as the mindmap's
+    // subtree clipboard. Cut = copy + remove in one call (see boardStore's
+    // cutElements doc comment for why that's already a single undo step).
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'v' || e.key === 'x')) {
+      if (e.key === 'c' && selection.length) {
+        e.preventDefault();
+        copyElements();
+        useUi.getState().toast('복사함');
+      } else if (e.key === 'v') {
+        e.preventDefault();
+        if (hasClipboard()) {
+          pasteElements();
+          useUi.getState().toast('붙여넣음');
+        }
+      } else if (e.key === 'x' && selection.length) {
+        e.preventDefault();
+        cutElements();
+        useUi.getState().toast('잘라냄');
+      }
+      return;
+    }
+    // ⌘/Ctrl+A — select every sticky/image on the board (not connectors).
+    if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+      e.preventDefault();
+      selectAll();
       return;
     }
     const sel = selection.length === 1 ? board.elements[selection[0]] : undefined;
@@ -864,6 +919,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
               onPointerDown={(e) => onElementPointerDown(e, id)}
               onPointerEnter={() => setHoveredId(id)}
               onPointerLeave={() => setHoveredId((h) => (h === id ? null : h))}
+              onContextMenu={(e) => onElementContextMenu(e, id)}
               onAnchorPointerDown={(side, e) => beginAnchorDrag(side, id, e)}
               onTextChange={(text) => updateElement(id, { text })}
               onNoteChange={(index, value) => {
@@ -1044,6 +1100,15 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
             setLinkPicker(null);
           }}
           onClose={() => setLinkPicker(null)}
+        />
+      )}
+
+      {elementContextMenu && (
+        <BoardContextMenu
+          ids={elementContextMenu.ids}
+          x={elementContextMenu.x}
+          y={elementContextMenu.y}
+          onClose={() => setElementContextMenu(null)}
         />
       )}
 

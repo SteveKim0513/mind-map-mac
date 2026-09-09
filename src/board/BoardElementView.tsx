@@ -119,6 +119,7 @@ interface Props {
   onPointerDown: (e: ReactPointerEvent) => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
   onAnchorPointerDown: (side: BoardAnchorSide, e: ReactPointerEvent) => void;
   onTextChange: (value: string) => void;
   onNoteChange: (index: number, value: string) => void;
@@ -158,6 +159,7 @@ export function BoardElementView({
   onPointerDown,
   onPointerEnter,
   onPointerLeave,
+  onContextMenu,
   onAnchorPointerDown,
   onTextChange,
   onNoteChange,
@@ -190,6 +192,7 @@ export function BoardElementView({
       style={style}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
+      onContextMenu={onContextMenu}
     >
       {el.kind === 'sticky' && (
         <div

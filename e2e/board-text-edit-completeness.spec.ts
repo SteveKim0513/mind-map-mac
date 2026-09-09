@@ -61,6 +61,30 @@ test('"텍스트 박스 추가" 블록 편집 중 스크롤해도 보드는 움�
   }
 });
 
+test('"텍스트 박스 추가" 블록은 blur 후 더블클릭으로 재편집이 가능하다', { tag: ['@board'] }, async () => {
+  const { page, cleanup } = await launchApp();
+  try {
+    await newBoard(page);
+    await page.click('.tool-btn[title="스티키노트 추가"]');
+    await page.locator('.board-el--sticky').click();
+    await page.locator('.sel-toolbar .st-btn[title="텍스트 박스 추가"]').click();
+    await page.locator('.board-sticky-note .board-el-input').fill('첫 입력');
+    await page.click('.board-canvas', { position: { x: 20, y: 20 } }); // blur → commits "첫 입력"
+
+    await expect(page.locator('.board-sticky-note .board-el-input')).toHaveCount(0);
+    await expect(page.locator('.board-sticky-note .board-el-text')).toHaveText('첫 입력');
+
+    await page.locator('.board-sticky-note .board-el-text').dblclick();
+    await expect(page.locator('.board-sticky-note .board-el-input')).toHaveCount(1); // 재편집 진입
+    await page.locator('.board-sticky-note .board-el-input').fill('첫 입력 + 추가');
+    await page.click('.board-canvas', { position: { x: 20, y: 20 } });
+
+    await expect(page.locator('.board-sticky-note .board-el-text')).toHaveText('첫 입력 + 추가');
+  } finally {
+    await cleanup();
+  }
+});
+
 test('스티키 텍스트 편집 중 Escape를 누르면 편집 시작 전 텍스트로 되돌아간다', { tag: ['@board'] }, async () => {
   const { page, cleanup } = await launchApp();
   try {

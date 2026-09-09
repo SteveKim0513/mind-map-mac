@@ -342,3 +342,209 @@ test('보드는 저장되고, 닫았다 다시 열어도 내용이 보존된다'
     await cleanup();
   }
 });
+
+test('스티키를 선택해 ⌘C/⌘V 하면 오프셋 위치에 같은 내용의 사본이 생기고 선택된다', { tag: ['@board'] }, async () => {
+  const { page, cleanup } = await launchApp();
+  try {
+    await newBoard(page);
+    await page.click('.tool-btn[title="스티키노트 추가"]');
+    await page.locator('.board-el--sticky').dblclick();
+    await page.keyboard.type('원본 생각');
+    await page.click('.board-canvas', { position: { x: 20, y: 20 } }); // blur → commit, deselect
+
+    const original = page.locator('.board-el--sticky', { hasText: '원본 생각' });
+    await expect(original).toHaveCount(1);
+    const before = await original.boundingBox();
+    if (!before) throw new Error('요소 위치를 읽지 못함');
+
+    await page.waitForTimeout(450); // clear the 400ms double-click window before re-clicking (board-power-features.spec.ts pattern)
+    await original.click(); // reselect
+    await page.keyboard.press('Meta+c');
+    await page.keyboard.press('Meta+v');
+
+    // now two stickies carry the copied text — original + pasted copy
+    await expect(page.locator('.board-el--sticky', { hasText: '원본 생각' })).toHaveCount(2);
+
+    // the pasted copy (not the original) is the new selection, offset from the original
+    const pasted = page.locator('.board-el--sticky.selected');
+    await expect(pasted).toHaveCount(1);
+    const after = await pasted.boundingBox();
+    if (!after) throw new Error('붙여넣은 요소 위치를 읽지 못함');
+    expect(Math.abs(after.x - before.x)).toBeGreaterThan(5);
+    expect(Math.abs(after.y - before.y)).toBeGreaterThan(5);
+
+    // pasting again (same clipboard, no new copy) adds yet another copy
+    await page.keyboard.press('Meta+v');
+    await expect(page.locator('.board-el--sticky', { hasText: '원본 생각' })).toHaveCount(3);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('연결된 두 스티키를 함께 선택해 복사·붙여넣기하면 그 사이 화살표도 함께 복제된다', { tag: ['@board'] }, async () => {
+  const { page, cleanup } = await launchApp();
+  try {
+    await newBoard(page);
+    await page.click('.tool-btn[title="스티키노트 추가"]');
+    await page.locator('.board-anchor--right').click(); // spawns a 2nd sticky, connected, in edit mode
+    await page.keyboard.type('연결된 생각');
+    await page.click('.board-canvas', { position: { x: 20, y: 20 } }); // commit + deselect
+    await expect(page.locator('.board-el--sticky')).toHaveCount(2);
+    await expect(page.locator('.board-connector')).toHaveCount(1);
+
+    // marquee-select both stickies (generous margin past the canvas edges so
+    // neither sticky is juuust outside the drag rect — mirrors the bulk-edit
+    // test above)
+    const canvasBox = await page.locator('.board-canvas').boundingBox();
+    if (!canvasBox) throw new Error('캔버스 위치를 읽지 못함');
+    await page.mouse.move(canvasBox.x + 2, canvasBox.y + 2);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2, { steps: 6 });
+    await page.mouse.move(canvasBox.x + canvasBox.width - 2, canvasBox.y + canvasBox.height - 2, { steps: 6 });
+    await page.mouse.up();
+    await expect(page.locator('.board-el--sticky.selected')).toHaveCount(2);
+
+    await page.keyboard.press('Meta+c');
+    await page.keyboard.press('Meta+v');
+
+    // 2 pasted stickies + the connector between them, on top of the original 2 + 1
+    await expect(page.locator('.board-el--sticky')).toHaveCount(4);
+    await expect(page.locator('.board-connector')).toHaveCount(2);
+    await expect(page.locator('.board-el--sticky.selected')).toHaveCount(2); // pasted pair is the new selection
+  } finally {
+    await cleanup();
+  }
+});
+
+test('스티키를 선택해 ⌘X 하면 캔버스에서 사라지고(클립보드로 이동), ⌘V로 오프셋된 자리에 다시 붙일 수 있다', { tag: ['@board'] }, async () => {
+  const { page, cleanup } = await launchApp();
+  try {
+    await newBoard(page);
+    await page.click('.tool-btn[title="스티키노트 추가"]');
+    await page.locator('.board-el--sticky').dblclick();
+    await page.keyboard.type('잘라낼 생각');
+    await page.click('.board-canvas', { position: { x: 20, y: 20 } }); // blur → commit, deselect
+
+    const original = page.locator('.board-el--sticky', { hasText: '잘라낼 생각' });
+    await expect(original).toHaveCount(1);
+    const before = await original.boundingBox();
+    if (!before) throw new Error('요소 위치를 읽지 못함');
+
+    await page.waitForTimeout(450); // clear the 400ms double-click window before re-clicking
+    await original.click(); // reselect
+    await page.keyboard.press('Meta+x');
+
+    // cut removes the element entirely — unlike copy, nothing is left behind
+    await expect(page.locator('.board-el--sticky')).toHaveCount(0);
+
+    await page.keyboard.press('Meta+v');
+    const pasted = page.locator('.board-el--sticky', { hasText: '잘라낼 생각' });
+    await expect(pasted).toHaveCount(1);
+    const after = await pasted.boundingBox();
+    if (!after) throw new Error('붙여넣은 요소 위치를 읽지 못함');
+    expect(Math.abs(after.x - before.x)).toBeGreaterThan(5);
+    expect(Math.abs(after.y - before.y)).toBeGreaterThan(5);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('보드 캔버스에 포커스가 있을 때 ⌘A를 누르면 화살표를 제외한 모든 스티키/이미지가 선택된다', { tag: ['@board'] }, async () => {
+  const { page, cleanup } = await launchApp();
+  try {
+    await newBoard(page);
+    await page.click('.tool-btn[title="스티키노트 추가"]');
+    await page.click('.tool-btn[title="스티키노트 추가"]');
+    await expect(page.locator('.board-el--sticky')).toHaveCount(2);
+
+    await page.click('.board-canvas', { position: { x: 20, y: 20 } }); // deselect both, keep canvas focus
+    await expect(page.locator('.board-el--sticky.selected')).toHaveCount(0);
+
+    await page.keyboard.press('Meta+a');
+    await expect(page.locator('.board-el--sticky.selected')).toHaveCount(2);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('스티키를 우클릭하면 컨텍스트 메뉴가 뜨고, "복제"를 누르면 같은 내용의 사본이 오프셋 위치에 생겨 선택된다', { tag: ['@board'] }, async () => {
+  const { page, cleanup } = await launchApp();
+  try {
+    await newBoard(page);
+    await page.click('.tool-btn[title="스티키노트 추가"]');
+    await page.locator('.board-el--sticky').dblclick();
+    await page.keyboard.type('복제할 생각');
+    await page.click('.board-canvas', { position: { x: 20, y: 20 } }); // blur → commit, deselect
+
+    const original = page.locator('.board-el--sticky', { hasText: '복제할 생각' });
+    await expect(original).toHaveCount(1);
+    const before = await original.boundingBox();
+    if (!before) throw new Error('요소 위치를 읽지 못함');
+
+    await page.waitForTimeout(450); // clear the 400ms double-click window before right-clicking
+    await original.click({ button: 'right' });
+    await page.waitForSelector('.ctx-menu', { timeout: 3_000 });
+    await page.click('.ctx-menu .ctx-item:has-text("복제")');
+
+    await expect(page.locator('.board-el--sticky', { hasText: '복제할 생각' })).toHaveCount(2);
+    const dup = page.locator('.board-el--sticky.selected'); // the duplicate is the new selection
+    await expect(dup).toHaveCount(1);
+    const after = await dup.boundingBox();
+    if (!after) throw new Error('복제된 요소 위치를 읽지 못함');
+    expect(Math.abs(after.x - before.x)).toBeGreaterThan(5);
+    expect(Math.abs(after.y - before.y)).toBeGreaterThan(5);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('여러 요소를 선택한 채로도 "맨 앞으로"가 활성화되고, 상대 순서를 유지한 채 함께 앞으로 온다', { tag: ['@board'] }, async () => {
+  const { page, cleanup } = await launchApp();
+  try {
+    await newBoard(page);
+    // A, B, C — created in this order, so board.order starts [A, B, C].
+    // New stickies all spawn near the viewport center with only a small
+    // jitter (BoardToolbar.tsx's nextSpot), so without spreading them apart
+    // they'd visually overlap — dragging each one away right after naming it
+    // (mirrors this file's own "second sticky, placed well clear of the
+    // first" comment on the connector tests) keeps each one a distinct,
+    // unambiguous click target for the shift-click selection below.
+    let i = 0;
+    for (const label of ['A', 'B', 'C']) {
+      await page.click('.tool-btn[title="스티키노트 추가"]');
+      const sticky = page.locator('.board-el--sticky').last();
+      await sticky.dblclick();
+      await page.keyboard.type(label);
+      await page.click('.board-canvas', { position: { x: 20, y: 20 } });
+      await page.waitForTimeout(450);
+
+      const box = await sticky.boundingBox();
+      if (!box) throw new Error('요소 위치를 읽지 못함');
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      await page.mouse.move(cx + 260 * (i + 1), cy, { steps: 6 });
+      await page.mouse.up();
+      await page.waitForTimeout(450);
+      i++;
+    }
+    await expect(page.locator('.board-el--sticky')).toHaveCount(3);
+
+    // select A and B (shift-click), leave C out
+    await page.locator('.board-el--sticky', { hasText: 'A' }).click();
+    await page.locator('.board-el--sticky', { hasText: 'B' }).click({ modifiers: ['Shift'] });
+    await expect(page.locator('.board-el--sticky.selected')).toHaveCount(2);
+
+    const bringFront = page.locator('.tool-btn[title="맨 앞으로"]');
+    await expect(bringFront).toBeEnabled(); // multi-selection no longer disables it
+    await bringFront.click();
+
+    // DOM render order mirrors board.order — C should now come BEFORE A, B
+    // (A, B moved to front, keeping their own relative order: A before B)
+    const order = await page.locator('.board-el--sticky .board-el-text').allTextContents();
+    expect(order).toEqual(['C', 'A', 'B']);
+  } finally {
+    await cleanup();
+  }
+});
