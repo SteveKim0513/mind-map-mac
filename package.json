@@ -1,6 +1,6 @@
 {
   "name": "mind-map",
-  "version": "0.13.8",
+  "version": "0.13.9",
   "description": "A keyboard-first mind mapping app for macOS",
   "main": "dist-electron/main.js",
   "author": "",
