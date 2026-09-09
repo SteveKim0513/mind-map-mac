@@ -4,6 +4,17 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.13.8] - 2026-09-09
+
+### 추가
+- **보드 캔버스에 복사·붙여넣기(⌘C/⌘V)·잘라내기(⌘X)·전체선택(⌘A)·복제(우클릭)·다중 선택 z-order 추가** — 지금까지 스티키/이미지/커넥터에 대해 전혀 구현돼 있지 않던 기본 조작 6종. `boardStore.ts`에 모듈 레벨 클립보드와 `copyElements`/`pasteElements`/`cutElements`/`selectAll`/`duplicateElements` 액션을 추가했고, 붙여넣기마다 새 id를 발급해 연속 붙여넣기 시 오프셋이 누적된다. 선택된 두 요소를 잇는 커넥터가 있으면 함께 복사·복제된다. 방향키 nudge(미세 이동)는 기존 방향키가 연결 탐색 용도로 이미 쓰이고 있어 이번 범위에서 제외.
+
+### 수정
+- **캡처 창(⌥Space)이 quiet 모드에서도 OS 포커스를 뺏던 문제** — `capture:show`이 `MINDMAP_E2E_QUIET` 하에서도 `center()+show()+focus()`를 그대로 호출해, 자동화 검증이나 백그라운드 작업 중 화면 중앙에 튀어나오며 포커스를 가져갔다. quiet 모드에서는 `showInactive()`+화면 밖 배치로 전환.
+
+### 기타
+- macOS 26(Tahoe)에서 `accessory` 활성화 정책 하의 `win.focus()`가 더 이상 실제 OS 포커스를 주지 않는다는 사실을 확인 — `win.focus()` 기반 E2E(`@serial`, 외부 파일 변경 감지류)가 로컬 quiet 모드에서 일괄 실패하던 원인. `CI=1`로 quiet를 끄면 우회 가능함을 `testing.md`에 기록.
+
 ## [0.13.7] - 2026-09-07
 
 ### 추가
