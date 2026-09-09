@@ -5,11 +5,14 @@ setup:
 	npm ci
 
 # Development server — isolated temp userData + workspace (real data untouched)
-# quiet=1: off-screen + macOS 'accessory' activation policy (same as E2E) — for
-# an agent verifying on its own via automation, not a human watching the window.
-# Plain `make dev-safe` stays visible/focusable, since a human needs to see it.
+# quiet=1: off-screen + macOS 'accessory' activation policy (same as E2E), plus
+# skipping the OS-global ⌥Space capture shortcut registration — for an agent
+# verifying on its own via automation, not a human watching the window. A
+# stray Alt+Space elsewhere would otherwise still pop the capture window and
+# steal focus even in quiet mode. Plain `make dev-safe` stays visible/focusable
+# and keeps the shortcut, since a human needs to see and use that window.
 dev-safe:
-	MINDMAP_USER_DATA="$$(mktemp -d)" MINDMAP_WORKSPACE="$$(mktemp -d)" $(if $(quiet),MINDMAP_E2E_QUIET=1) npm run dev
+	MINDMAP_USER_DATA="$$(mktemp -d)" MINDMAP_WORKSPACE="$$(mktemp -d)" $(if $(quiet),MINDMAP_E2E_QUIET=1 MINDMAP_DISABLE_GLOBAL_SHORTCUT=1) npm run dev
 
 # TypeScript type check (no emit)
 typecheck:

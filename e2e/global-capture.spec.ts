@@ -26,6 +26,54 @@ test('전역 단축키(⌥Space)가 등록된다', { tag: ['@capture'] }, async 
   }
 });
 
+test('capture:show은 quiet 모드에서 포커스 상태를 바꾸지 않는다', { tag: ['@capture'] }, async () => {
+  // launchApp()은 항상 MINDMAP_E2E_QUIET=1을 넘기지만, electron/main.ts는
+  // CI 환경변수가 있으면 quiet를 의도적으로 끈다(win.focus() 기반 테스트가
+  // CI에서 실제 포커스를 받게 하려고). 그래서 실제 GitHub Actions CI에서
+  // 이 테스트를 그냥 돌리면 quiet 모드 자체가 꺼져 있어 전제가 깨진다 —
+  // forceQuiet로 이 런치에서만 CI를 무시하고 quiet를 강제한다.
+  //
+  // "어떤 창도 포커스가 없어야 한다"는 절대 기준은 쓰지 않는다 — 이 OS에서는
+  // 메인 윈도우가 off-screen+accessory 상태로도 capture:show 호출 전부터
+  // 이미 isFocused()===true를 보고하기 때문(메인 윈도우 자체의 기존 동작이지
+  // 캡처 창과 무관). 대신 capture:show 전후로 포커스된 창 집합이 그대로인지
+  // 비교해, 캡처 창이 "추가로" 포커스를 가져가지 않는지만 검증한다.
+  const { app, page, cleanup } = await launchApp({ forceQuiet: true });
+  try {
+    const focusedBefore = await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()
+        .filter((w) => w.isFocused())
+        .map((w) => w.id)
+        .sort(),
+    );
+
+    const [capturePage] = await Promise.all([
+      app.waitForEvent('window'),
+      page.evaluate(() => window.api.capture.show()),
+    ]);
+    await capturePage.waitForSelector('.capture-input', { timeout: 5_000 });
+
+    const focusedAfter = await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()
+        .filter((w) => w.isFocused())
+        .map((w) => w.id)
+        .sort(),
+    );
+    const captureWinFocused = await app.evaluate(
+      ({ BrowserWindow }, before) =>
+        BrowserWindow.getAllWindows()
+          .filter((w) => !before.includes(w.id))
+          .some((w) => w.isFocused()),
+      focusedBefore,
+    );
+
+    expect(focusedAfter).toEqual(focusedBefore);
+    expect(captureWinFocused).toBe(false);
+  } finally {
+    await cleanup();
+  }
+});
+
 test('캡처 창에 텍스트를 입력하고 Enter를 누르면 "오늘의 생각" 맵에 루트 노드로 쌓인다', { tag: ['@capture'] }, async () => {
   const { app, page, workspace, cleanup } = await launchApp();
   try {

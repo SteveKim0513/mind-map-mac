@@ -22,6 +22,17 @@ export interface LaunchOptions {
    * electron/main.ts MINDMAP_DISABLE_GLOBAL_SHORTCUT.
    */
   globalShortcut?: boolean;
+  /**
+   * Force MINDMAP_E2E_QUIET to actually take effect for this one launch by
+   * clearing an inherited CI env var, even when the outer test run itself is
+   * executing under CI. electron/main.ts intentionally disables quiet mode
+   * whenever CI is set (so win.focus()-dependent tests get real OS focus on
+   * CI runners) — but a test that asserts the quiet-mode behavior itself
+   * (e.g. "the capture window doesn't steal focus") needs quiet mode to
+   * actually be on regardless of that ambient CI override, or the assertion
+   * is untestable in CI. Only use this for tests like that.
+   */
+  forceQuiet?: boolean;
 }
 
 /**
@@ -51,6 +62,7 @@ export async function launchApp(opts: LaunchOptions = {}): Promise<AppHandle> {
   // VSCode sets ELECTRON_RUN_AS_NODE=1 which makes Electron behave as plain Node.
   // Remove it so the child process starts as a real Electron browser process.
   delete env.ELECTRON_RUN_AS_NODE;
+  if (opts.forceQuiet) delete env.CI;
 
   const app = await electron.launch({
     args: [join(__dirname, '../dist-electron/main.js')],

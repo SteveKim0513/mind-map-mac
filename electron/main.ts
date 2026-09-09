@@ -251,9 +251,20 @@ function createCaptureWindow(): BrowserWindow {
 
 function showCaptureWindow() {
   if (!captureWin || captureWin.isDestroyed()) captureWin = createCaptureWindow();
-  captureWin.center();
-  captureWin.show();
-  captureWin.focus();
+  // Quiet mode: reachable via the capture:show IPC channel regardless of the
+  // OS-global accelerator (see global-capture.spec.ts), so every E2E run for
+  // the @capture domain used to call real show()+focus() here — popping a
+  // window to screen-center and stealing OS focus mid-test-run even though
+  // Playwright only needs CDP access, not real focus. showInactive() gives
+  // Playwright the same window without the steal.
+  if (E2E_QUIET) {
+    captureWin.setPosition(-3000, -3000);
+    captureWin.showInactive();
+  } else {
+    captureWin.center();
+    captureWin.show();
+    captureWin.focus();
+  }
   captureWin.webContents.send('capture:shown');
 }
 
