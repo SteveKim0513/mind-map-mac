@@ -108,6 +108,44 @@ describe('boardStore — element CRUD', () => {
     expect(s.getState().board.order).toEqual(['s2']);
   });
 
+  it('removeStickyNote drops the note and keeps a connector anchored to a LATER note in sync (shifts its index down)', () => {
+    const s = createBoardStore();
+    s.getState().addElement({ ...sticky('s1'), notes: ['a', 'b', 'c'] });
+    s.getState().addElement(sticky('s2'));
+    s.getState().addElement({
+      id: 'c1',
+      kind: 'connector',
+      fromId: 's1',
+      fromAnchor: 'right',
+      fromNoteIndex: 2, // anchored to 'c'
+      toId: 's2',
+      toAnchor: 'left',
+    });
+    s.getState().removeStickyNote('s1', 0); // drop 'a' — 'c' shifts from index 2 to 1
+    const el = s.getState().board.elements.s1 as BoardStickyElement;
+    expect(el.notes).toEqual(['b', 'c']);
+    const conn = s.getState().board.elements.c1 as BoardConnectorElement;
+    expect(conn.fromNoteIndex).toBe(1);
+  });
+
+  it('removeStickyNote clears a connector anchored to the REMOVED note itself (falls back to the main card, not a dangling/wrong index)', () => {
+    const s = createBoardStore();
+    s.getState().addElement({ ...sticky('s1'), notes: ['a', 'b'] });
+    s.getState().addElement(sticky('s2'));
+    s.getState().addElement({
+      id: 'c1',
+      kind: 'connector',
+      fromId: 's1',
+      fromAnchor: 'right',
+      fromNoteIndex: 0, // anchored to 'a', which is about to be removed
+      toId: 's2',
+      toAnchor: 'left',
+    });
+    s.getState().removeStickyNote('s1', 0);
+    const conn = s.getState().board.elements.c1 as BoardConnectorElement;
+    expect(conn.fromNoteIndex).toBeUndefined();
+  });
+
   it('addElements adds multiple elements atomically and selects the last one', () => {
     const s = createBoardStore();
     const a = sticky('s1');

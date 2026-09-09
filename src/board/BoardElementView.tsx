@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import type { BoardAnchorSide, BoardElement, BoardImageElement, BoardStickyElement } from '../types';
 import { tagVar, contrastInk } from '../theme/palette';
 import { useUi } from '../store/uiStore';
@@ -114,13 +114,27 @@ interface Props {
   editingField: 'text' | 'note' | null;
   editingNoteIndex: number | null; // meaningful only when editingField === 'note'
   showAnchors: boolean; // selected, hovered, or the live target of a connector drag — anchors are always mounted, this just toggles their "active" (big/opaque/clickable) CSS state
-  snapAnchor: BoardAnchorSide | null; // which anchor an in-progress connector would land on if dropped now
+  // Which anchor an in-progress connector would land on if dropped now.
+  // `noteIndex` unset (or null) means the sticky's own main card; otherwise
+  // one of its fused note boxes (see `onNoteHeightsChange` below).
+  snapAnchor: { side: BoardAnchorSide; noteIndex?: number | null } | null;
   imageSrc: string | undefined; // resolved data: URI for image elements (undefined while loading)
   onPointerDown: (e: ReactPointerEvent) => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
-  onAnchorPointerDown: (side: BoardAnchorSide, e: ReactPointerEvent) => void;
+  // `noteIndex` is passed when the anchor pressed belongs to a fused note box
+  // rather than the sticky's own main card.
+  onAnchorPointerDown: (side: BoardAnchorSide, e: ReactPointerEvent, noteIndex?: number) => void;
+  /** Reports each fused note box's MEASURED height (world/layout pixels,
+   *  offsetHeight — unaffected by the canvas's zoom transform, same
+   *  convention as layout/measure.ts), indexed like `el.notes`. Called after
+   *  every render where notes exist so the canvas can compute their world
+   *  bboxes for connector routing/hit-testing (boardGeometry.ts's
+   *  `noteBBox`/`anchorBoxFor`) — the boxes themselves are pure CSS normal
+   *  flow (auto-height), so their position/size isn't otherwise knowable
+   *  without measuring the actual DOM. */
+  onNoteHeightsChange: (heights: number[]) => void;
   onTextChange: (value: string) => void;
   onNoteChange: (index: number, value: string) => void;
   onFieldBlur: () => void;
@@ -166,12 +180,32 @@ export function BoardElementView({
   onFieldBlur,
   onCancelEdit,
   onRemoveNote,
+  onNoteHeightsChange,
 }: Props) {
   if (el.kind === 'connector') return null; // connectors render in the shared SVG overlay
   const theme = useUi((s) => s.theme);
   const setNodeLink = useBoard((s) => s.setNodeLink);
   const setNoteLink = useBoard((s) => s.setNoteLink);
   const updateElement = useBoard((s) => s.updateElement);
+
+  // Measure every fused note box's rendered height and report it up — see
+  // the `onNoteHeightsChange` prop doc. Mirrors canvas/NodeView.tsx's own
+  // measurement effect: re-measure on every text/count change (`notesSig`),
+  // plus a ResizeObserver as a safety net for anything that resizes a note
+  // without going through this component's own props (e.g. a font finishing
+  // load).
+  const noteRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const notes = el.kind === 'sticky' ? el.notes : undefined;
+  const notesSig = notes?.join('\n') ?? '';
+  useEffect(() => {
+    if (!notes || notes.length === 0) return;
+    const report = () => onNoteHeightsChange(noteRefs.current.map((n) => n?.offsetHeight ?? 0));
+    report();
+    const ro = new ResizeObserver(report);
+    for (const n of noteRefs.current) if (n) ro.observe(n);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesSig, el.width, el.kind === 'sticky' ? el.fontSize : undefined]);
 
   const style: React.CSSProperties = {
     left: el.x,
@@ -284,7 +318,7 @@ export function BoardElementView({
           // is always present but nearly invisible + inert (pointer-events:
           // none) until `active`, which is a plain CSS transition, not a
           // keyframe animation with its own timeline to desync.
-          className={`board-anchor board-anchor--${side}${showAnchors ? ' active' : ''}${snapAnchor === side ? ' board-anchor--snap' : ''}`}
+          className={`board-anchor board-anchor--${side}${showAnchors ? ' active' : ''}${snapAnchor && snapAnchor.noteIndex == null && snapAnchor.side === side ? ' board-anchor--snap' : ''}`}
           onPointerDown={(e) => onAnchorPointerDown(side, e)}
         />
       ))}
@@ -294,6 +328,9 @@ export function BoardElementView({
           {el.notes.map((noteText, i) => (
             <div
               key={i}
+              ref={(node) => {
+                noteRefs.current[i] = node;
+              }}
               className="board-sticky-note"
               data-board-region={`note-${i}`}
               style={{
@@ -334,6 +371,24 @@ export function BoardElementView({
               >
                 <Icon name="close" />
               </button>
+              {/* A connector can attach here too, not just the sticky's main
+                  card (2026-09-09) — `.board-sticky-note` isn't clipped (no
+                  overflow:hidden, unlike `.board-sticky`), so these anchors
+                  aren't cut off the same way the main card's would be if
+                  nested inside it (see this file's top doc comment). Percent
+                  positioning is relative to THIS note's own rendered box, so
+                  it tracks its auto-grown height with no extra math needed
+                  here — only the canvas's connector-routing math (outside
+                  this component) needs the measured height. */}
+              {ANCHORS.map((side) => (
+                <div
+                  key={side}
+                  className={`board-anchor board-anchor--${side}${showAnchors ? ' active' : ''}${
+                    snapAnchor && snapAnchor.noteIndex === i && snapAnchor.side === side ? ' board-anchor--snap' : ''
+                  }`}
+                  onPointerDown={(e) => onAnchorPointerDown(side, e, i)}
+                />
+              ))}
             </div>
           ))}
         </div>

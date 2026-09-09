@@ -17,7 +17,17 @@ import { BoardContextMenu } from './BoardContextMenu';
 import { BoardNodePicker } from './BoardNodePicker';
 import { BoardNoteLinkPicker } from './BoardNoteLinkPicker';
 import { ensureMapPersisted } from './boardLinks';
-import { elementBBox, boardBounds, isBoxElement, anchorPoint, oppositeAnchor, type BoxElement } from './boardGeometry';
+import {
+  elementBBox,
+  boardBounds,
+  isBoxElement,
+  anchorPointOfBox,
+  anchorBoxFor,
+  noteBBox,
+  oppositeAnchor,
+  type BoxElement,
+  type BBox,
+} from './boardGeometry';
 import { routeWaypoints, roundedPath, pointsBBox, pathMidpoint } from './boardRouting';
 import { layoutConnectedCluster, filterGridPositions } from './boardLayout';
 import { newId } from '../io/formats';
@@ -47,26 +57,46 @@ function newSticky(x: number, y: number): BoardStickyElement {
  *  reattached itself when checking its new target. */
 function findConnectorBetween(
   elements: Record<string, BoardElement>,
-  aId: string,
-  bId: string,
+  a: { id: string; noteIndex?: number },
+  b: { id: string; noteIndex?: number },
   excludeId?: string,
 ): BoardConnectorElement | undefined {
+  // Note-index-aware (2026-09-09): a connector to a sticky's main card and
+  // one to a specific note of that SAME sticky are different relationships,
+  // not duplicates of each other — only an exact (id, noteIndex) pair match
+  // on both ends counts.
+  const same = (x: string, xi: number | undefined, y: string, yi: number | undefined) => x === y && (xi ?? null) === (yi ?? null);
   return Object.values(elements).find(
     (el): el is BoardConnectorElement =>
       el.kind === 'connector' &&
       el.id !== excludeId &&
-      ((el.fromId === aId && el.toId === bId) || (el.fromId === bId && el.toId === aId)),
+      ((same(el.fromId, el.fromNoteIndex, a.id, a.noteIndex) && same(el.toId, el.toNoteIndex, b.id, b.noteIndex)) ||
+        (same(el.fromId, el.fromNoteIndex, b.id, b.noteIndex) && same(el.toId, el.toNoteIndex, a.id, a.noteIndex))),
   );
 }
 
-/** Nearest of an element's 4 anchor sides to a world point (used to pick
- *  where an in-progress connector should land when dropped on it). */
-function nearestAnchorSide(el: BoxElement, point: { x: number; y: number }): BoardAnchorSide {
+/** The box a `targetAt` hit actually resolves to (its note box, or its own),
+ *  or null if the hit wasn't a sticky/image (or there was no hit at all). */
+function targetBoxOf(
+  target: { id: string; noteIndex?: number } | null,
+  elements: Record<string, BoardElement>,
+  noteHeights: Record<string, number[]>,
+): BBox | null {
+  if (!target) return null;
+  const el = elements[target.id];
+  return el && isBoxElement(el) ? anchorBoxFor(el, target.noteIndex, noteHeights[target.id]) : null;
+}
+
+/** Nearest of a box's 4 anchor sides to a world point (used to pick where an
+ *  in-progress connector should land when dropped on it) — takes a plain
+ *  `BBox` so the same logic works for an element's own box or a fused note's
+ *  box (see `noteBBox`). */
+function nearestAnchorSide(box: BBox, point: { x: number; y: number }): BoardAnchorSide {
   const sides: BoardAnchorSide[] = ['top', 'right', 'bottom', 'left'];
   let best: BoardAnchorSide = 'top';
   let bestDist = Infinity;
   for (const side of sides) {
-    const p = anchorPoint(el, side);
+    const p = anchorPointOfBox(box, side);
     const d = (p.x - point.x) ** 2 + (p.y - point.y) ** 2;
     if (d < bestDist) {
       bestDist = d;
@@ -76,26 +106,42 @@ function nearestAnchorSide(el: BoxElement, point: { x: number; y: number }): Boa
   return best;
 }
 
-/** Topmost box element (sticky/image) whose bounds contain `point`, excluding `excludeId`. */
-function elementAt(
+/** Topmost box element (sticky/image) whose bounds — or, for a sticky, one of
+ *  its fused note boxes (2026-09-09, see boardGeometry.ts's `noteBBox`) —
+ *  contain `point`, excluding `excludeId`. A note box is checked before the
+ *  sticky's own main card since it sits entirely outside it (below, in normal
+ *  flow — see BoardElementView.tsx), so there's no ambiguity about which one
+ *  "wins" when both would match. `noteHeights` are this render's MEASURED
+ *  per-sticky note heights (BoardCanvasArea's `noteHeights` state), needed to
+ *  know where each note box actually sits/ends. */
+function targetAt(
   elements: Record<string, BoardElement>,
   order: string[],
+  noteHeights: Record<string, number[]>,
   point: { x: number; y: number },
   excludeId: string,
-): string | null {
+): { id: string; noteIndex?: number } | null {
+  const hits = (box: BBox) => point.x >= box.x0 && point.x <= box.x1 && point.y >= box.y0 && point.y <= box.y1;
   for (let i = order.length - 1; i >= 0; i--) {
     const id = order[i];
     if (id === excludeId) continue;
     const el = elements[id];
     if (!el || !isBoxElement(el)) continue;
-    const box = elementBBox(el);
-    if (point.x >= box.x0 && point.x <= box.x1 && point.y >= box.y0 && point.y <= box.y1) return id;
+    if (el.kind === 'sticky' && el.notes?.length) {
+      const heights = noteHeights[id] ?? [];
+      for (let ni = 0; ni < el.notes.length; ni++) {
+        if (hits(noteBBox(el, ni, heights))) return { id, noteIndex: ni };
+      }
+    }
+    if (hits(elementBBox(el))) return { id };
   }
   return null;
 }
 
-function childStickySpot(source: BoxElement, side: BoardAnchorSide): { x: number; y: number } {
-  const a = anchorPoint(source, side);
+/** Where a new connected sticky should spawn given the anchor point it's
+ *  connecting FROM (the source element's own box, or one of its note boxes —
+ *  callers resolve which via `anchorBoxFor` before calling this). */
+function childStickySpot(a: { x: number; y: number }, side: BoardAnchorSide): { x: number; y: number } {
   switch (side) {
     case 'right':
       return { x: a.x + CHILD_GAP, y: a.y - NEW_STICKY_H / 2 };
@@ -127,6 +173,7 @@ type Drag =
       mode: 'connect';
       fromId: string;
       fromAnchor: BoardAnchorSide;
+      fromNoteIndex: number | undefined;
       startClientX: number;
       startClientY: number;
       moved: boolean;
@@ -137,6 +184,7 @@ type Drag =
       end: 'from' | 'to';
       otherId: string;
       otherAnchor: BoardAnchorSide;
+      otherNoteIndex: number | undefined;
     };
 
 export interface BoardCanvasHandle {
@@ -180,6 +228,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const moveElements = useBoard((s) => s.moveElements);
   const updateElement = useBoard((s) => s.updateElement);
   const updateElements = useBoard((s) => s.updateElements);
+  const removeStickyNote = useBoard((s) => s.removeStickyNote);
   const beginTransaction = useBoard((s) => s.beginTransaction);
   const endTransaction = useBoard((s) => s.endTransaction);
   const cancelTransaction = useBoard((s) => s.cancelTransaction);
@@ -208,10 +257,20 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const [connectPreview, setConnectPreview] = useState<{
     fromId: string;
     fromAnchor: BoardAnchorSide;
+    fromNoteIndex: number | undefined;
     to: { x: number; y: number };
     targetId: string | null;
+    targetNoteIndex: number | undefined;
     snapAnchor: BoardAnchorSide | null;
   } | null>(null);
+  // Fused note boxes auto-grow with text (pure CSS normal flow, no stored
+  // height — see types.ts's BoardStickyElement.notes) so their world bbox
+  // isn't knowable from the doc alone. Each sticky reports its own notes'
+  // MEASURED heights here (BoardElementView's onNoteHeightsChange), indexed
+  // like `el.notes`; boardGeometry.ts's `noteBBox`/`anchorBoxFor` combine
+  // this with the sticky's stored x/y/width/height to place note-anchored
+  // connectors and hit-test note-anchor drops (2026-09-09).
+  const [noteHeights, setNoteHeights] = useState<Record<string, number[]>>({});
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
   // Wraps every text-edit entry/exit so the WHOLE typing session becomes one
   // undo step (2026-09-07 — a controlled <textarea> otherwise calls
@@ -372,7 +431,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     if (activeFilter) return; // world coords under the cursor don't match what's on screen in grid view
     const w = toWorld(e.clientX, e.clientY);
     const { elements, order } = store.getState().board;
-    if (elementAt(elements, order, w, '')) return; // hit a sticky/image — its own dblclick-to-edit handles this
+    if (targetAt(elements, order, noteHeights, w, '')) return; // hit a sticky/image (or one of its notes) — its own dblclick-to-edit handles this
     const sticky = newSticky(w.x - NEW_STICKY_W / 2, w.y - NEW_STICKY_H / 2);
     addElements([sticky]);
     beginEditingTarget({ id: sticky.id, field: 'text' });
@@ -477,16 +536,27 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     setSelection(next);
   };
 
-  const beginAnchorDrag = (side: BoardAnchorSide, id: string, e: React.PointerEvent) => {
+  const beginAnchorDrag = (side: BoardAnchorSide, id: string, e: React.PointerEvent, noteIndex?: number) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
     containerRef.current?.setPointerCapture(e.pointerId);
-    dragRef.current = { mode: 'connect', fromId: id, fromAnchor: side, startClientX: e.clientX, startClientY: e.clientY, moved: false };
+    dragRef.current = {
+      mode: 'connect',
+      fromId: id,
+      fromAnchor: side,
+      fromNoteIndex: noteIndex,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      moved: false,
+    };
     const el = board.elements[id];
     if (el && isBoxElement(el)) {
-      const p = anchorPoint(el, side);
-      setConnectPreview({ fromId: id, fromAnchor: side, to: p, targetId: null, snapAnchor: null });
+      const box = anchorBoxFor(el, noteIndex, noteHeights[id]);
+      if (box) {
+        const p = anchorPointOfBox(box, side);
+        setConnectPreview({ fromId: id, fromAnchor: side, fromNoteIndex: noteIndex, to: p, targetId: null, targetNoteIndex: undefined, snapAnchor: null });
+      }
     }
   };
 
@@ -502,6 +572,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     end: 'from' | 'to',
     otherId: string,
     otherAnchor: BoardAnchorSide,
+    otherNoteIndex: number | undefined,
     e: React.PointerEvent,
   ) => {
     if (e.button !== 0) return;
@@ -509,24 +580,38 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     e.preventDefault();
     containerRef.current?.setPointerCapture(e.pointerId);
     setSelection([connectorId]);
-    dragRef.current = { mode: 'reattach', connectorId, end, otherId, otherAnchor };
+    dragRef.current = { mode: 'reattach', connectorId, end, otherId, otherAnchor, otherNoteIndex };
     const otherEl = board.elements[otherId];
     if (otherEl && isBoxElement(otherEl)) {
-      const p = anchorPoint(otherEl, otherAnchor);
-      setConnectPreview({ fromId: otherId, fromAnchor: otherAnchor, to: p, targetId: null, snapAnchor: null });
+      const box = anchorBoxFor(otherEl, otherNoteIndex, noteHeights[otherId]);
+      if (box) {
+        const p = anchorPointOfBox(box, otherAnchor);
+        setConnectPreview({
+          fromId: otherId,
+          fromAnchor: otherAnchor,
+          fromNoteIndex: otherNoteIndex,
+          to: p,
+          targetId: null,
+          targetNoteIndex: undefined,
+          snapAnchor: null,
+        });
+      }
     }
   };
 
-  const createConnectedChild = (fromId: string, side: BoardAnchorSide) => {
+  const createConnectedChild = (fromId: string, side: BoardAnchorSide, fromNoteIndex?: number) => {
     const fromEl = store.getState().board.elements[fromId];
     if (!fromEl || !isBoxElement(fromEl)) return;
-    const spot = childStickySpot(fromEl, side);
+    const fromBox = anchorBoxFor(fromEl, fromNoteIndex, noteHeights[fromId]);
+    if (!fromBox) return;
+    const spot = childStickySpot(anchorPointOfBox(fromBox, side), side);
     const sticky = newSticky(spot.x, spot.y);
     const connector: BoardConnectorElement = {
       id: newId(),
       kind: 'connector',
       fromId,
       fromAnchor: side,
+      fromNoteIndex,
       toId: sticky.id,
       toAnchor: oppositeAnchor(side),
       arrow: true,
@@ -582,17 +667,33 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       }
       const w = toWorld(e.clientX, e.clientY);
       const { elements, order } = store.getState().board;
-      const targetId = elementAt(elements, order, w, d.fromId);
-      const targetEl = targetId ? elements[targetId] : null;
-      const snapAnchor = targetEl && isBoxElement(targetEl) ? nearestAnchorSide(targetEl, w) : null;
-      setConnectPreview({ fromId: d.fromId, fromAnchor: d.fromAnchor, to: w, targetId, snapAnchor });
+      const target = targetAt(elements, order, noteHeights, w, d.fromId);
+      const targetBox = targetBoxOf(target, elements, noteHeights);
+      const snapAnchor = targetBox ? nearestAnchorSide(targetBox, w) : null;
+      setConnectPreview({
+        fromId: d.fromId,
+        fromAnchor: d.fromAnchor,
+        fromNoteIndex: d.fromNoteIndex,
+        to: w,
+        targetId: target?.id ?? null,
+        targetNoteIndex: target?.noteIndex,
+        snapAnchor,
+      });
     } else if (d.mode === 'reattach') {
       const w = toWorld(e.clientX, e.clientY);
       const { elements, order } = store.getState().board;
-      const targetId = elementAt(elements, order, w, d.otherId);
-      const targetEl = targetId ? elements[targetId] : null;
-      const snapAnchor = targetEl && isBoxElement(targetEl) ? nearestAnchorSide(targetEl, w) : null;
-      setConnectPreview({ fromId: d.otherId, fromAnchor: d.otherAnchor, to: w, targetId, snapAnchor });
+      const target = targetAt(elements, order, noteHeights, w, d.otherId);
+      const targetBox = targetBoxOf(target, elements, noteHeights);
+      const snapAnchor = targetBox ? nearestAnchorSide(targetBox, w) : null;
+      setConnectPreview({
+        fromId: d.otherId,
+        fromAnchor: d.otherAnchor,
+        fromNoteIndex: d.otherNoteIndex,
+        to: w,
+        targetId: target?.id ?? null,
+        targetNoteIndex: target?.noteIndex,
+        snapAnchor,
+      });
     }
   };
 
@@ -603,45 +704,51 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     if (d?.mode === 'connect') {
       const { elements, order } = store.getState().board;
       const fromEl = elements[d.fromId];
-      if (fromEl && isBoxElement(fromEl)) {
+      const fromBox = fromEl && isBoxElement(fromEl) ? anchorBoxFor(fromEl, d.fromNoteIndex, noteHeights[d.fromId]) : null;
+      if (fromEl && isBoxElement(fromEl) && fromBox) {
         if (!d.moved) {
           // a plain click on the anchor — spawn a connected child sticky
-          createConnectedChild(d.fromId, d.fromAnchor);
+          createConnectedChild(d.fromId, d.fromAnchor, d.fromNoteIndex);
         } else {
           const w = toWorld(e.clientX, e.clientY);
-          const targetId = elementAt(elements, order, w, d.fromId);
-          if (targetId) {
-            const targetEl = elements[targetId];
-            if (targetEl && isBoxElement(targetEl)) {
-              // already connected — select the existing connector instead of
-              // drawing a second, indistinguishable one on top of it
-              const dup = findConnectorBetween(elements, d.fromId, targetId);
-              if (dup) {
-                setSelection([dup.id]);
-              } else {
-                const toAnchor = nearestAnchorSide(targetEl, w);
-                const connector: BoardConnectorElement = {
-                  id: newId(),
-                  kind: 'connector',
-                  fromId: d.fromId,
-                  fromAnchor: d.fromAnchor,
-                  toId: targetId,
-                  toAnchor,
-                  arrow: true,
-                };
-                addElements([connector]);
-                setSelection([connector.id]);
-              }
+          const target = targetAt(elements, order, noteHeights, w, d.fromId);
+          const targetBox = targetBoxOf(target, elements, noteHeights);
+          if (target && targetBox) {
+            // already connected — select the existing connector instead of
+            // drawing a second, indistinguishable one on top of it
+            const dup = findConnectorBetween(
+              elements,
+              { id: d.fromId, noteIndex: d.fromNoteIndex },
+              { id: target.id, noteIndex: target.noteIndex },
+            );
+            if (dup) {
+              setSelection([dup.id]);
+            } else {
+              const toAnchor = nearestAnchorSide(targetBox, w);
+              const connector: BoardConnectorElement = {
+                id: newId(),
+                kind: 'connector',
+                fromId: d.fromId,
+                fromAnchor: d.fromAnchor,
+                fromNoteIndex: d.fromNoteIndex,
+                toId: target.id,
+                toAnchor,
+                toNoteIndex: target.noteIndex,
+                arrow: true,
+              };
+              addElements([connector]);
+              setSelection([connector.id]);
             }
           } else {
             // dropped on empty canvas — spawn a new sticky right there, connected
             const sticky = newSticky(w.x - NEW_STICKY_W / 2, w.y - NEW_STICKY_H / 2);
-            const toAnchor = nearestAnchorSide(sticky, anchorPoint(fromEl, d.fromAnchor));
+            const toAnchor = nearestAnchorSide(elementBBox(sticky), anchorPointOfBox(fromBox, d.fromAnchor));
             const connector: BoardConnectorElement = {
               id: newId(),
               kind: 'connector',
               fromId: d.fromId,
               fromAnchor: d.fromAnchor,
+              fromNoteIndex: d.fromNoteIndex,
               toId: sticky.id,
               toAnchor,
               arrow: true,
@@ -655,18 +762,28 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     } else if (d?.mode === 'reattach') {
       const w = toWorld(e.clientX, e.clientY);
       const { elements, order } = store.getState().board;
-      const targetId = elementAt(elements, order, w, d.otherId);
-      const targetEl = targetId ? elements[targetId] : null;
-      if (targetId && targetEl && isBoxElement(targetEl)) {
+      const target = targetAt(elements, order, noteHeights, w, d.otherId);
+      const targetBox = targetBoxOf(target, elements, noteHeights);
+      if (target && targetBox) {
         // reattaching onto a pair that's already connected would create a
         // second, exactly-overlapping connector — select the existing one
         // and leave this connector's original attachment alone instead
-        const dup = findConnectorBetween(elements, d.otherId, targetId, d.connectorId);
+        const dup = findConnectorBetween(
+          elements,
+          { id: d.otherId, noteIndex: d.otherNoteIndex },
+          { id: target.id, noteIndex: target.noteIndex },
+          d.connectorId,
+        );
         if (dup) {
           setSelection([dup.id]);
         } else {
-          const anchor = nearestAnchorSide(targetEl, w);
-          updateElement(d.connectorId, d.end === 'from' ? { fromId: targetId, fromAnchor: anchor } : { toId: targetId, toAnchor: anchor });
+          const anchor = nearestAnchorSide(targetBox, w);
+          updateElement(
+            d.connectorId,
+            d.end === 'from'
+              ? { fromId: target.id, fromAnchor: anchor, fromNoteIndex: target.noteIndex }
+              : { toId: target.id, toAnchor: anchor, toNoteIndex: target.noteIndex },
+          );
         }
       }
       // no target → cancelled, original attachment kept
@@ -738,8 +855,13 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     const side = ARROW_SIDE[e.key];
     if (side && sel?.kind === 'sticky') {
       e.preventDefault();
+      // Keyboard arrow-nav always walks from the sticky's own main card, not
+      // one of its notes (there's no keyboard way to select a note anchor) —
+      // fromNoteIndex == null excludes a note-anchored connector sharing the
+      // same fromId/side.
       const existing = Object.values(board.elements).find(
-        (el): el is BoardConnectorElement => el.kind === 'connector' && el.fromId === sel.id && el.fromAnchor === side,
+        (el): el is BoardConnectorElement =>
+          el.kind === 'connector' && el.fromId === sel.id && el.fromAnchor === side && el.fromNoteIndex == null,
       );
       if (existing) setSelection([existing.toId]);
       else createConnectedChild(sel.id, side);
@@ -830,8 +952,10 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       if (activeFilter && (!filterPositions?.[fromElRaw.id] || !filterPositions?.[toElRaw.id])) return null;
       const fromEl = displayBox(fromElRaw);
       const toEl = displayBox(toElRaw);
-      const a = anchorPoint(fromEl, el.fromAnchor);
-      const b = anchorPoint(toEl, el.toAnchor);
+      const fromBox = anchorBoxFor(fromEl, el.fromNoteIndex, noteHeights[el.fromId]) ?? elementBBox(fromEl);
+      const toBox = anchorBoxFor(toEl, el.toNoteIndex, noteHeights[el.toId]) ?? elementBBox(toEl);
+      const a = anchorPointOfBox(fromBox, el.fromAnchor);
+      const b = anchorPointOfBox(toBox, el.toAnchor);
       const pts = routeWaypoints(a, el.fromAnchor, b, el.toAnchor);
       const box = pointsBBox(pts);
       const d = roundedPath(
@@ -914,13 +1038,24 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
               editingField={editingTarget?.id === id ? editingTarget.field : null}
               editingNoteIndex={editingTarget?.id === id && editingTarget.field === 'note' ? editingTarget.index : null}
               showAnchors={!activeFilter && (selection.includes(id) || hoveredId === id || isConnectTarget)}
-              snapAnchor={isConnectTarget ? connectPreview.snapAnchor : null}
+              snapAnchor={
+                isConnectTarget && connectPreview.snapAnchor
+                  ? { side: connectPreview.snapAnchor, noteIndex: connectPreview.targetNoteIndex }
+                  : null
+              }
               imageSrc={el.kind === 'image' ? imageCache[el.src] : undefined}
               onPointerDown={(e) => onElementPointerDown(e, id)}
               onPointerEnter={() => setHoveredId(id)}
               onPointerLeave={() => setHoveredId((h) => (h === id ? null : h))}
               onContextMenu={(e) => onElementContextMenu(e, id)}
-              onAnchorPointerDown={(side, e) => beginAnchorDrag(side, id, e)}
+              onAnchorPointerDown={(side, e, noteIndex) => beginAnchorDrag(side, id, e, noteIndex)}
+              onNoteHeightsChange={(heights) =>
+                setNoteHeights((m) => {
+                  const prev = m[id];
+                  if (prev && prev.length === heights.length && prev.every((v, i) => v === heights[i])) return m;
+                  return { ...m, [id]: heights };
+                })
+              }
               onTextChange={(text) => updateElement(id, { text })}
               onNoteChange={(index, value) => {
                 if (el.kind !== 'sticky') return;
@@ -930,11 +1065,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
               }}
               onFieldBlur={endEditingTarget}
               onCancelEdit={cancelTransaction}
-              onRemoveNote={(index) => {
-                if (el.kind !== 'sticky') return;
-                const notes = (el.notes ?? []).filter((_, i) => i !== index);
-                updateElement(id, { notes });
-              }}
+              onRemoveNote={(index) => removeStickyNote(id, index)}
             />
           );
         })}
@@ -990,12 +1121,12 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
                 <div
                   className="board-connector-endpoint"
                   style={{ left: a.x, top: a.y }}
-                  onPointerDown={(e) => beginEndpointDrag(id, 'from', el.toId, el.toAnchor, e)}
+                  onPointerDown={(e) => beginEndpointDrag(id, 'from', el.toId, el.toAnchor, el.toNoteIndex, e)}
                 />
                 <div
                   className="board-connector-endpoint"
                   style={{ left: b.x, top: b.y }}
-                  onPointerDown={(e) => beginEndpointDrag(id, 'to', el.fromId, el.fromAnchor, e)}
+                  onPointerDown={(e) => beginEndpointDrag(id, 'to', el.fromId, el.fromAnchor, el.fromNoteIndex, e)}
                 />
               </>
             )}
@@ -1006,19 +1137,18 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
           (() => {
             const fromEl = board.elements[connectPreview.fromId];
             if (!fromEl || !isBoxElement(fromEl)) return null;
-            const a = anchorPoint(fromEl, connectPreview.fromAnchor);
+            const fromBox = anchorBoxFor(fromEl, connectPreview.fromNoteIndex, noteHeights[connectPreview.fromId]) ?? elementBBox(fromEl);
+            const a = anchorPointOfBox(fromBox, connectPreview.fromAnchor);
             // once a target is armed, preview the route into its snap anchor
             // (not just a raw line to the cursor) so the animation reads as
             // "this is where it'll attach", not just "line follows mouse"
             const targetEl = connectPreview.targetId ? board.elements[connectPreview.targetId] : null;
-            const b =
-              targetEl && isBoxElement(targetEl) && connectPreview.snapAnchor
-                ? anchorPoint(targetEl, connectPreview.snapAnchor)
-                : connectPreview.to;
-            const pts =
-              targetEl && isBoxElement(targetEl) && connectPreview.snapAnchor
-                ? routeWaypoints(a, connectPreview.fromAnchor, b, connectPreview.snapAnchor)
-                : [a, b];
+            const targetBox =
+              targetEl && isBoxElement(targetEl)
+                ? (anchorBoxFor(targetEl, connectPreview.targetNoteIndex, noteHeights[connectPreview.targetId ?? '']) ?? elementBBox(targetEl))
+                : null;
+            const b = targetBox && connectPreview.snapAnchor ? anchorPointOfBox(targetBox, connectPreview.snapAnchor) : connectPreview.to;
+            const pts = targetBox && connectPreview.snapAnchor ? routeWaypoints(a, connectPreview.fromAnchor, b, connectPreview.snapAnchor) : [a, b];
             const box = pointsBBox(pts);
             const d = roundedPath(
               pts.map((p) => ({ x: p.x - box.x0, y: p.y - box.y0 })),

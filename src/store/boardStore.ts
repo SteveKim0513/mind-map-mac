@@ -57,8 +57,10 @@ export type BoardElementPatch = Partial<{
   alt: string;
   fromId: string;
   fromAnchor: BoardAnchorSide;
+  fromNoteIndex: number;
   toId: string;
   toAnchor: BoardAnchorSide;
+  toNoteIndex: number;
   arrow: boolean;
   label: string;
   link: string;
@@ -113,6 +115,14 @@ interface BoardState {
    *  omitted" — see BoardStickyElement.nodeLink/noteLink. */
   setNodeLink: (id: string, link: NoteLink | null) => void;
   setNoteLink: (id: string, ref: BoardNoteRef | null) => void;
+  /** Removes one fused note text-block (`notes[index]`) from a sticky and
+   *  keeps any connector anchored to a note in sync: a connector on a note
+   *  AFTER the removed one shifts its index down by one (its target note is
+   *  now one slot earlier), and a connector anchored to the removed note
+   *  itself falls back to the sticky's main card (its `fromNoteIndex`/
+   *  `toNoteIndex` is cleared) rather than dangling or silently re-pointing
+   *  at whichever note shifted into that slot. */
+  removeStickyNote: (id: string, index: number) => void;
 
   // clipboard (⌘/Ctrl+C / ⌘/Ctrl+V)
   /** Copies the currently selected elements into the in-app clipboard, plus
@@ -253,6 +263,40 @@ export function createBoardStore(): BoardStore {
           changed = true;
         }
         if (!changed) return;
+        set({ board: { ...board, elements }, dirty: true, ...historyPatch(board) });
+      },
+
+      removeStickyNote: (id, index) => {
+        const { board } = get();
+        const sticky = board.elements[id];
+        if (!sticky || sticky.kind !== 'sticky') return;
+        const notes = (sticky.notes ?? []).filter((_, i) => i !== index);
+        const elements = { ...board.elements, [id]: { ...sticky, notes } };
+        for (const el of Object.values(board.elements)) {
+          if (el.kind !== 'connector') continue;
+          let fromNoteIndex = el.fromNoteIndex;
+          let toNoteIndex = el.toNoteIndex;
+          let changed = false;
+          if (el.fromId === id && fromNoteIndex != null) {
+            if (fromNoteIndex === index) {
+              fromNoteIndex = undefined;
+              changed = true;
+            } else if (fromNoteIndex > index) {
+              fromNoteIndex -= 1;
+              changed = true;
+            }
+          }
+          if (el.toId === id && toNoteIndex != null) {
+            if (toNoteIndex === index) {
+              toNoteIndex = undefined;
+              changed = true;
+            } else if (toNoteIndex > index) {
+              toNoteIndex -= 1;
+              changed = true;
+            }
+          }
+          if (changed) elements[el.id] = { ...el, fromNoteIndex, toNoteIndex };
+        }
         set({ board: { ...board, elements }, dirty: true, ...historyPatch(board) });
       },
 

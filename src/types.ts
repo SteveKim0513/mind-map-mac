@@ -271,8 +271,16 @@ export interface BoardConnectorElement {
   kind: 'connector';
   fromId: string;
   fromAnchor: BoardAnchorSide;
+  // When set, this end attaches to `notes[fromNoteIndex]`'s own box (a fused
+  // text block stacked below the sticky, see BoardStickyElement.notes) instead
+  // of the sticky's main card (2026-09-09). Meaningless — and ignored at
+  // render time — unless fromId is a sticky with a notes[] entry at that
+  // index; a stale index (note deleted) falls back to the main card rather
+  // than erroring.
+  fromNoteIndex?: number;
   toId: string;
   toAnchor: BoardAnchorSide;
+  toNoteIndex?: number; // see fromNoteIndex
   arrow?: boolean; // arrowhead at the `to` end — default true when absent
   color?: string;
   label?: string; // short caption shown at the path's midpoint (e.g. "왜냐하면")
