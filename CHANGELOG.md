@@ -4,6 +4,30 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.14.0] - 2026-09-21
+
+### 추가
+- **공유 폴더 (ADR 0021)** — 폴더 단위 opt-in으로 초대 코드 참가·실시간 공동편집·소유자 전용 맵/보드·코멘트/알림을 제공한다. 프로젝트 최초의 상시 서버가 생기며 "서버 없음" 불변 조건을 "공유 폴더만 자체 호스팅 릴레이 경유, 릴레이는 콘텐츠를 영속 저장하지 않는다"로 재정의했다(`AGENTS.md`).
+  - **릴레이 서버 `server/`** (앱과 분리된 독립 패키지, Node ≥ 22, Hocuspocus v4 + REST + `better-sqlite3` 메타데이터): 방·참가자(토큰 해시)·초대(8자·10분·1회용·해시 저장)만 SQLite에 저장, 문서 상태는 메모리에서 방 접속자가 0이면 폐기. `file:*` 문서는 서버가 비소유자를 readOnly로 강제, 강퇴 시 라이브 소켓을 4403으로 종료, 방 삭제 API(`DELETE /rooms/:id`), 비활동 방 정리(`ROOM_TTL_DAYS`), 자원 한도(인증 전 프레임 64KiB·문서 8MiB·방 64MiB·소켓 수·메시지 속도), IPv6 /64·전역 초대 실패 제한. Railway(Singapore, 볼륨 `/data`, 인스턴스 1개)에 배포 — 운영: `docs/operations/relay-server.md`.
+  - **클라이언트**: `src/share/`(연결·복제 엔진·코멘트 동기화), `electron/share.ts`(`share:*` IPC 16개: 릴레이 REST는 main에서만, 토큰은 `safeStorage`, 표식 `.mindshare/room.json`·사이드카 `.mindshare/n_<hex(noteId)>.yjs`), 렌더러 CSP `connect-src` 신설, `store/shareStore`·`commentStore`·`notificationStore`, `electron/notifications.ts`(`notifications:*` 2개, `userData/notifications.json`).
+  - **노트 공동편집**: Yjs CRDT — Y.Doc이 진실이고 `.md`는 디바운스 파생, 소유자가 최초 1회만 시드(manifest `seeded` 마커), 오프라인 병합, 외부 편집기 수정은 3-way 흡수(위험하면 충돌 사본), `@tiptap/extension-collaboration(-caret)` 3.26.0 정확 고정, `note/extensions.ts`로 확장 목록 추출(일반 노트 동작 불변).
+  - **맵/보드 뷰어**: 소유자 발행(`file:<id>`의 Y.Map)·참가자 읽기 전용 미러, `store/readOnlyGuard.ts` 중앙 가드(허용 목록 외 모든 액션 차단·뷰어 문서 저장 제외), 발행·수신 양쪽에서 리마인더 4필드 제거 + `reminderSync`가 뷰어 미러를 동기화 대상에서 제외.
+  - **코멘트·알림**: `comments` 문서(Y.Map), 노드·요소·노트 앵커, 즉시 토스트, 사이드바 하단 알림 센터(읽음/모두 읽음, 기기 로컬 영속).
+  - 신규 의존성: `yjs`, `y-protocols`, `@hocuspocus/provider`, `@tiptap/extension-collaboration`, `@tiptap/extension-collaboration-caret`, `@tiptap/y-tiptap`(정확한 버전 선언). 서버 전용: `@hocuspocus/server`, `better-sqlite3`.
+- **보드 노트 링크를 노트 id 기반으로 (ADR 0022)** — `BoardNoteRef.noteId?` 선택 필드(`BoardDoc.version` 무범프). 클릭 시 id → 경로 폴백 순으로 해석해 이름 변경·이동에 강하고, 공유 사본은 경로 대신 id만 담아 참가자에게도 칩이 동작한다.
+- **E2E 도메인 태그 `@share`**, 하네스 `share/` 경계 검사 5종, `make setup/verify/pre-release`에 server 빌드·테스트 편입.
+
+### 변경
+- **외부 링크 스킴을 http·https·mailto로 제한** — `setWindowOpenHandler`가 임의 스킴을 `shell.openExternal`로 넘기던 것을 허용 목록으로 제한하고, 공유 사본(맵 `link`/`links`·보드 `link`)과 노트 미리보기 링크도 같은 함수(`io/linkSafety.ts`)로 정제한다. 부작용: `tel:`·`sms:`·`ftp:` 링크와 앱 딥링크가 열리지 않는다.
+- **릴리즈 CI**(`.github/workflows/release.yml`)가 `server/`를 설치·빌드·테스트하고 E2E 제한시간을 20분으로 늘렸다(첫 태그 배포에서 CI 결과 확인 필요).
+- **로그 보강** — 앱: 공유 연결 상태 전이(사유 포함, 반복 억제)·방 관리 흐름·코멘트 동기화 오류, 렌더러 전역 오류(`src/diagnostics.ts`, `[renderer]` 스코프), 기존 `console-message` 브리지가 던진 문자열 내용을 그대로 남기던 것을 정제. 서버: 요청 route 오기록(`unmatched`) 수정·오류 코드 `reason`·`http.error` 메시지·`ws.closed`·`relay.crash`·`LOG_LEVEL`. 문서 내용·토큰·초대 코드·폴더 이름·IP는 남기지 않는 정책을 테스트로 강제. → `docs/operations/relay-server.md`, `troubleshooting.md`.
+
+### 보안
+- 독립 보안·아키텍처·테스트 검토 3건을 반영: 원격이 채우는 링크 스킴 검증, 받은 맵·보드 구조 검증(순환·깊이·노드 수·비유한 좌표), 심볼릭 링크 파일 공유 수집 제외, 사이드카 네임스페이스 충돌(노트 id 소문자 hex), 표식 `role` 서버 값 재확인, 원격 입력 상한, REST 응답 크기 상한, 패키지 빌드에서 `MINDMAP_RELAY_URL` 무시.
+
+### 알려진 한계
+- 공유 노트 이미지 미지원, 신규 참가자는 다른 참가자가 온라인일 때만 기존 내용 수신, 코멘트 작성자 위조 가능(서버 미검증), manifest 노트 삭제 신뢰 모델, `img-src` CSP 미제한 등 — `docs/product/FEATURE-INVENTORY.md` 18절과 `docs/exec-plans/tech-debt-tracker.md`(TD-003~019) 참고.
+
 ## [0.13.9] - 2026-09-09
 
 ### 추가
