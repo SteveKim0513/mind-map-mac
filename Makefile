@@ -3,6 +3,7 @@
 # Install dependencies
 setup:
 	npm ci
+	npm --prefix server ci
 
 # Development server — isolated temp userData + workspace (real data untouched)
 # quiet=1: off-screen + macOS 'accessory' activation policy (same as E2E), plus
@@ -28,16 +29,16 @@ build:
 
 # Fast verify: typecheck + unit tests (required before every completion claim)
 verify:
-	npm run typecheck && npm test
+	npm --prefix server run build && npm run typecheck && npm test && npm --prefix server test
 
 # Full verify: typecheck + unit tests + production build
 verify-full:
-	npm run typecheck && npm test && npm run build
+	npm --prefix server run build && npm run typecheck && npm test && npm --prefix server test && npm run build
 
 # Pre-release gate: verify-full + E2E — must pass before make bump
 # 새 기능·UI 변경이 포함된 릴리즈는 반드시 이 타겟을 통과한 뒤 bump한다.
 pre-release:
-	npm run typecheck && npm test && npm run build && npm run test:e2e
+	npm --prefix server run build && npm run typecheck && npm test && npm --prefix server test && npm run build && npm run test:e2e
 
 # Harness structure checks (architecture + doc integrity + design + e2e 태그)
 harness-check:
@@ -63,7 +64,7 @@ e2e-tag:
 # 사용: make verify-feature tag=@calendar
 verify-feature:
 	@[ "$(tag)" ] || { echo 'Usage: make verify-feature tag=@<domain>  (예: @calendar)'; exit 1; }
-	npm run typecheck && npm test && npm run build && node scripts/e2e-run.mjs "$(tag)"
+	npm --prefix server run build && npm run typecheck && npm test && npm --prefix server test && npm run build && node scripts/e2e-run.mjs "$(tag)"
 
 # 핵심 화면 스크린샷 (빌드 → 앱 실행 → 5개 화면 캡처 → /tmp/smoke/)
 smoke:

@@ -21,3 +21,8 @@ CLAUDE.local.md
 .env
 .env.*
 !.env.example
+
+# Relay server (server/ is an independent package)
+/server/node_modules/
+/server/dist/
+/server/data/
