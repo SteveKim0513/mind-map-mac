@@ -4,6 +4,8 @@ import { serialize } from '../io/formats';
 import { useWorkspace } from '../store/workspaceStore';
 import { useSession } from '../store/sessionStore';
 import { useUi } from '../store/uiStore';
+import { useShare } from '../store/shareStore';
+import { patchNoteFile } from '../store/sharedNoteSave';
 import { setNoteLinkDeleteHook, setNoteLinkRenameHook, type MapStore } from '../store/mapStore';
 import type { NoteStore } from '../store/noteStore';
 import { extractWikiTargets } from './wikiLinkText';
@@ -23,6 +25,7 @@ export async function ensureMapPersisted(mapId: string): Promise<void> {
   if (!tab) return;
   const st = (tab.store as MapStore).getState();
   if (!st.filePath) return;
+  if (st.readOnly) return; // 공유로 받은 읽기 전용 맵(뷰어)은 소유자의 미러 파일이다 — 여기서 쓰지 않는다
   const p = await window.api.save(st.filePath, serialize(st.doc));
   if (p) (tab.store as MapStore).getState().markSaved(p);
 }
@@ -64,6 +67,16 @@ export async function addLinkToNoteFile(notePath: string, link: NoteLink): Promi
     return;
   }
 
+  // 공유 폴더의 노트라면 복제 매니저의 큐 안에서 고친다(원격 편집을 옛 본문으로 되돌리지 않게) — 아니면 아래 직접 경로.
+  const shared = await patchNoteFile(notePath, (n) => {
+    if (n.links.some((l) => l.mapId === link.mapId && l.nodeId === link.nodeId)) return null;
+    return { ...n, links: [...n.links, link] };
+  });
+  if (shared.status !== 'not_shared') {
+    if (shared.status !== 'failed') reindexFromNote(notePath, shared.note);
+    return;
+  }
+
   // closed note → read / modify / write the file directly
   const content = await window.api.readFile(notePath);
   const note = parseNote(content, noteName(notePath));
@@ -75,6 +88,15 @@ export async function addLinkToNoteFile(notePath: string, link: NoteLink): Promi
 }
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * 노트 제목이 바뀌어 파일 이름을 바꾼 뒤, `[[옛 제목]]` → `[[새 제목]]` 일괄 치환(`renameWikiLinks`)을 **이 기기에서** 해야 하는가.
+ * 공유 노트에서 다른 참가자가 바꾼 제목(`remoteTitle`)은 그쪽이 이미 치환했다 — 여기서도 하면 CRDT가 두 삽입을 모두 살려 `[[새]]`가
+ * 중복된다. `remoteTitle`이 새 제목과 같으면(= 이 제목은 원격에서 온 것) false. 일반(비공유) 노트는 `remoteTitle`이 항상 null이라 true.
+ */
+export function shouldRewriteWikiLinksOnRename(remoteTitle: string | null, newTitle: string): boolean {
+  return remoteTitle !== newTitle;
+}
 
 /**
  * Rewrite every `[[old title]]` → `[[new title]]` across ALL notes when a note is
@@ -94,7 +116,20 @@ export async function renameWikiLinks(oldTitle: string, newTitle: string): Promi
   const replacement = `[[${n}]]`;
 
   for (const meta of useWorkspace.getState().noteIndex) {
-    const tab = useSession.getState().tabs.find((t) => t.kind === 'note' && t.path === meta.path);
+    // 공유 폴더 노트는 열려 있어도 탭 스토어로 고치지 않는다 — 본문은 공유 문서(Y)가 진실이고 탭 저장은 본문을 쓰지
+    // 않는다. 파일을 고치면 복제 매니저가 3-way로 흡수해 열린 에디터·다른 참가자에게 반영한다. 그 "파일 고치기"도 매니저의 직렬 큐
+    // 안에서 해야 한다(읽고 쓰는 사이 원격 편집이 파일에 쓰이면 옛 본문으로 되돌아가 삭제로 전파된다) — `patchNoteFile`.
+    if (useShare.getState().isSharedNote(meta.path)) {
+      const res = await patchNoteFile(meta.path, (doc) => {
+        const next = doc.body.replace(re, replacement);
+        return next === doc.body ? null : { ...doc, body: next };
+      });
+      if (res.status === 'written') reindexFromNote(meta.path, res.note);
+      if (res.status !== 'not_shared') continue;
+    }
+    const tab = useShare.getState().isSharedNote(meta.path)
+      ? undefined
+      : useSession.getState().tabs.find((t) => t.kind === 'note' && t.path === meta.path);
     if (tab) {
       const store = tab.store as NoteStore;
       const body = store.getState().note.body;
@@ -138,6 +173,16 @@ export async function removeLinkFromNoteFile(
     return;
   }
 
+  // 공유 폴더의 노트라면 복제 매니저의 큐 안에서 고친다.
+  const shared = await patchNoteFile(notePath, (n) => {
+    const links = n.links.filter((l) => !(l.mapId === mapId && l.nodeId === nodeId));
+    return links.length === n.links.length ? null : { ...n, links };
+  });
+  if (shared.status !== 'not_shared') {
+    if (shared.status !== 'failed') reindexFromNote(notePath, shared.note);
+    return;
+  }
+
   // closed note → read / modify / write the file directly
   const content = await window.api.readFile(notePath);
   const note = parseNote(content, noteName(notePath));
@@ -165,6 +210,23 @@ export async function updateLinkLabelInNoteFile(
     if (store.getState().note.links === before) return; // no change (already current)
     await useSession.getState().flushSaves(notePath);
     reindexFromNote(notePath, store.getState().note);
+    return;
+  }
+
+  // 공유 폴더의 노트라면 복제 매니저의 큐 안에서 고친다.
+  const shared = await patchNoteFile(notePath, (n) => {
+    let touched = false;
+    const links = n.links.map((l) => {
+      if (l.mapId === mapId && l.nodeId === nodeId && l.nodeText !== nodeText) {
+        touched = true;
+        return { ...l, nodeText };
+      }
+      return l;
+    });
+    return touched ? { ...n, links } : null;
+  });
+  if (shared.status !== 'not_shared') {
+    if (shared.status === 'written') reindexFromNote(notePath, shared.note);
     return;
   }
 

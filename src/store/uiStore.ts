@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { CommentAnchor } from '../types';
 
 type Theme = 'light' | 'dark';
 type ThemeMode = 'light' | 'dark' | 'system';
@@ -54,7 +55,27 @@ export type OverlayId =
   | 'favorites'
   | 'updates'
   | 'settings'
-  | 'manual';
+  | 'manual'
+  | 'share' // 공유 설정 패널 (초대 코드·참가자·나가기)
+  | 'shareDialog' // 공유 폴더 만들기·참가 입력 다이얼로그
+  | 'notifications'; // 알림 센터 (공유 폴더 코멘트 알림 — 사이드바 맨 아래 종 버튼)
+
+/** 공유 폴더 다이얼로그 — 만들기(폴더를 미리 정했으면 경로, 팔레트에서 열면 null) 또는 참가. */
+export type ShareDialogState = { kind: 'create'; folderPath: string | null } | { kind: 'join' };
+/** 방금 만든 초대 코드(메모리에만, 패널을 닫으면 지운다). expiresAt은 epoch ms. */
+export interface ShareInviteView {
+  code: string;
+  expiresAt: number;
+}
+
+/**
+ * 열려 있는 코멘트 스레드 팝오버 — 맵 노드·보드 요소·노트에 달린 코멘트를 보고 쓴다. 관리형 오버레이(스택)가 아니라 노드에 붙는
+ * 팝오버라 다른 팝오버(일정·아이콘)처럼 바깥 클릭·Esc로 닫힌다. 해당 파일을 그리는 Pane·BoardPane·NotePane이 렌더한다.
+ */
+export interface CommentThreadTarget {
+  roomId: string;
+  anchor: CommentAnchor;
+}
 
 /** Move `id` to the top of the stack (re-opening an already-open overlay raises it). */
 export const pushOverlay = (stack: OverlayId[], id: OverlayId): OverlayId[] => [
@@ -239,6 +260,26 @@ interface UiState {
   manualOpen: boolean;
   openManual: () => void;
   closeManual: () => void;
+  // 공유 설정 패널 (overlay) — roomId는 store/shareStore의 방 id
+  shareOpen: boolean;
+  shareRoomId: string | null;
+  shareInvite: ShareInviteView | null;
+  openShare: (roomId: string, invite?: ShareInviteView | null) => void;
+  setShareInvite: (invite: ShareInviteView | null) => void;
+  closeShare: () => void;
+  // 알림 센터 (overlay) — 공유 폴더 코멘트 알림 목록·읽음 관리
+  notificationsOpen: boolean;
+  openNotifications: () => void;
+  closeNotifications: () => void;
+  // 코멘트 스레드 팝오버 (null = 닫힘)
+  commentThread: CommentThreadTarget | null;
+  openCommentThread: (roomId: string, anchor: CommentAnchor) => void;
+  closeCommentThread: () => void;
+  // 공유 폴더 만들기·참가 다이얼로그 (overlay, null = 닫힘)
+  shareDialog: ShareDialogState | null;
+  openShareCreate: (folderPath: string | null) => void;
+  openShareJoin: () => void;
+  closeShareDialog: () => void;
   // in-app update-check popup (immediate feedback on "업데이트 확인")
   updateStatus: UpdateStatus | null;
   setUpdateStatus: (s: UpdateStatus | null) => void;
@@ -455,6 +496,11 @@ export const useUi = create<UiState>((set, get) => ({
       updatesOpen: false,
       settingsOpen: false,
       manualOpen: false,
+      shareOpen: false,
+      shareRoomId: null,
+      shareInvite: null,
+      shareDialog: null,
+      notificationsOpen: false,
       overlayStack: [],
     }),
   historyOpen: false,
@@ -487,6 +533,42 @@ export const useUi = create<UiState>((set, get) => ({
   manualOpen: false,
   openManual: () => set((s) => ({ manualOpen: true, overlayStack: pushOverlay(s.overlayStack, 'manual') })),
   closeManual: () => set((s) => ({ manualOpen: false, overlayStack: removeOverlay(s.overlayStack, 'manual') })),
+  shareOpen: false,
+  shareRoomId: null,
+  shareInvite: null,
+  openShare: (roomId, invite = null) =>
+    set((s) => ({
+      shareOpen: true,
+      shareRoomId: roomId,
+      shareInvite: invite,
+      overlayStack: pushOverlay(s.overlayStack, 'share'),
+    })),
+  setShareInvite: (invite) => set({ shareInvite: invite }),
+  closeShare: () =>
+    set((s) => ({
+      shareOpen: false,
+      shareRoomId: null,
+      shareInvite: null,
+      overlayStack: removeOverlay(s.overlayStack, 'share'),
+    })),
+  notificationsOpen: false,
+  openNotifications: () =>
+    set((s) => ({ notificationsOpen: true, overlayStack: pushOverlay(s.overlayStack, 'notifications') })),
+  closeNotifications: () =>
+    set((s) => ({ notificationsOpen: false, overlayStack: removeOverlay(s.overlayStack, 'notifications') })),
+  commentThread: null,
+  openCommentThread: (roomId, anchor) => set({ commentThread: { roomId, anchor } }),
+  closeCommentThread: () => set((s) => (s.commentThread ? { commentThread: null } : s)),
+  shareDialog: null,
+  openShareCreate: (folderPath) =>
+    set((s) => ({
+      shareDialog: { kind: 'create', folderPath },
+      overlayStack: pushOverlay(s.overlayStack, 'shareDialog'),
+    })),
+  openShareJoin: () =>
+    set((s) => ({ shareDialog: { kind: 'join' }, overlayStack: pushOverlay(s.overlayStack, 'shareDialog') })),
+  closeShareDialog: () =>
+    set((s) => ({ shareDialog: null, overlayStack: removeOverlay(s.overlayStack, 'shareDialog') })),
   updateStatus: null,
   setUpdateStatus: (s) => set({ updateStatus: s }),
   whatsNew: null,

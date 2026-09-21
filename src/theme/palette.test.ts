@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contrastInk, TAG_KEYS } from './palette';
+import { contrastInk, presenceKey, PRESENCE_KEYS, TAG_KEYS } from './palette';
 
 describe('contrastInk', () => {
   it('falls back to dark ink for an unset/unknown color', () => {
@@ -16,5 +16,23 @@ describe('contrastInk', () => {
       expect(['dark', 'light']).toContain(ink);
     }
     expect(contrastInk('yellow', 'light')).toBe('dark');
+  });
+});
+
+describe('presenceKey (공유 노트 참가자 표시색)', () => {
+  it('같은 참가자 id는 항상 같은 색 키를 받는다', () => {
+    expect(presenceKey('p-abc123')).toBe(presenceKey('p-abc123'));
+  });
+
+  it('태그 팔레트 키만 쓰고 노란색은 제외한다(밝은 테마 대비)', () => {
+    expect(PRESENCE_KEYS).not.toContain('yellow');
+    for (const k of PRESENCE_KEYS) expect(TAG_KEYS).toContain(k);
+    for (let i = 0; i < 200; i++) expect(PRESENCE_KEYS).toContain(presenceKey(`participant-${i}`));
+  });
+
+  it('여러 참가자가 여러 색으로 흩어진다(전부 같은 색으로 몰리지 않는다)', () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 60; i++) seen.add(presenceKey(`participant-${i}`));
+    expect(seen.size).toBeGreaterThanOrEqual(5);
   });
 });

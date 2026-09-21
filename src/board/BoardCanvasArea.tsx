@@ -10,7 +10,8 @@ import {
 } from 'react';
 import { useBoard, useBoardStore } from '../store/boardStore';
 import { useUi } from '../store/uiStore';
-import { BoardElementView } from './BoardElementView';
+import { BoardElementView, elementLabel } from './BoardElementView';
+import { useCommentFileTarget } from '../store/commentStore';
 import { BoardSelectionToolbar } from './BoardSelectionToolbar';
 import { BoardConnectorToolbar } from './BoardConnectorToolbar';
 import { BoardContextMenu } from './BoardContextMenu';
@@ -242,6 +243,11 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const hasClipboard = useBoard((s) => s.hasClipboard);
   const cutElements = useBoard((s) => s.cutElements);
   const selectAll = useBoard((s) => s.selectAll);
+  // 공유로 받은 읽기 전용 보드(뷰어): 이동·리사이즈·연결·텍스트 편집·삭제 제스처와 편집 툴바를 모두 끈다.
+  // (선택·팬/줌·복사·필터는 그대로 — 스토어도 모든 변경을 차단하므로 여기는 "보이지 않게/반응하지 않게"의 UI 계층이다.)
+  const readOnly = useBoard((s) => s.readOnly);
+  // 공유 폴더의 보드면(소유자·뷰어 모두) 요소에 코멘트를 남길 수 있다 — 코멘트는 문서를 바꾸지 않으므로 뷰어에서도 된다.
+  const commentTarget = useCommentFileTarget(boardFilePath);
 
   // A color/shape filter is active — see the `filterPositions` block further
   // down for what this changes about rendering. Computed early because the
@@ -428,6 +434,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   // onBackgroundPointerDown lands on .board-canvas itself either way, so
   // there's no capturing-element mismatch to break the synthesized dblclick.
   const onCanvasDoubleClick = (e: React.MouseEvent) => {
+    if (readOnly) return; // 뷰어: 빈 곳 더블클릭으로 스티키를 만들지 않는다
     if (activeFilter) return; // world coords under the cursor don't match what's on screen in grid view
     const w = toWorld(e.clientX, e.clientY);
     const { elements, order } = store.getState().board;
@@ -467,6 +474,13 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     // re-render, evaluated against the now-removed, non-focusable original
     // target) blurs the textarea straight back out again.
     e.preventDefault();
+    if (readOnly) {
+      // 뷰어: 선택만 한다 — 더블클릭 편집·이동 드래그 없음
+      containerRef.current?.focus();
+      const already = selection.includes(id);
+      setSelection(e.shiftKey ? (already ? selection.filter((x) => x !== id) : [...selection, id]) : already ? selection : [id]);
+      return;
+    }
     const now = Date.now();
     // Which text region (main vs. a specific fused note block) was actually
     // hit — BoardElementView tags each with data-board-region so a double-
@@ -498,6 +512,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
 
   const beginResize = (e: React.PointerEvent, id: string, handle: Handle) => {
     e.stopPropagation();
+    if (readOnly) return;
     containerRef.current?.setPointerCapture(e.pointerId);
     const el = board.elements[id];
     if (!el || !isBoxElement(el)) return;
@@ -520,6 +535,11 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   const onElementContextMenu = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
+    if (readOnly) {
+      setSelection([id]); // 뷰어: 편집 메뉴는 없다 — 선택만(공유 보드면 "코멘트 남기기"만 있는 메뉴)
+      if (commentTarget) setElementContextMenu({ ids: [id], x: e.clientX, y: e.clientY });
+      return;
+    }
     const alreadyInMultiSelection = selection.length > 1 && selection.includes(id);
     const ids = alreadyInMultiSelection ? selection : [id];
     if (!alreadyInMultiSelection) setSelection([id]);
@@ -540,6 +560,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
+    if (readOnly) return;
     containerRef.current?.setPointerCapture(e.pointerId);
     dragRef.current = {
       mode: 'connect',
@@ -578,6 +599,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
+    if (readOnly) return;
     containerRef.current?.setPointerCapture(e.pointerId);
     setSelection([connectorId]);
     dragRef.current = { mode: 'reattach', connectorId, end, otherId, otherAnchor, otherNoteIndex };
@@ -600,6 +622,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   };
 
   const createConnectedChild = (fromId: string, side: BoardAnchorSide, fromNoteIndex?: number) => {
+    if (readOnly) return;
     const fromEl = store.getState().board.elements[fromId];
     if (!fromEl || !isBoxElement(fromEl)) return;
     const fromBox = anchorBoxFor(fromEl, fromNoteIndex, noteHeights[fromId]);
@@ -812,6 +835,21 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
   // creates and connects a new one (same as clicking that anchor).
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (editingTarget || editingLabelId) return; // let the textarea/input handle its own keys, incl. native text copy/paste
+    if (readOnly) {
+      // 뷰어: 보기 동작만 — 선택 해제·복사·전체 선택. 삭제·붙여넣기·잘라내기·Enter 편집·방향키 확장은 무시한다.
+      if (e.key === 'Escape') setSelection([]);
+      else if ((e.metaKey || e.ctrlKey) && e.key === 'c' && selection.length) {
+        e.preventDefault();
+        copyElements();
+        useUi.getState().toast('복사함');
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault();
+        selectAll();
+      } else if (['Delete', 'Backspace', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+      }
+      return;
+    }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length) {
       e.preventDefault();
       removeElements(selection);
@@ -1037,7 +1075,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
               selected={selection.includes(id)}
               editingField={editingTarget?.id === id ? editingTarget.field : null}
               editingNoteIndex={editingTarget?.id === id && editingTarget.field === 'note' ? editingTarget.index : null}
-              showAnchors={!activeFilter && (selection.includes(id) || hoveredId === id || isConnectTarget)}
+              showAnchors={!readOnly && !activeFilter && (selection.includes(id) || hoveredId === id || isConnectTarget)}
               snapAnchor={
                 isConnectTarget && connectPreview.snapAnchor
                   ? { side: connectPreview.snapAnchor, noteIndex: connectPreview.targetNoteIndex }
@@ -1099,12 +1137,12 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => {
                   setSelection([id]);
-                  setEditingLabelId(id);
+                  if (!readOnly) setEditingLabelId(id);
                 }}
               >
                 {el.label}
               </button>
-            ) : selected ? (
+            ) : selected && !readOnly ? (
               <button
                 className="board-label-chip ghost selected"
                 style={{ left: mid.x, top: mid.y }}
@@ -1116,7 +1154,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
               </button>
             ) : null}
 
-            {selected && (
+            {selected && !readOnly && (
               <>
                 <div
                   className="board-connector-endpoint"
@@ -1161,7 +1199,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
             );
           })()}
 
-        {singleBoxSelected && !editingTarget && !activeFilter && (
+        {singleBoxSelected && !editingTarget && !activeFilter && !readOnly && (
           <div
             className="board-resize-handles"
             style={{ left: singleBoxSelected.x, top: singleBoxSelected.y, width: singleBoxSelected.width, height: singleBoxSelected.height }}
@@ -1185,7 +1223,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
         )}
       </div>
 
-      {toolbarElements && toolbarPos && (
+      {!readOnly && toolbarElements && toolbarPos && (
         <BoardSelectionToolbar
           key={toolbarElements.map((s) => s.id).join(',')}
           elements={toolbarElements}
@@ -1202,7 +1240,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
         />
       )}
 
-      {allConnectorsSelected && connectorToolbarPos && (
+      {!readOnly && allConnectorsSelected && connectorToolbarPos && (
         <BoardConnectorToolbar
           key={selectedConnectorIds.join(',')}
           color={(board.elements[selectedConnectorIds[0]] as BoardConnectorElement).color}
@@ -1238,6 +1276,20 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
           ids={elementContextMenu.ids}
           x={elementContextMenu.x}
           y={elementContextMenu.y}
+          viewer={readOnly}
+          onComment={
+            commentTarget
+              ? (id) => {
+                  const el = store.getState().board.elements[id];
+                  useUi.getState().openCommentThread(commentTarget.roomId, {
+                    kind: 'board',
+                    fileId: commentTarget.fileId,
+                    targetId: id,
+                    label: el ? elementLabel(el) : undefined,
+                  });
+                }
+              : undefined
+          }
           onClose={() => setElementContextMenu(null)}
         />
       )}
@@ -1245,7 +1297,7 @@ export const BoardCanvasArea = forwardRef<BoardCanvasHandle, Props>(function Boa
       {isEmpty && (
         <div className="empty">
           <div className="title">빈 보드</div>
-          <div className="hint">위 툴바에서 스티키노트를 추가해 시작하세요</div>
+          <div className="hint">{readOnly ? '소유자가 아직 내용을 만들지 않았어요' : '위 툴바에서 스티키노트를 추가해 시작하세요'}</div>
         </div>
       )}
     </div>

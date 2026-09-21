@@ -5,6 +5,15 @@ import { useUi } from '../store/uiStore';
 import { useBoard, type BoardElementPatch } from '../store/boardStore';
 import { revealBoardNodeLink, revealBoardNoteLink } from './boardLinks';
 import { Icon } from '../ui/Icon';
+import { safeExternalUrl } from '../io/linkSafety';
+import { useCommentFileTarget, useTargetCommentCount } from '../store/commentStore';
+
+/** 코멘트 앵커 라벨 — 요소에 보이는 글자(스티키 본문, 이미지 대체 텍스트). */
+export function elementLabel(el: BoardElement): string {
+  if (el.kind === 'sticky') return el.text;
+  if (el.kind === 'image') return el.alt ?? '';
+  return '';
+}
 
 const ANCHORS: BoardAnchorSide[] = ['top', 'right', 'bottom', 'left'];
 const FONT_PX: Record<string, number> = { small: 12, medium: 13.5, large: 16.5 };
@@ -24,11 +33,14 @@ function hostOf(url: string): string {
  *  gained them alongside sticky) and open/unlink identically. */
 function LinkChips({
   el,
+  readOnly,
   setNodeLink,
   setNoteLink,
   updateElement,
 }: {
   el: BoardStickyElement | BoardImageElement;
+  /** 뷰어(공유로 받은 읽기 전용 보드) — 링크는 열 수 있지만 해제 버튼은 숨긴다. */
+  readOnly: boolean;
   setNodeLink: (id: string, link: null) => void;
   setNoteLink: (id: string, ref: null) => void;
   updateElement: (id: string, patch: BoardElementPatch) => void;
@@ -44,18 +56,20 @@ function LinkChips({
         >
           <Icon name="mindmap" />
           <span className="board-sticky-link-text">{el.nodeLink.nodeText || '노드'}</span>
-          <span
-            className="board-sticky-link-x"
-            role="button"
-            title="연결 해제"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              setNodeLink(el.id, null);
-            }}
-          >
-            <Icon name="close" />
-          </span>
+          {!readOnly && (
+            <span
+              className="board-sticky-link-x"
+              role="button"
+              title="연결 해제"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setNodeLink(el.id, null);
+              }}
+            >
+              <Icon name="close" />
+            </span>
+          )}
         </button>
       )}
       {el.noteLink && (
@@ -63,22 +77,24 @@ function LinkChips({
           className="board-sticky-link"
           title={el.noteLink.title ? `노트 열기: ${el.noteLink.title}` : '노트 열기'}
           onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => void revealBoardNoteLink(el.noteLink!.notePath)}
+          onClick={() => void revealBoardNoteLink(el.noteLink!)}
         >
           <Icon name="note" />
           <span className="board-sticky-link-text">{el.noteLink.title || '노트'}</span>
-          <span
-            className="board-sticky-link-x"
-            role="button"
-            title="연결 해제"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              setNoteLink(el.id, null);
-            }}
-          >
-            <Icon name="close" />
-          </span>
+          {!readOnly && (
+            <span
+              className="board-sticky-link-x"
+              role="button"
+              title="연결 해제"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setNoteLink(el.id, null);
+              }}
+            >
+              <Icon name="close" />
+            </span>
+          )}
         </button>
       )}
       {el.link && (
@@ -86,22 +102,29 @@ function LinkChips({
           className="board-sticky-link"
           title={`링크 열기: ${el.link}`}
           onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => window.open(el.link, '_blank')}
+          onClick={() => {
+            // 공유로 받은 보드의 링크는 원격이 채울 수 있다 — http(s)·mailto만 연다(main도 한 번 더 막는다).
+            const safe = safeExternalUrl(el.link);
+            if (safe) window.open(safe, '_blank');
+            else useUi.getState().toast('열 수 없는 링크예요 — http(s)·메일 주소만 열 수 있어요');
+          }}
         >
           <Icon name="external" />
           <span className="board-sticky-link-text">{hostOf(el.link)}</span>
-          <span
-            className="board-sticky-link-x"
-            role="button"
-            title="연결 해제"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              updateElement(el.id, { link: '' });
-            }}
-          >
-            <Icon name="close" />
-          </span>
+          {!readOnly && (
+            <span
+              className="board-sticky-link-x"
+              role="button"
+              title="연결 해제"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                updateElement(el.id, { link: '' });
+              }}
+            >
+              <Icon name="close" />
+            </span>
+          )}
         </button>
       )}
     </>
@@ -187,6 +210,12 @@ export function BoardElementView({
   const setNodeLink = useBoard((s) => s.setNodeLink);
   const setNoteLink = useBoard((s) => s.setNoteLink);
   const updateElement = useBoard((s) => s.updateElement);
+  // 공유로 받은 읽기 전용 보드(뷰어): 앵커·노트 삭제·링크 해제 어포던스를 그리지 않는다.
+  const readOnly = useBoard((s) => s.readOnly);
+  // 공유 폴더의 코멘트(소유자·참가자 모두, 뷰어 포함): 코멘트가 달린 요소에는 개수 칩이 붙는다. 일반(비공유) 보드에는 아무것도 그려지지 않는다.
+  const boardPath = useBoard((s) => s.filePath);
+  const commentTarget = useCommentFileTarget(boardPath);
+  const commentCount = useTargetCommentCount(commentTarget, el.id);
 
   // Measure every fused note box's rendered height and report it up — see
   // the `onNoteHeightsChange` prop doc. Mirrors canvas/NodeView.tsx's own
@@ -223,11 +252,36 @@ export function BoardElementView({
   return (
     <div
       className={`board-el board-el--${el.kind}${selected ? ' selected' : ''}`}
+      data-element-id={el.id}
       style={style}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
       onContextMenu={onContextMenu}
     >
+      {commentTarget && commentCount > 0 && (
+        <button
+          className="board-el-comment"
+          data-testid="comment-chip"
+          title={`코멘트 ${commentCount}개 — 눌러서 보기`}
+          aria-label={`코멘트 ${commentCount}개`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            useUi.getState().openCommentThread(commentTarget.roomId, {
+              kind: 'board',
+              fileId: commentTarget.fileId,
+              targetId: el.id,
+              label: elementLabel(el),
+            });
+          }}
+        >
+          <Icon name="comment" />
+          <span>{commentCount}</span>
+        </button>
+      )}
+
       {el.kind === 'sticky' && (
         <div
           className={`board-el-body board-sticky board-sticky--${el.shape ?? 'rect'}`}
@@ -266,14 +320,14 @@ export function BoardElementView({
               />
             ) : (
               <div className="board-el-text" style={textStyle}>
-                {el.text || <span className="board-el-placeholder">더블클릭해 입력</span>}
+                {el.text || (readOnly ? null : <span className="board-el-placeholder">더블클릭해 입력</span>)}
               </div>
             )}
           </div>
 
           {(el.nodeLink || el.noteLink || el.link) && (
             <div className="board-sticky-links" data-board-region="links">
-              <LinkChips el={el} setNodeLink={setNodeLink} setNoteLink={setNoteLink} updateElement={updateElement} />
+              <LinkChips el={el} readOnly={readOnly} setNodeLink={setNodeLink} setNoteLink={setNoteLink} updateElement={updateElement} />
             </div>
           )}
         </div>
@@ -304,11 +358,11 @@ export function BoardElementView({
         // 스티키의 notes[]와 같은 자리(카드 아래, normal flow) — 사진 높이를 침범하지
         // 않고 그 아래로 쌓인다 (2026-09-07).
         <div className="board-image-links" style={{ width: el.width }} data-board-region="links">
-          <LinkChips el={el} setNodeLink={setNodeLink} setNoteLink={setNoteLink} updateElement={updateElement} />
+          <LinkChips el={el} readOnly={readOnly} setNodeLink={setNodeLink} setNoteLink={setNoteLink} updateElement={updateElement} />
         </div>
       )}
 
-      {ANCHORS.map((side) => (
+      {!readOnly && ANCHORS.map((side) => (
         <div
           key={side}
           // Always mounted (2026-09-06) — a conditionally-mounted anchor needs
@@ -360,17 +414,19 @@ export function BoardElementView({
                 />
               ) : (
                 <div className="board-el-text" style={textStyle}>
-                  {noteText || <span className="board-el-placeholder">더블클릭해 입력</span>}
+                  {noteText || (readOnly ? null : <span className="board-el-placeholder">더블클릭해 입력</span>)}
                 </div>
               )}
-              <button
-                className="board-sticky-note-del"
-                title="이 텍스트 박스 삭제"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => onRemoveNote(i)}
-              >
-                <Icon name="close" />
-              </button>
+              {!readOnly && (
+                <button
+                  className="board-sticky-note-del"
+                  title="이 텍스트 박스 삭제"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => onRemoveNote(i)}
+                >
+                  <Icon name="close" />
+                </button>
+              )}
               {/* A connector can attach here too, not just the sticky's main
                   card (2026-09-09) — `.board-sticky-note` isn't clipped (no
                   overflow:hidden, unlike `.board-sticky`), so these anchors
@@ -380,15 +436,16 @@ export function BoardElementView({
                   it tracks its auto-grown height with no extra math needed
                   here — only the canvas's connector-routing math (outside
                   this component) needs the measured height. */}
-              {ANCHORS.map((side) => (
-                <div
-                  key={side}
-                  className={`board-anchor board-anchor--${side}${showAnchors ? ' active' : ''}${
-                    snapAnchor && snapAnchor.noteIndex === i && snapAnchor.side === side ? ' board-anchor--snap' : ''
-                  }`}
-                  onPointerDown={(e) => onAnchorPointerDown(side, e, i)}
-                />
-              ))}
+              {!readOnly &&
+                ANCHORS.map((side) => (
+                  <div
+                    key={side}
+                    className={`board-anchor board-anchor--${side}${showAnchors ? ' active' : ''}${
+                      snapAnchor && snapAnchor.noteIndex === i && snapAnchor.side === side ? ' board-anchor--snap' : ''
+                    }`}
+                    onPointerDown={(e) => onAnchorPointerDown(side, e, i)}
+                  />
+                ))}
             </div>
           ))}
         </div>

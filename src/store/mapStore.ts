@@ -5,6 +5,7 @@ import type { TagKey } from '../theme/palette';
 import { emptyDoc, newId } from '../io/formats';
 import { parseScheduleText, parseHashtagColor } from './parseNodeText';
 import { resolveOverlaps, type TidyBox } from '../layout/tidyOverlaps';
+import { guardActions, guardSet } from './readOnlyGuard';
 
 /** One root's current anchor + subtree bounding box, for overlap resolution. */
 export interface TidyRoot {
@@ -66,6 +67,31 @@ export function setNoteLinkRenameHook(fn: ((mapId: string, nodeId: string, text:
   noteLinkRenameHook = fn;
 }
 
+/**
+ * 읽기 전용(뷰어) 문서에서도 동작하는 액션 — 로컬 표시 상태(선택·필터·접기·팬/줌)와 문서 수명주기·조회뿐이다.
+ * 여기 없는 액션은 전부 자동 차단된다(`readOnlyGuard.guardActions`) — 새 액션을 추가할 때 문서를 바꾸는 것이면
+ * 절대 여기 넣지 않는다.
+ */
+export const MAP_VIEWER_ALLOWED: ReadonlySet<string> = new Set([
+  'loadDoc',
+  'markSaved',
+  'setFilePath',
+  'setReadOnly',
+  'refreshViewerDoc',
+  'select',
+  'toggleSelect',
+  'selectMany',
+  'cancelEdit',
+  'setFocus',
+  'setColorFilter',
+  'toggleFilterAncestors',
+  'toggleFilterDescendants',
+  'toggleCollapse',
+  'copyNode',
+  'navigate',
+  'setView',
+]);
+
 interface MapState {
   doc: MindMapDoc;
   selectedId: string | null; // primary selection (last clicked)
@@ -73,6 +99,8 @@ interface MapState {
   editingId: string | null;
   filePath: string | null;
   dirty: boolean;
+  /** 공유 폴더에서 받은 맵(참가자 뷰어) — true면 문서를 바꾸는 모든 액션이 차단되고 저장되지 않는다. */
+  readOnly: boolean;
   past: MindMapDoc[];
   future: MindMapDoc[];
   // timestamp (ms) of the last edit-commit; used to swallow the Enter that ends editing
@@ -85,6 +113,10 @@ interface MapState {
   newDoc: () => void;
   markSaved: (filePath: string) => void;
   setFilePath: (filePath: string) => void;
+  /** 뷰어 표시를 켠다(끄지 않는다 — 공유가 끝나도 읽기 전용을 유지). 켜면 dirty도 즉시 해제. */
+  setReadOnly: (on: boolean) => void;
+  /** 뷰어 문서를 소유자의 새 버전으로 바꾼다(선택·팬/줌은 유지, 이력 없음). 읽기 전용이 아니면 아무 일도 안 한다. */
+  refreshViewerDoc: (doc: MindMapDoc) => void;
 
   // selection / editing
   select: (id: string | null) => void;
@@ -234,7 +266,9 @@ export type MapStore = StoreApi<MapState>;
 
 /** Each open document/tab owns its own isolated store instance. */
 export function createMapStore(): MapStore {
-  return createStore<MapState>((set, get) => {
+  return createStore<MapState>((rawSet, get) => {
+  // 뷰어(읽기 전용)에서는 어떤 경로로도 dirty가 되지 않게 set을 감싼다.
+  const set = guardSet<MapState>(rawSet, get);
   // A node created for immediate editing (addChild/addRoot/…). Its creation is NOT
   // snapshotted, so create + first-text-commit collapse into ONE undo step (A5).
   // Held per-store. Resolved by commitText (fold), or deleteNode/cancelEdit (drop).
@@ -266,8 +300,9 @@ export function createMapStore(): MapStore {
     set({ doc: draft, future: [], dirty: true });
   };
 
-  return {
+  const state: MapState = {
     doc: emptyDoc(),
+    readOnly: false,
     selectedId: null,
     selectedIds: [],
     editingId: null,
@@ -344,6 +379,25 @@ export function createMapStore(): MapStore {
 
     markSaved: (filePath) => set({ filePath, dirty: false }),
     setFilePath: (filePath) => set({ filePath }),
+    setReadOnly: (on) => {
+      if (on) set({ readOnly: true, dirty: false, editingId: null });
+    },
+    refreshViewerDoc: (doc) => {
+      const s = get();
+      if (!s.readOnly) return;
+      const selectedIds = s.selectedIds.filter((id) => doc.nodes[id]);
+      const selectedId = s.selectedId && doc.nodes[s.selectedId] ? s.selectedId : selectedIds[selectedIds.length - 1] ?? doc.rootIds[0] ?? null;
+      // 소유자의 팬/줌은 가져오지 않는다 — 보는 사람의 시점을 유지한다.
+      set({
+        doc: { ...doc, view: s.doc.view },
+        past: [],
+        future: [],
+        dirty: false,
+        editingId: null,
+        selectedId,
+        selectedIds: selectedIds.length ? selectedIds : selectedId ? [selectedId] : [],
+      });
+    },
 
     select: (id) => set({ selectedId: id, selectedIds: id ? [id] : [], editingId: null }),
     toggleSelect: (id) => {
@@ -1145,6 +1199,11 @@ export function createMapStore(): MapStore {
         dirty: true,
       })),
   };
+  // 문서를 바꾸는 모든 액션은 뷰어(readOnly)에서 기본 차단 — 허용 목록만 열려 있다.
+  return guardActions(state, get, {
+    allow: MAP_VIEWER_ALLOWED,
+    blockedResult: { captureScheduled: '', hasClipboard: false },
+  });
   });
 }
 

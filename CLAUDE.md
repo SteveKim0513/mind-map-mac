@@ -21,10 +21,10 @@
 ## Required Commands
 
 ```bash
-make setup                   # npm ci
+make setup                   # npm ci (앱 + server/)
 make dev-safe                # Electron + Vite 개발 서버 (격리된 임시 환경)
 make dev-safe quiet=1        # 위와 동일 + 화면 밖·포커스 안 뺏음 (사람이 안 볼 때, 에이전트 자체 검증용)
-make verify                  # typecheck + unit test  ← 완료 주장 전 반드시 실행
+make verify                  # typecheck + unit test + server/ test  ← 완료 주장 전 반드시 실행
 make verify-feature tag=@x   # verify + 해당 도메인 E2E만  ← 기능 단위 검증 (개발 루프)
 make verify-full             # typecheck + unit test + build  ← PR 전 반드시 실행
 make pre-release             # verify-full + 전체 E2E  ← 배포(make bump) 전 반드시 실행
@@ -78,6 +78,7 @@ UI·CSS 작업 시 **반드시** 먼저 읽는다:
 
 - `git push --force`, `git reset --hard`, 브랜치·태그 삭제
 - `npm run dist` (운영 배포)
+- 릴레이 서버 배포(`railway up`)·`electron/shareConfig.ts`의 `DEFAULT_RELAY_URL` 변경 (공유 폴더 트래픽 목적지, 결정 0021)
 - `MindMapDoc.version` 스키마 변경
 - GitHub Secrets 변경
 - `.claude/settings.json`의 `deny` 규칙 제거

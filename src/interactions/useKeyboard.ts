@@ -27,6 +27,67 @@ export function useKeyboard() {
 
       const sel = s.selectedId;
 
+      // 뷰어(공유로 받은 읽기 전용 맵): 보기 동작만 — 이동·접기·확대·복사. 그 밖의 키(편집·삭제·붙여넣기·⌘Enter·⌘L)는 무시한다.
+      if (s.readOnly) {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'c' && sel) {
+          e.preventDefault();
+          s.copyNode(sel);
+          useUi.getState().toast('복사함');
+          return;
+        }
+        if (e.metaKey || e.ctrlKey) {
+          const n = sel ? s.doc.nodes[sel] : null;
+          if (e.key === 'ArrowLeft' && n && n.children.length && !n.collapsed) {
+            e.preventDefault();
+            s.toggleCollapse(sel!);
+          } else if (e.key === 'ArrowRight' && n && n.children.length && n.collapsed) {
+            e.preventDefault();
+            s.toggleCollapse(sel!);
+          }
+          return;
+        }
+        switch (e.key) {
+          case 'ArrowUp':
+            e.preventDefault();
+            s.navigate('up');
+            break;
+          case 'ArrowDown':
+            e.preventDefault();
+            s.navigate('down');
+            break;
+          case 'ArrowLeft':
+            e.preventDefault();
+            s.navigate('left');
+            break;
+          case 'ArrowRight':
+            e.preventDefault();
+            s.navigate('right');
+            break;
+          case 'z':
+          case 'Z':
+            if (sel) {
+              e.preventDefault();
+              useUi.getState().zoomTo(sel);
+            }
+            break;
+          case 'Escape':
+            e.preventDefault();
+            if (s.focusRootId) s.setFocus(null);
+            else if (s.colorFilter) s.setColorFilter(null);
+            else s.select(null);
+            break;
+          case 'Tab':
+          case 'Enter':
+          case ' ':
+          case 'F2':
+          case 'Delete':
+          case 'Backspace':
+            e.preventDefault(); // 편집 키 — 아무 일도 하지 않는다
+            break;
+        }
+        return;
+      }
+
       // ⌘C / ⌘V — copy / paste a subtree
       if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'v')) {
         if (e.key === 'c' && sel) {

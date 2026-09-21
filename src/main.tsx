@@ -5,6 +5,10 @@ import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import './styles.css';
 import App from './App';
 import { CaptureWindow } from './ui/CaptureWindow';
+import { installRendererDiagnostics } from './diagnostics';
+
+// 전역 오류(`error`·`unhandledrejection`)를 앱 로그의 `[renderer]` 줄로 남긴다 — 동작 변경 없음, 개인정보 없이(diagnostics.ts).
+installRendererDiagnostics((level, message) => window.api?.log?.(level, 'renderer', message));
 
 // The global quick-capture window (electron/main.ts) loads this same bundle
 // with ?capture=1 instead of a second entry point — REDESIGN-VISION §3-1.

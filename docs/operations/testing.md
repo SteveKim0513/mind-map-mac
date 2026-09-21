@@ -29,14 +29,23 @@ make e2e-tag tag=@calendar    # build + 해당 도메인 태그 spec만
 
 E2E는 먼저 `npm run build`를 실행하므로 시간이 걸린다. 실행은 `scripts/e2e-run.mjs`가 **2단계**로 처리한다: 대부분의 spec을 병렬(`playwright.config.ts`의 `workers`, 기본 로컬 4)로 돌린 뒤, frontmost(앱 활성화)에 의존해 병렬이 불가능한 `@serial` 테스트만 `workers=1`로 직렬 실행한다. 그래도 빌드+전체 실행은 비싸므로 개발 중에는 도메인 태그로 부분 실행한다.
 
-**도메인 태그 어휘 (10개)**: `@map` `@calendar` `@schedule` `@focus` `@todo` `@note` `@capture` `@command` `@nav` `@view`. 모든 `test(...)`가 태그를 가지며(`{ tag: ['@x'] }`), 한 spec이 여러 태그를 가질 수 있다. 여러 도메인 동시 실행은 `tag="@calendar|@focus"`. 규칙·태깅 상세는 `.claude/rules/testing.md`.
+**도메인 태그 어휘 (12개)**: `@map` `@calendar` `@schedule` `@focus` `@todo` `@note` `@capture` `@command` `@nav` `@view` `@board` `@share`. 모든 `test(...)`가 태그를 가지며(`{ tag: ['@x'] }`), 한 spec이 여러 태그를 가질 수 있다. 여러 도메인 동시 실행은 `tag="@calendar|@focus"`. 규칙·태깅 상세는 `.claude/rules/testing.md`.
+
+## 릴레이 서버(`server/`) 테스트
+
+```bash
+npm --prefix server test       # vitest (실제 서버를 임의 포트로 띄워 REST·WebSocket 통합 테스트)
+npm --prefix server run build  # server/dist — 앱 E2E(@share)가 import한다
+```
+
+`make verify` 계열이 server 빌드·테스트를 이미 포함한다. `@share` E2E는 test마다 `server/dist/relay.js`의 `startRelay({ port: 0 })`(메모리 DB)로 자체 릴레이를 띄우고, 인스턴스는 `launchApp({ env: { MINDMAP_RELAY_URL } })`로 연결한다 — `scripts/e2e-run.mjs`가 `server/dist`를 보장한다. 상세 규칙(병렬 안전·`reuse` 재시작 시뮬레이션·시각 확인)은 `.claude/rules/testing.md`의 "공유 폴더(`@share`) E2E".
 
 ## 전체 검증
 
 ```bash
-make verify                   # typecheck + unit test (빠름, 완료 전 필수)
+make verify                   # typecheck + unit test + server/ test (빠름, 완료 전 필수)
 make verify-feature tag=@x    # verify + 해당 도메인 E2E만 (기능 단위 검증)
-make verify-full              # typecheck + unit test + build (PR 전 필수)
+make verify-full              # typecheck + unit test + server/ test + build (PR 전 필수)
 make pre-release              # verify-full + 전체 E2E (배포 게이트 — make bump 전 필수)
 ```
 

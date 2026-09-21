@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useWorkspace } from '../store/workspaceStore';
 import { openLightbox } from './ImageLightbox';
+import { safeExternalUrl } from '../io/linkSafety';
 
 // Compact, dependency-free Markdown → React renderer used for the read-only note
 // peek popup (NotePopup). Handles the common blocks (headings, lists, quotes,
@@ -34,12 +35,22 @@ function inline(text: string): ReactNode[] {
     } else if (m[5] !== undefined) out.push(<strong key={k()}>{m[5]}</strong>);
     else if (m[7] !== undefined) out.push(<em key={k()}>{m[7]}</em>);
     else if (m[9] !== undefined) out.push(<code key={k()}>{m[9]}</code>);
-    else if (m[11] !== undefined)
+    else if (m[11] !== undefined) {
+      // 공유 노트 본문 등 원격이 쓴 마크다운일 수 있다 — http(s)·mailto만 링크로 만들고, 그 밖(file:·smb:·javascript:·상대 경로…)은
+      // 클릭할 수 없는 글자로만 보여 준다(클릭이 OS로 위험한 URL을 넘기지 못하게).
+      const href = safeExternalUrl(m[12]);
       out.push(
-        <a key={k()} href={m[12]} target="_blank" rel="noreferrer">
-          {m[11]}
-        </a>,
+        href ? (
+          <a key={k()} href={href} target="_blank" rel="noreferrer">
+            {m[11]}
+          </a>
+        ) : (
+          <span key={k()} title="열 수 없는 링크">
+            {m[11]}
+          </span>
+        ),
       );
+    }
     else if (m[13] !== undefined) {
       // note wiki-link → styled chip (inert in this read-only preview); dim when
       // the target note doesn't exist

@@ -6,6 +6,8 @@ import { deserialize, serialize, newId } from './../io/formats';
 import { parseNote, serializeNote } from './../io/noteFormat';
 import { parseBoard, serializeBoard } from './../io/boardFormat';
 import { useUi } from './uiStore';
+import { isViewerFile, notifyFileSaved, useShare } from './shareStore';
+import { saveSharedNote } from './sharedNoteSave';
 
 export type TabKind = 'map' | 'note' | 'board' | 'calendar';
 
@@ -93,6 +95,11 @@ interface SessionState {
   renamePath: (oldPath: string, newPath: string) => void;
   flushSaves: (target: string) => Promise<void>;
   reloadIfOpen: (path: string) => Promise<void>;
+  /**
+   * 열린 맵·보드 탭 가운데 공유로 받은 읽기 전용 파일(`isViewerFile`)을 뷰어 모드로 바꾼다. 세션 복원처럼 공유 연결
+   * (경로 맵)이 준비되기 전에 탭이 열린 경우를 위한 것 — 뷰어 표시는 켜기만 하고 끄지 않는다.
+   */
+  syncViewerFlags: () => void;
   beginDelete: (path: string) => void; // suppress autosave for path while trashing
   endDelete: (path: string) => void; // resume autosave (on failure or after settle)
   isDeleting: (path: string) => boolean; // true for the path or anything under it
@@ -113,20 +120,36 @@ async function flushTab(t: Tab): Promise<void> {
   if (t.kind === 'note') {
     const st = (t.store as NoteStore).getState();
     if (st.dirty && st.filePath) {
-      const p = await window.api.save(st.filePath, serializeNote(st.note));
-      if (p) (t.store as NoteStore).getState().markSaved(p);
+      if (useShare.getState().isSharedNote(st.filePath)) {
+        // 공유 폴더 노트: 본문은 복제 매니저가 단일 쓰기 주체 — 제목(공유 문서)과 로컬 프론트매터만 저장한다.
+        const p = await saveSharedNote(st.filePath, st.note, { pushTitle: st.titleEdited });
+        if (p && (t.store as NoteStore).getState().note === st.note) {
+          (t.store as NoteStore).getState().markSaved(p);
+          if (st.titleEdited) (t.store as NoteStore).getState().markTitleSynced();
+        }
+      } else {
+        const p = await window.api.save(st.filePath, serializeNote(st.note));
+        if (p) (t.store as NoteStore).getState().markSaved(p);
+      }
     }
   } else if (t.kind === 'board') {
     const st = (t.store as BoardStore).getState();
-    if (st.dirty && st.filePath) {
+    // 뷰어(공유로 받은 읽기 전용 보드)는 절대 저장하지 않는다 — 소유자의 미러 파일이다.
+    if (st.dirty && st.filePath && !st.readOnly) {
       const p = await window.api.save(st.filePath, serializeBoard(st.board));
-      if (p) (t.store as BoardStore).getState().markSaved(p);
+      if (p) {
+        (t.store as BoardStore).getState().markSaved(p);
+        notifyFileSaved(p); // 공유 폴더 소유자면 발행(그 밖에는 아무 일도 없다)
+      }
     }
   } else {
     const st = (t.store as MapStore).getState();
-    if (st.dirty && st.filePath) {
+    if (st.dirty && st.filePath && !st.readOnly) {
       const p = await window.api.save(st.filePath, serialize(st.doc));
-      if (p) (t.store as MapStore).getState().markSaved(p);
+      if (p) {
+        (t.store as MapStore).getState().markSaved(p);
+        notifyFileSaved(p);
+      }
     }
   }
 }
@@ -141,10 +164,13 @@ function makeTab(path: string, content: string): Tab {
   if (isBoardPath(path)) {
     const store = createBoardStore();
     store.getState().loadBoard(parseBoard(content), path);
+    // 공유 폴더에서 소유자에게 받은 보드는 뷰어 모드(읽기 전용) — 스토어 수준에서 모든 변경이 차단된다.
+    if (isViewerFile(useShare.getState().rooms, path)) store.getState().setReadOnly(true);
     return { id: newId(), path, title: base(path), kind: 'board', isTemplate, store };
   }
   const store = createMapStore();
   store.getState().loadDoc(deserialize(content), path);
+  if (isViewerFile(useShare.getState().rooms, path)) store.getState().setReadOnly(true);
   return { id: newId(), path, title: base(path), kind: 'map', isTemplate, store };
 }
 
@@ -590,6 +616,12 @@ export const useSession = create<SessionState>((set, get) => {
       if (!tab || !tab.store) return;
       try {
         const content = await window.api.readFile(path);
+        if (tab.kind !== 'note' && (tab.store as MapStore | BoardStore).getState().readOnly) {
+          // 뷰어: 소유자의 새 버전으로 바꾸되 보는 위치·선택은 유지하고 저장 대상이 되지 않는다(포커스와 무관하게 실시간 반영).
+          if (tab.kind === 'board') (tab.store as BoardStore).getState().refreshViewerBoard(parseBoard(content));
+          else (tab.store as MapStore).getState().refreshViewerDoc(deserialize(content));
+          return;
+        }
         if (tab.kind === 'note') {
           // Re-read the .md and replace the open note's in-memory state, mirroring
           // the map branch — used by the external-change reload (D2) so a note
@@ -603,6 +635,14 @@ export const useSession = create<SessionState>((set, get) => {
         }
       } catch {
         /* file missing/unreadable — nothing to reload */
+      }
+    },
+
+    syncViewerFlags: () => {
+      const rooms = useShare.getState().rooms;
+      for (const t of get().tabs) {
+        if ((t.kind !== 'map' && t.kind !== 'board') || !t.store || !isViewerFile(rooms, t.path)) continue;
+        (t.store as MapStore | BoardStore).getState().setReadOnly(true);
       }
     },
 

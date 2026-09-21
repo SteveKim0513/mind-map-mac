@@ -9,6 +9,8 @@ import { fmtDuration } from '../focus/aggregate';
 import { Icon, isIconName } from '../ui/Icon';
 import { tagVar } from '../theme/palette';
 import { fileDisplayName } from '../io/fileKind';
+import { safeExternalUrl } from '../io/linkSafety';
+import { useCommentFileTarget, useTargetCommentCount } from '../store/commentStore';
 
 interface Props {
   p: PositionedNode;
@@ -44,9 +46,15 @@ export function NodeView({
   const removeNodeLink = useMap((s) => s.removeNodeLink);
   const setNote = useMap((s) => s.setNote);
   const mapStore = useMapStore();
+  // 공유로 받은 읽기 전용 맵(뷰어): 편집 어포던스를 숨기고 눌러도 아무 일도 없게 한다(스토어도 모든 변경을 차단한다).
+  const readOnly = useMap((s) => s.readOnly);
   const isMatch = useUi((s) => s.matchIds.includes(node.id));
   const isActiveMatch = useUi((s) => s.activeMatchId === node.id);
   const memoEditing = useUi((s) => s.memoEditFor === node.id);
+  // 공유 폴더의 코멘트(소유자·참가자 모두, 뷰어 포함): 코멘트가 달린 노드에는 개수 칩이 붙는다. 일반(비공유) 파일에는 아무것도 그려지지 않는다.
+  const filePath = useMap((s) => s.filePath);
+  const commentTarget = useCommentFileTarget(filePath);
+  const commentCount = useTargetCommentCount(commentTarget, node.id);
 
   // notes linked to this node (resolved from the workspace link index)
   const docId = useMap((s) => s.doc.id);
@@ -116,7 +124,7 @@ export function NodeView({
   const memoTitles = linkedNotes.map((m) => m.title).join('');
   const metaSig = `${node.note ? 1 : 0}|${memoEditing ? 1 : 0}|${sched?.label ?? ''}|${
     sched?.urg ?? ''
-  }|${p.childDone}/${p.childTotal}|${node.collapsed ? p.hiddenCount : 0}|${linkedNotes.length}|${allLinks.length}|${memoTitles}|${focusStat?.sec ?? 0}|${linkedBoards.length}`;
+  }|${p.childDone}/${p.childTotal}|${node.collapsed ? p.hiddenCount : 0}|${linkedNotes.length}|${allLinks.length}|${memoTitles}|${focusStat?.sec ?? 0}|${linkedBoards.length}|${commentCount}`;
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -163,6 +171,7 @@ export function NodeView({
     isDragging ? 'dragging' : '',
     node.todo ? 'todo' : '',
     node.done ? 'done' : '',
+    readOnly ? 'viewer' : '',
     node.scheduled ? 'scheduled' : '',
     isMatch ? 'match' : '',
     isActiveMatch ? 'active-match' : '',
@@ -196,7 +205,7 @@ export function NodeView({
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        startEdit(node.id);
+        if (!readOnly) startEdit(node.id);
       }}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -211,11 +220,12 @@ export function NodeView({
         {node.todo && !editing && (
           <button
             className={`node-check${node.done ? ' done' : ''}`}
-            title={node.done ? '완료 해제' : '완료'}
+            title={readOnly ? (node.done ? '완료됨' : '할 일') : node.done ? '완료 해제' : '완료'}
+            disabled={readOnly}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              toggleDone(node.id);
+              if (!readOnly) toggleDone(node.id);
             }}
           >
             {node.done && <Icon name="check" />}
@@ -241,11 +251,12 @@ export function NodeView({
       </div>
 
       {/* ① MEMO = the node's own body (a light inline line), not an attachment */}
-      {!editing && (node.note || memoEditing) && (
+      {!editing && (node.note || (memoEditing && !readOnly)) && (
         <NodeMemo
           key={memoEditing ? 'edit' : 'view'}
           initial={node.note ?? ''}
-          autoFocus={memoEditing}
+          autoFocus={memoEditing && !readOnly}
+          readOnly={readOnly}
           onCommit={(t) => {
             setNote(node.id, t.trim());
             if (memoEditing) useUi.getState().setMemoEditFor(null);
@@ -266,7 +277,7 @@ export function NodeView({
 
       {/* ②③ STATUS GUTTER — one compact row: schedule (urgency) · links · notes · focus.
           집중 통계는 실행 지표라 할 일(todo) 노드에서만 — 생각 노드로 새어나가지 않게(누수 수정). */}
-      {!editing && (sched || allLinks.length > 0 || linkedNotes.length > 0 || linkedBoards.length > 0 || (focusStat && node.todo)) && (
+      {!editing && (sched || allLinks.length > 0 || linkedNotes.length > 0 || linkedBoards.length > 0 || commentCount > 0 || (focusStat && node.todo)) && (
         <div className="node-gutter" onPointerDown={(e) => e.stopPropagation()}>
           {sched && (
             <button
@@ -275,7 +286,7 @@ export function NodeView({
               onClick={(e) => {
                 e.stopPropagation();
                 select(node.id);
-                useUi.getState().openSchedule(node.id);
+                if (!readOnly) useUi.getState().openSchedule(node.id);
               }}
             >
               <Icon name={node.reminderOn ? 'alarm' : 'calendar'} />
@@ -289,22 +300,27 @@ export function NodeView({
                 title={url}
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.open(url, '_blank');
+                  // 공유로 받은 맵의 링크는 원격이 채울 수 있다 — http(s)·mailto만 연다(main도 한 번 더 막는다).
+                  const safe = safeExternalUrl(url);
+                  if (safe) window.open(safe, '_blank');
+                  else useUi.getState().toast('열 수 없는 링크예요 — http(s)·메일 주소만 열 수 있어요');
                 }}
               >
                 <Icon name="link" />
                 <span className="gchip-t">{hostOf(url)}</span>
               </button>
-              <button
-                className="gchip-x"
-                title="링크 제거"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeNodeLink(node.id, url);
-                }}
-              >
-                <Icon name="close" />
-              </button>
+              {!readOnly && (
+                <button
+                  className="gchip-x"
+                  title="링크 제거"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeNodeLink(node.id, url);
+                  }}
+                >
+                  <Icon name="close" />
+                </button>
+              )}
             </span>
           ))}
           {linkedNotes.map((m) => (
@@ -342,6 +358,27 @@ export function NodeView({
               <span className="gchip-t">{fileDisplayName(b.path)}</span>
             </button>
           ))}
+          {commentTarget && commentCount > 0 && (
+            <button
+              className="gchip comment"
+              data-testid="comment-chip"
+              title={`코멘트 ${commentCount}개 — 눌러서 보기`}
+              aria-label={`코멘트 ${commentCount}개`}
+              onClick={(e) => {
+                e.stopPropagation();
+                select(node.id);
+                useUi.getState().openCommentThread(commentTarget.roomId, {
+                  kind: 'map',
+                  fileId: commentTarget.fileId,
+                  targetId: node.id,
+                  label: node.text,
+                });
+              }}
+            >
+              <Icon name="comment" />
+              <span className="gchip-t">{commentCount}</span>
+            </button>
+          )}
           {focusStat && node.todo && (
             <button
               className="gchip focus"
@@ -373,7 +410,7 @@ export function NodeView({
         </span>
       )}
 
-      {!editing && (
+      {!editing && !readOnly && (
         <button
           className="add-child"
           style={{ left: hasChildren ? 'calc(100% + 24px)' : '100%' }}
@@ -415,10 +452,13 @@ function hostOf(url: string): string {
 function NodeMemo({
   initial,
   autoFocus,
+  readOnly = false,
   onCommit,
 }: {
   initial: string;
   autoFocus: boolean;
+  /** 뷰어(공유로 받은 읽기 전용 맵) — 글자만 보이고 커서·입력이 없다. */
+  readOnly?: boolean;
   onCommit: (text: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -441,7 +481,7 @@ function NodeMemo({
     <div
       ref={ref}
       className="node-memo"
-      contentEditable
+      contentEditable={!readOnly}
       suppressContentEditableWarning
       data-placeholder="메모…"
       onPointerDown={(e) => e.stopPropagation()}

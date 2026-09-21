@@ -53,3 +53,12 @@ gh release upload vX.Y.Z --clobber release/MindMap-*
 ```bash
 node scripts/verify-release.mjs
 ```
+
+## 릴레이 서버 (공유 폴더) — 앱 배포와 별개
+
+공유 폴더 기능은 앱과 **별도로 배포되는** 릴레이 서버(`server/`)를 쓴다 (결정 [0021](../decisions/0021-shared-folder-relay.md)). 위 GitHub Actions 릴리즈(앱 `.dmg`)는 릴레이를 배포하지 않는다 — 절차·환경변수·운영 제약·문제 해결은 **[relay-server.md](relay-server.md)**.
+
+- 릴레이는 Railway에 `cd server && railway up`(CLI)으로 올린다. 사람의 승인 후에만 실행한다(AGENTS.md "인간 승인이 필요한 작업").
+- 앱이 바라보는 릴레이 주소는 `electron/shareConfig.ts`의 `DEFAULT_RELAY_URL`이다(현재 배포된 Railway 릴레이, 2026-09-21 승인). 릴리즈 전에 이 값이 살아 있는 릴레이의 `https://` URL인지(`curl <URL>/health`) 확인한다. 이 값을 바꾸면 모든 사용자의 공유 트래픽 목적지가 바뀌고 옛 버전 앱은 옛 주소를 계속 쓰므로 인간 승인 사항이다.
+- 릴레이를 재배포하면 모든 WebSocket 연결이 끊겼다 자동 재접속한다(로컬 사이드카로 데이터 손실 없음) — 사용이 적은 시간에 한다.
+- **릴리즈 워크플로**: `.github/workflows/release.yml`은 `npm ci && npm --prefix server ci`로 server를 설치하고, 게이트에서 `npm --prefix server run build`를 루트 테스트보다 먼저 실행한다(루트 통합 테스트·`@share` E2E가 `server/dist/relay.js`를 요구). E2E 스텝 제한시간은 20분(공유 E2E 추가분 반영). 2026-09-21 사용자 승인으로 추가했으며 아직 CI에서 실행해 보지 않았다 — 첫 태그 배포에서 게이트 결과를 확인한다.

@@ -10,6 +10,8 @@ export interface AppHandle {
   app: ElectronApplication;
   page: Page;
   workspace: string;
+  /** This instance's isolated userData directory (settings, tokens, notifications …). */
+  userData: string;
   cleanup: () => Promise<void>;
 }
 
@@ -33,6 +35,20 @@ export interface LaunchOptions {
    * is untestable in CI. Only use this for tests like that.
    */
   forceQuiet?: boolean;
+  /**
+   * Extra environment variables for this Electron instance, merged over the
+   * defaults (e.g. `{ MINDMAP_RELAY_URL: relay.url }` to point the shared-folder
+   * feature at a per-test relay). Applied last, so it can also override
+   * MINDMAP_* defaults — keep it to what the test actually needs.
+   */
+  env?: Record<string, string>;
+  /**
+   * Relaunch on the SAME userData + workspace directories as an earlier instance — an app restart:
+   * everything persisted (safeStorage tokens, notifications.json, session, sidecars) is still there.
+   * Close the earlier instance first (`await first.app.close()`). The relaunched handle's `cleanup`
+   * only quits the app; the directories are removed by the ORIGINAL handle's `cleanup`.
+   */
+  reuse?: { userData: string; workspace: string };
 }
 
 /**
@@ -40,8 +56,8 @@ export interface LaunchOptions {
  * Returns handles and a cleanup function that quits the app and removes the temp dirs.
  */
 export async function launchApp(opts: LaunchOptions = {}): Promise<AppHandle> {
-  const userData = mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
-  const workspace = mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
+  const userData = opts.reuse?.userData ?? mkdtempSync(join(tmpdir(), 'mindmap-userData-'));
+  const workspace = opts.reuse?.workspace ?? mkdtempSync(join(tmpdir(), 'mindmap-ws-'));
 
   // MINDMAP_E2E_QUIET keeps the Electron window off-screen and un-activated —
   // Playwright drives it over CDP either way, so there's no reason for it to
@@ -63,6 +79,7 @@ export async function launchApp(opts: LaunchOptions = {}): Promise<AppHandle> {
   // Remove it so the child process starts as a real Electron browser process.
   delete env.ELECTRON_RUN_AS_NODE;
   if (opts.forceQuiet) delete env.CI;
+  if (opts.env) Object.assign(env, opts.env);
 
   const app = await electron.launch({
     args: [join(__dirname, '../dist-electron/main.js')],
@@ -75,11 +92,12 @@ export async function launchApp(opts: LaunchOptions = {}): Promise<AppHandle> {
 
   const cleanup = async () => {
     await app.close().catch(() => {});
+    if (opts.reuse) return; // the original launch owns (and removes) the directories
     rmSync(userData, { recursive: true, force: true });
     rmSync(workspace, { recursive: true, force: true });
   };
 
-  return { app, page, workspace, cleanup };
+  return { app, page, workspace, userData, cleanup };
 }
 
 /**

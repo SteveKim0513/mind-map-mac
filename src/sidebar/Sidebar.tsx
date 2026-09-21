@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TreeNode } from '../../electron/preload';
 import { useWorkspace } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
 import { useSession } from '../store/sessionStore';
 import { useTrash } from '../store/trashStore';
+import { unreadCount, useNotifications } from '../store/notificationStore';
 import { useTemplates } from '../store/templateStore';
 import { usePins } from '../store/pinStore';
+import { localOnlyFileNotice, useShare, type ShareRoom } from '../store/shareStore';
+import { renameSharedNoteTitle } from '../store/sharedNoteSave';
 import { emptyDoc, serialize, newId } from '../io/formats';
 import { emptyNote, serializeNote, parseNote } from '../io/noteFormat';
 import { emptyBoard, serializeBoard } from '../io/boardFormat';
@@ -17,6 +20,8 @@ import { renameWikiLinks } from '../note/noteLinks';
 import { UrlImportModal } from '../note/UrlImportModal';
 import type { NoteDoc } from '../types';
 import { Icon } from '../ui/Icon';
+import { ShareStatusIcon } from '../ui/ShareStatus';
+import { connStatusText, flushSharedRooms } from '../share';
 import { FocusPill } from '../focus/FocusWidget';
 import { useDismissablePosition } from '../ui/useDismissablePosition';
 
@@ -52,6 +57,23 @@ function fileIconName(node: TreeNode): 'folder' | 'note' | 'board' | 'mindmap' {
   return node.type === 'dir' ? 'folder' : extIconName(node.name);
 }
 
+/**
+ * `path`(폴더)가 공유 폴더이거나 공유 폴더를 품고 있는가 — 이름 변경·이동 전에 대기 중인 공유 쓰기를 끝내고, 옮긴 뒤 공유 상태의 경로를
+ * 즉시 따라가게 해야 하는 경우다.
+ */
+function holdsSharedFolder(path: string): boolean {
+  const p = path.replace(/\/+$/, '');
+  return Object.values(useShare.getState().rooms).some((r) => {
+    const d = r.folderPath.replace(/\/+$/, '');
+    return d === p || d.startsWith(p + '/');
+  });
+}
+
+/** 폴더 이동·이름 변경 직전: 옛 경로에 아직 못 쓴 공유 편집(노트·사이드카)을 끝낸다. */
+async function flushSharedBeforeMove(path: string): Promise<void> {
+  if (holdsSharedFolder(path)) await flushSharedRooms();
+}
+
 export function Sidebar({
   openPaths,
   activePath,
@@ -70,11 +92,23 @@ export function Sidebar({
   const noteByPath = useWorkspace((s) => s.noteByPath);
   const trashCount = useTrash((s) => s.items.length);
   useEffect(() => void useTrash.getState().refresh(), []); // hydrate the trash badge on mount
+  // 알림 센터(공유 폴더 코멘트 알림) — 종 버튼은 공유 폴더가 있거나 받은 알림이 남아 있을 때만 보인다(일반 사용자 화면은 그대로).
+  const unreadNotis = useNotifications((s) => unreadCount(s.items));
+  const hasNotis = useNotifications((s) => s.items.length > 0);
+  const hasSharedRooms = useShare((s) => Object.keys(s.rooms).length > 0);
+  const showBell = hasNotis || hasSharedRooms;
   const templatesEnabled = useTemplates((s) => s.enabled);
   const templateCount = useTemplates((s) => s.items.length);
   useEffect(() => void useTemplates.getState().refresh(), []); // hydrate templates on mount
   const pinnedPaths = usePins((s) => s.paths);
   useEffect(() => void usePins.getState().refresh(), []); // hydrate favorites on mount
+  // 공유 폴더 표식(사람 아이콘 + 상태 점)을 그릴 행을 folderPath로 바로 찾는다.
+  const shareRooms = useShare((s) => s.rooms);
+  const roomByFolder = useMemo(() => {
+    const m = new Map<string, ShareRoom>();
+    for (const room of Object.values(shareRooms)) m.set(room.folderPath.replace(/\/+$/, ''), room);
+    return m;
+  }, [shareRooms]);
 
   // path bar "reveal in sidebar" (PathBar.tsx): expand ancestors, select + scroll
   // the row into view. Runs on mount too (not just change) so opening the
@@ -140,8 +174,10 @@ export function Sidebar({
     const failed: string[] = [];
     for (const p of paths) {
       try {
+        await flushSharedBeforeMove(p);
         const newPath = await window.api.move(p, destDir);
         if (newPath) {
+          useShare.getState().relocateFolder(p, newPath); // 공유 폴더가 (안에) 있으면 경로를 즉시 따라간다
           onRenamed(p, newPath);
           moved.push(p);
         }
@@ -194,6 +230,12 @@ export function Sidebar({
     return selected.type === 'dir' ? selected.path : dirname(selected.path);
   };
 
+  // 참가자가 공유 폴더 안에 맵·보드를 만들면(소유자만 공유한다) 방마다 한 번만 그 사실을 알린다 — 과한 UI 없이 토스트 하나.
+  const noticeLocalOnly = (path: string) => {
+    const msg = localOnlyFileNotice(useShare.getState().rooms, path);
+    if (msg) useUi.getState().toast(msg);
+  };
+
   const newMindmap = async () => {
     const dir = targetDir();
     const path = await window.api.createFile(dir, '제목 없음', serialize(emptyDoc()), '.mind');
@@ -202,6 +244,7 @@ export function Sidebar({
     setSelected({ path, type: 'file' });
     onOpenFile(path);
     setRenaming({ path, isFile: true });
+    noticeLocalOnly(path);
   };
 
   const newNote = async () => {
@@ -227,6 +270,7 @@ export function Sidebar({
     setSelected({ path, type: 'file' });
     onOpenFile(path);
     setRenaming({ path, isFile: true });
+    noticeLocalOnly(path);
   };
 
   // ── URL → note: fetch the page, extract the article, save as a linked note ──
@@ -325,11 +369,18 @@ export function Sidebar({
         (tab.store as NoteStore).getState().setTitle(trimmed);
         await useSession.getState().flushSaves(node.path); // persist new title before moving
       } else {
-        try {
-          const note = parseNote(await window.api.readFile(node.path), trimmed);
-          oldTitle = note.title;
-          await window.api.save(node.path, serializeNote({ ...note, title: trimmed }));
-        } catch { /* ignore — fall through to a plain rename */ }
+        // 공유 폴더의 노트라면 제목을 공유 문서로 보내고 프론트매터 제목을 복제 매니저의 큐 안에서 고친다(원격 편집을 옛 본문으로
+        // 되돌리지 않게). 공유 노트가 아니면 기존처럼 파일을 직접 고친다.
+        const shared = await renameSharedNoteTitle(node.path, trimmed);
+        if (shared.status !== 'not_shared') {
+          if (shared.oldTitle) oldTitle = shared.oldTitle;
+        } else {
+          try {
+            const note = parseNote(await window.api.readFile(node.path), trimmed);
+            oldTitle = note.title;
+            await window.api.save(node.path, serializeNote({ ...note, title: trimmed }));
+          } catch { /* ignore — fall through to a plain rename */ }
+        }
       }
       // 충돌 감지: 같은 이름 파일이 있으면 에러 표시
       const targetFileName = `${fileNameFromTitle(trimmed) ?? trimmed}.md`;
@@ -365,7 +416,11 @@ export function Sidebar({
         return;
       } catch { /* 없으면 진행 */ }
     }
+    if (node.type === 'dir') await flushSharedBeforeMove(node.path);
     const newPath = await window.api.rename(node.path, newName);
+    // 공유 폴더(또는 그 상위)의 이름을 바꿨다면 공유 상태(방 폴더·공유 노트·뷰어 파일 경로)가 즉시 새 경로를 가리키게 한다 —
+    // 표식 재스캔이 도는 사이에 공유 노트가 일반 노트로 보이면 자동저장이 본문을 덮어쓰거나 뷰어 미러가 편집 가능해진다.
+    if (node.type === 'dir') useShare.getState().relocateFolder(node.path, newPath);
     await refresh();
     onRenamed(node.path, newPath);
     setSelected({ path: newPath, type: node.type });
@@ -403,8 +458,10 @@ export function Sidebar({
     setDropTarget(null);
     setDragging(null);
     await useSession.getState().flushSaves(src); // avoid autosave racing the move
+    await flushSharedBeforeMove(src);
     const newPath = await window.api.move(src, destDir);
     if (!newPath) return; // no-op or illegal move
+    useShare.getState().relocateFolder(src, newPath);
     if (destDir !== root) setExpanded(destDir, true);
     await refresh();
     onRenamed(src, newPath); // session follows any open tabs (file or whole folder)
@@ -600,6 +657,10 @@ export function Sidebar({
               <span className="label">{displayName(node)}</span>
             )}
 
+            {node.type === 'dir' && roomByFolder.has(node.path) && (
+              <ShareBadge room={roomByFolder.get(node.path)!} />
+            )}
+
             <span className="row-actions">
               {node.type === 'file' && (
                 <button
@@ -696,6 +757,9 @@ export function Sidebar({
           <button className="sb-section-btn" title="새 폴더" onClick={() => void newFolder()}>
             <Icon name="folderPlus" />
           </button>
+          <button className="sb-section-btn" title="공유 폴더 참가" onClick={() => useUi.getState().openShareJoin()}>
+            <Icon name="users" />
+          </button>
         </div>
       </div>
 
@@ -783,6 +847,23 @@ export function Sidebar({
               <Icon name="trash" />
               {trashCount > 0 && <span className="sb-dot-badge" />}
             </button>
+            {/* 알림 센터 — 휴지통과 같은 자리·같은 모양. 안 읽은 개수는 1과 9가 다른 정보라 점(존재 표시)이 아니라 숫자로 보인다. */}
+            {showBell && (
+              <button
+                className={`sb-foot-btn${unreadNotis > 0 ? ' has-items' : ''}`}
+                data-testid="sb-notifications"
+                title={unreadNotis > 0 ? `알림 (안 읽음 ${unreadNotis}개)` : '알림'}
+                aria-label={unreadNotis > 0 ? `알림, 안 읽음 ${unreadNotis}개` : '알림'}
+                onClick={() => useUi.getState().openNotifications()}
+              >
+                <Icon name="bell" />
+                {unreadNotis > 0 && (
+                  <span className="sb-count-badge" data-testid="sb-notifications-badge" data-count={unreadNotis}>
+                    {unreadNotis > 9 ? '9+' : unreadNotis}
+                  </span>
+                )}
+              </button>
+            )}
             {templatesEnabled && (
               <button
                 className={`sb-foot-btn${templateCount > 0 ? ' has-items' : ''}`}
@@ -833,6 +914,22 @@ export function Sidebar({
               <span>이름 변경</span>
             </button>
           )}
+          {rowMenu.node.type === 'dir' && (
+            <button
+              className="ctx-item"
+              data-testid="ctx-share"
+              onClick={() => {
+                const room = roomByFolder.get(rowMenu.node.path);
+                // 이미 공유 중이면 설정을, 아니면 만들기를 연다. 공유할 수 없는 폴더(공유 폴더 안 등)도
+                // 만들기 다이얼로그가 이유를 안내한다 — 메뉴 항목을 조용히 숨기지 않는다.
+                if (room) useUi.getState().openShare(room.marker.roomId);
+                else useUi.getState().openShareCreate(rowMenu.node.path);
+                setRowMenu(null);
+              }}
+            >
+              <span>{roomByFolder.has(rowMenu.node.path) ? '공유 설정' : '공유 폴더로 만들기…'}</span>
+            </button>
+          )}
           <div className="ctx-sep" />
           <button
             className="ctx-item danger"
@@ -849,6 +946,26 @@ export function Sidebar({
   );
 }
 
+
+/** 공유 폴더 행의 사람 아이콘 + 상태 점 — 누르면 공유 설정을 연다. */
+function ShareBadge({ room }: { room: ShareRoom }) {
+  const label = `공유 설정 · ${connStatusText(room.status, room.error)}`;
+  return (
+    <button
+      className="share-badge"
+      title={label}
+      aria-label={label}
+      data-testid="share-badge"
+      onClick={(e) => {
+        e.stopPropagation(); // 행 선택과 겹치지 않게
+        useUi.getState().openShare(room.marker.roomId);
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      <ShareStatusIcon status={room.status} error={room.error} />
+    </button>
+  );
+}
 
 function RenameInput({
   initial,

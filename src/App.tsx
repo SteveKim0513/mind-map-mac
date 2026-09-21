@@ -23,6 +23,9 @@ import { Search } from './search/Search';
 import { GlobalSearch } from './search/GlobalSearch';
 import { Settings } from './ui/Settings';
 import { Manual } from './ui/Manual';
+import { SharePanel } from './ui/SharePanel';
+import { ShareDialog } from './ui/ShareDialogs';
+import { NotificationCenter } from './ui/NotificationCenter';
 import { UpdateStatus } from './ui/UpdateStatus';
 import { Toasts } from './ui/Toasts';
 import { GrowthNudges } from './ui/GrowthNudges';
@@ -32,11 +35,18 @@ import type { TreeNode } from '../electron/preload';
 import { useKeyboard } from './interactions/useKeyboard';
 import { startReminderSync } from './sync/reminderSync';
 import { startNoteLinkSync } from './note/noteLinks';
+import { bootShare, createNotifyLimiter, getReplica, scanSharedFolders, setShareLogSink, type CommentHooks, type FileReplicaHooks, type ReplicaHooks } from './share';
+import { createNoteCodec } from './note/collabCodec';
+import { extractWikiTargets } from './note/wikiLinkText';
 import { MapContext, useMap, type MapStore } from './store/mapStore';
 import { useSession, loadSessionSnapshot } from './store/sessionStore';
 import { useWorkspace } from './store/workspaceStore';
+import { useShare } from './store/shareStore';
+import { useNotifications } from './store/notificationStore';
 import { useUi, type UpdateStatus as UpdateStatusType } from './store/uiStore';
 import type { CanvasHandle } from './canvas/Canvas';
+import type { NoteStore } from './store/noteStore';
+import type { BoardStore } from './store/boardStore';
 import type { Tab, GroupIndex } from './store/sessionStore';
 import {
   serialize,
@@ -47,9 +57,111 @@ import {
   fromOpml,
 } from './io/formats';
 import { emptyNote, serializeNote } from './io/noteFormat';
+import { previewOf } from './io/commentFormat';
+import type { CommentAnchor, NotificationItem } from './types';
 import { emptyBoard, serializeBoard } from './io/boardFormat';
 import { requestFocusStart } from './focus/controller';
 import { TAG_KEYS, type TagKey } from './theme/palette';
+
+// ── 공유 폴더 진단 로그: share/의 연결 전이·흐름·코멘트 동기화 로그를 앱 로그(`[share]` 줄)로 보낸다 ──
+// 이벤트·상태·오류 코드만 흐른다(내용·토큰·초대 코드·이름 금지 — share/shareLog.ts 규칙). 렌더러 전역 오류는 main.tsx가 따로 남긴다(`[renderer]`).
+setShareLogSink((level, message) => window.api.log(level, 'share', message));
+
+// ── 공유 폴더 노트 복제: 노트 변환기·훅 주입(share/는 note/를 import할 수 없어 합성 루트가 연결한다) ──
+let noteCodecSingleton: ReturnType<typeof createNoteCodec> | null = null;
+const shareNoteCodec = () => (noteCodecSingleton ??= createNoteCodec());
+const shareReplicaHooks: ReplicaHooks = {
+  notify: (message) => useUi.getState().toast(message),
+  // 복제 매니저가 노트 파일을 쓴 뒤 워크스페이스 노트 인덱스(제목·링크·역링크)를 갱신한다.
+  onNoteWritten: (path, n) => {
+    useWorkspace
+      .getState()
+      .reindexNote({ path, id: n.id, title: n.title, links: n.links, session: n.session, refs: extractWikiTargets(n.body) });
+    // 다른 참가자가 제목을 바꿔 매니저가 프론트매터를 고쳐 썼다면, 열려 있는 탭의 제목 입력도 따라간다
+    // (로컬에서 고치는 중인 제목은 store가 무시한다).
+    for (const t of useSession.getState().tabs) {
+      if (t.kind === 'note' && t.path === path && t.store) (t.store as NoteStore).getState().setTitleFromShare(n.title);
+    }
+  },
+  onTreeChanged: () => void useWorkspace.getState().refresh(),
+  // 원격 삭제로 휴지통에 옮겨진 노트가 열려 있으면 탭을 닫는다(파일이 이미 없으므로 저장하지 않는다).
+  onNoteTrashed: (path) => useSession.getState().closeByPath(path),
+  log: (level, message) => window.api.log(level, 'share', message),
+};
+
+// ── 공유 폴더 맵·보드(소유자만 편집, 참가자는 읽기 전용 미러): 훅 주입 ──
+const shareFileHooks: FileReplicaHooks = {
+  notify: (message) => useUi.getState().toast(message),
+  // 미러가 갱신되면 열려 있는 뷰어 탭을 곧바로 다시 로드한다 — 창 포커스와 무관(외부 변경 감지에 기대지 않는다).
+  onFileWritten: (path) => void useSession.getState().reloadIfOpen(path),
+  // 소유자가 이름을 바꾸거나 옮기면 열려 있는 탭의 경로도 따라간다.
+  onFileMoved: (from, to) => useSession.getState().renamePath(from, to),
+  onTreeChanged: () => void useWorkspace.getState().refresh(),
+  // 원격 삭제로 휴지통에 옮겨진 미러가 열려 있으면 탭을 닫는다(파일이 이미 없으므로 저장하지 않는다).
+  onFileTrashed: (path) => useSession.getState().closeByPath(path),
+  log: (level, message) => window.api.log(level, 'share', message),
+};
+
+// ── 공유 폴더 코멘트·알림: 이동(reveal)·토스트 주입(share/는 canvas/·board/·note/를 import할 수 없어 합성 루트가 연결한다) ──
+/**
+ * 코멘트가 달린 곳으로 간다: 그 파일을 열고(이미 열려 있으면 그 탭으로), 맵 노드/보드 요소를 선택·중앙 정렬하고, 스레드 팝오버를 연다.
+ * 파일 경로는 코멘트가 아니라 방의 현재 경로 맵(노트·맵·보드 id → 경로)에서 찾는다 — 이름이 바뀌어도 따라간다. 못 찾으면 false.
+ */
+async function revealCommentAnchor(roomId: string, anchor: CommentAnchor): Promise<boolean> {
+  const room = useShare.getState().getRoom(roomId);
+  if (!room) return false;
+  const wanted = anchor.kind === 'note' ? anchor.noteId : anchor.fileId;
+  const path = Object.entries(anchor.kind === 'note' ? room.notes : room.files).find(([, id]) => id === wanted)?.[0];
+  if (!path) return false;
+  const sess = useSession.getState();
+  if (sess.tabs.some((t) => t.path === path)) {
+    sess.openPath(path, '');
+  } else {
+    try {
+      sess.openPath(path, await window.api.readFile(path));
+    } catch {
+      return false;
+    }
+  }
+  const tab = useSession.getState().tabs.find((t) => t.path === path);
+  if (!tab) return false;
+  if (anchor.kind !== 'note' && anchor.targetId) {
+    const targetId = anchor.targetId;
+    if (tab.kind === 'map') {
+      const st = (tab.store as MapStore).getState();
+      if (st.doc.nodes[targetId]) st.select(targetId);
+    } else if (tab.kind === 'board') {
+      const st = (tab.store as BoardStore).getState();
+      if (st.board.elements[targetId]) st.setSelection([targetId]);
+    }
+    setTimeout(() => useUi.getState().focusNode(targetId), 0);
+  }
+  // 스레드 팝오버는 파일이 그려진 뒤에 연다(앵커 요소를 찾아 붙는다 — 팬·확대로 움직여도 따라간다).
+  setTimeout(() => useUi.getState().openCommentThread(roomId, anchor), 0);
+  return true;
+}
+
+/** 알림 하나를 연다: 읽음 처리 → 쌓인 오버레이 해소(목적 달성으로 화면을 떠난다, ADR 0018) → 코멘트 위치로 이동. */
+function openNotification(item: NotificationItem): void {
+  useNotifications.getState().setRead(item.id, true);
+  useUi.getState().closeAllOverlays();
+  void revealCommentAnchor(item.roomId, item.anchor).then((ok) => {
+    if (!ok) useUi.getState().toast('이 코멘트가 달린 파일을 찾을 수 없어요 — 지워졌거나 공유가 끝난 것 같아요');
+  });
+}
+
+// 토스트는 방마다 10초에 3개까지만 개별로 띄우고 나머지는 "새 코멘트 N개"로 합친다 — 코멘트가 몰려와도 화면이 도배되지 않게.
+// (알림 뱃지·알림 센터 목록은 제한하지 않는다. 합쳐진 토스트를 누르면 알림 센터가 열린다.)
+const shareToastLimiter = createNotifyLimiter({
+  // 코멘트 알림이 만들어지는 즉시(소켓 push 직후) 토스트 — 누르면 해당 위치로 이동하고 읽음 처리된다. 뱃지는 store 갱신과 함께 이미 반영됐다.
+  onEach: (item) =>
+    useUi.getState().toastAction(`${item.authorName}님의 코멘트 — ${previewOf(item.preview, 60)}`, '보기', () => openNotification(item)),
+  onSummary: (_roomId, folderName, count) =>
+    useUi.getState().toastAction(`"${folderName}"에 새 코멘트 ${count}개가 더 있어요`, '보기', () => useUi.getState().openNotifications()),
+});
+const shareCommentHooks: CommentHooks = {
+  onNotified: (item) => shareToastLimiter.push(item),
+};
 
 const TAG_LABEL: Record<TagKey, string> = {
   red: '빨강', orange: '주황', yellow: '노랑', green: '초록',
@@ -81,11 +193,22 @@ export default function App() {
     if (revealPathReq) setSidebarVisible(true);
   }, [revealPathReq]);
   // ⌘K "전체에서 찾기" → ⌘⇧F로 넘어갈 때 이미 입력한 쿼리를 이어받기 위한 중계 상태.
+  // 저장된 알림·읽음 상태를 앱 시작 때 한 번 읽는다(사이드바 종 뱃지와 알림 센터가 이 store를 본다).
+  useEffect(() => {
+    void useNotifications.getState().hydrate();
+  }, []);
   const [gsInitialQuery, setGsInitialQuery] = useState('');
   const searchOpen = useUi((s) => s.searchOpen);
   const globalSearchOpen = useUi((s) => s.globalSearchOpen);
   const settingsOpen = useUi((s) => s.settingsOpen);
   const manualOpen = useUi((s) => s.manualOpen);
+  const shareOpen = useUi((s) => s.shareOpen);
+  const notificationsOpen = useUi((s) => s.notificationsOpen);
+  const shareRooms = useShare((s) => s.rooms);
+  // 세션 복원처럼 공유 연결(경로 맵)이 준비되기 전에 열린 탭도, 공유로 받은 읽기 전용 파일이면 뷰어 모드로 바꾼다.
+  useEffect(() => {
+    useSession.getState().syncViewerFlags();
+  }, [shareRooms]);
   const quickOpen = useUi((s) => s.quickOpen);
   const cmdkOpen = useUi((s) => s.cmdkOpen);
   const historyOpen = useUi((s) => s.historyOpen);
@@ -144,13 +267,23 @@ export default function App() {
   useEffect(() => {
     return window.api.onWorkspaceFocus(() => {
       void useWorkspace.getState().refresh();
+      // 공유 폴더: 새 노트 공유·삭제 반영·외부에서 고친 공유 노트 흡수(충돌 시 사본 보존)를 복제 매니저가 처리한다.
+      void scanSharedFolders();
       for (const t of useSession.getState().tabs) {
         // Maps, notes, AND boards (all back real files) get external-change
         // detection — an open file edited by another app/device used to be
         // silently overwritten by this tab's autosave (calendar has no backing file).
         if ((t.kind !== 'map' && t.kind !== 'note' && t.kind !== 'board') || !t.path) continue;
+        // 공유로 받은 읽기 전용 맵·보드는 파일 매니저가 미러를 직접 갱신하고 탭을 즉시 다시 로드한다 — 포커스 기반 감지·"불러올까요?" 토스트 대상이 아니다.
+        if (t.kind !== 'note' && t.store && (t.store as MapStore | BoardStore).getState().readOnly) continue;
         const p = t.path;
         const title = t.title;
+        // 공유 노트는 복제 매니저가 단일 쓰기 주체다 — "디스크 버전 불러오기" 대신 매니저로 라우팅한다.
+        const shared = t.kind === 'note' ? useShare.getState().sharedNoteAt(p) : null;
+        if (shared) {
+          void getReplica(shared.roomId)?.onExternalChange(p);
+          continue;
+        }
         void window.api.externalChange(p).then(({ changed, mtime }) => {
           if (!changed || mtime == null) return;
           if (externalWarnedRef.current.get(p) === mtime) return; // already warned for this change
@@ -259,7 +392,8 @@ export default function App() {
           break;
         }
         case 'save':
-          if (st) {
+          // 뷰어(공유로 받은 읽기 전용 맵)는 저장하지 않는다 — 소유자의 미러 파일이다("다른 이름으로 저장"은 내 사본을 만든다).
+          if (st && !st.readOnly) {
             const p = await window.api.save(st.filePath, serialize(st.doc));
             if (p) sess.activeStore()!.getState().markSaved(p);
           }
@@ -287,6 +421,9 @@ export default function App() {
           // ⌘F: in a map → in-canvas node find; in a note / home → workspace search
           if (sess.activeStore()) useUi.getState().setSearchOpen(true);
           else useUi.getState().setGlobalSearch(true);
+          break;
+        case 'join-share':
+          useUi.getState().openShareJoin();
           break;
         case 'toggle-sidebar':
           setSidebarVisible((v) => !v);
@@ -376,6 +513,31 @@ export default function App() {
       }
     })();
   }, []);
+
+  // ── 공유 폴더: 워크스페이스·폴더 구조가 바뀔 때마다 표식을 훑어 연결을 맞춘다 ─────────────────
+  // bootShare는 멱등이다(이미 연결된 폴더는 유지, 새 표식만 추가, 사라진 폴더는 정리). 폴더 이름 변경·이동·
+  // 삭제·Finder에서의 복사로 표식 경로가 바뀌어도 여기서 따라간다. 언마운트하면 모든 연결을 끊는다.
+  const wsRoot = useWorkspace((s) => s.root);
+  const shareStopRef = useRef<(() => void) | null>(null);
+  const shareUnmountedRef = useRef(false);
+  useEffect(() => {
+    shareUnmountedRef.current = false;
+    return () => {
+      shareUnmountedRef.current = true;
+      shareStopRef.current?.();
+      shareStopRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void bootShare({ noteCodec: shareNoteCodec(), replicaHooks: shareReplicaHooks, fileHooks: shareFileHooks, commentHooks: shareCommentHooks }).then((stop) => {
+        shareStopRef.current = stop;
+        if (shareUnmountedRef.current) stop();
+        else void scanSharedFolders(); // 트리가 바뀔 때마다 새 공유 노트·삭제를 반영한다
+      });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [wsRoot, wsTree]);
 
   const handleControls = useCallback((api: CanvasHandle | null) => {
     if (api) activeControls.current = api;
@@ -551,8 +713,11 @@ export default function App() {
             fit: () => activeControls.current?.fit(),
             tidy: () => activeControls.current?.tidy(),
             toggleSidebar: () => setSidebarVisible((v) => !v),
-            activeMapPath: activeTab?.kind === 'map' ? (activeTab.path ?? null) : null,
-            selectedNode: activeStore && activeTab
+            // 뷰어(읽기 전용) 맵은 이전 버전으로 되돌리기 대상이 아니다(미러 파일은 소유자의 것)
+            activeMapPath: activeTab?.kind === 'map' && !activeStore?.getState().readOnly ? (activeTab.path ?? null) : null,
+            sharedRooms: Object.values(shareRooms).map((r) => ({ roomId: r.marker.roomId, name: r.marker.folderName })),
+            // 뷰어(읽기 전용) 맵에서는 노드 편집 명령(일정·색·링크·할 일 전환)을 노출하지 않는다
+            selectedNode: activeStore && activeTab && !activeStore.getState().readOnly
               ? (() => {
                   const st = activeStore.getState();
                   const n = st.selectedId ? st.doc.nodes[st.selectedId] : undefined;
@@ -595,6 +760,9 @@ export default function App() {
       {whatsNew && <WhatsNewCard />}
       {settingsOpen && <Settings />}
       {manualOpen && <Manual />}
+      {shareOpen && <SharePanel />}
+      {notificationsOpen && <NotificationCenter onOpen={openNotification} />}
+      <ShareDialog />
       <UpdateStatus />
     </div>
   );
@@ -610,6 +778,7 @@ function buildCommands(o: {
   tidy: () => void;
   toggleSidebar: () => void;
   activeMapPath: string | null;
+  sharedRooms: { roomId: string; name: string }[];
   selectedNode: { id: string; text: string; todo: boolean; mapId: string; mapPath: string; store: MapStore } | null;
 }): Command[] {
   const cmds: Command[] = [
@@ -632,6 +801,15 @@ function buildCommands(o: {
       },
     },
     { id: 'reminders', icon: 'calendar', label: '미리알림 동기화 설정', run: () => useUi.getState().openSettings() },
+    // 공유 폴더 — 우클릭 메뉴("공유 폴더로 만들기…"·"공유 설정")와 사이드바 참가 버튼의 미러 (결정 0004)
+    { id: 'share-create', icon: 'users', label: '공유 폴더로 만들기…', run: () => useUi.getState().openShareCreate(null) },
+    { id: 'share-join', icon: 'users', label: '공유 폴더 참가…', run: () => useUi.getState().openShareJoin() },
+    ...o.sharedRooms.map((r) => ({
+      id: `share-settings-${r.roomId}`,
+      icon: 'users' as const,
+      label: `공유 설정: ${r.name}`,
+      run: () => useUi.getState().openShare(r.roomId),
+    })),
     { id: 'globalsearch', icon: 'search', label: '전체 검색 (노드·노트·보드)', hint: '⌘⇧F', run: () => useUi.getState().setGlobalSearch(true) },
     { id: 'quickopen', icon: 'file', label: '파일 빠른 열기', hint: '⌘P', run: () => useUi.getState().setQuickOpen(true) },
     { id: 'theme', icon: 'moon', label: '다크 모드 전환', hint: '⌘⇧L', run: () => useUi.getState().toggleTheme() },

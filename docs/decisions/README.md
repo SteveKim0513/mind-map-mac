@@ -38,3 +38,5 @@
 - [0018 — 관리형 오버레이 스택 — 닫기/Esc의 한 단계 복귀](0018-overlay-esc-stack.md)
 - [0019 — exec-plan step 상태 머신 + 위임 명세 표준](0019-exec-plan-step-state-machine.md)
 - [0020 — 보드는 절대좌표 자유배치 문서를 가진 세 번째 독립 파일 타입](0020-board-file-type.md)
+- [0021 — 공유 폴더: 자체 호스팅 릴레이 서버 도입과 "서버 없음" 불변 조건의 재정의](0021-shared-folder-relay.md)
+- [0022 — 보드의 노트 링크는 노트 id로 건다 — 공유 폴더 참가자에게도 칩이 작동한다](0022-board-note-link-noteid.md)

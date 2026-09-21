@@ -13,7 +13,7 @@ types.ts → io/ · theme/ → store/ → domain/* → ui/* → App.tsx
 ```
 
 - `src/`에서 `electron/` 직접 import 금지. `window.api`만 사용.
-- `canvas/`, `note/`, `focus/`, `sync/` 등 도메인 모듈은 서로 직접 참조하지 않는다.
+- `canvas/`, `note/`, `board/`, `focus/`, `sync/`, `share/` 등 도메인 모듈은 서로 직접 참조하지 않는다.
   - 공유가 필요하면 `store/`를 통하거나 `App.tsx`에서 props로 연결한다.
 - `store/`는 `ui/`, `canvas/` 등 렌더러 모듈을 import하지 않는다.
 

@@ -36,6 +36,24 @@ export const TAG_DEFAULT_LABELS: Record<TagKey, string> = {
   brown: '브라운',
 };
 
+/**
+ * 공유 노트 참가자 표시색(캐럿·이름 라벨·"함께 보는 사람" 칩). 새 색을 만들지 않고 태그 팔레트의 hue를 재사용한다.
+ *  - 노란색은 제외 — 흰 캔버스 위 선/글자 대비가 가장 낮다(밝은 테마에서 캐럿 선이 안 보임).
+ *  - 파랑(--primary)은 애초에 팔레트에 없어 선택·포커스 색과 겹치지 않는다.
+ * 같은 참가자 id는 어느 기기·어느 세션에서나 같은 키를 받는다(결정론적 해시).
+ */
+export const PRESENCE_KEYS: readonly TagKey[] = ['red', 'orange', 'green', 'teal', 'violet', 'pink', 'brown'];
+
+/** 참가자 id → 표시색 태그 키(FNV-1a 32비트 해시 → PRESENCE_KEYS 인덱스). */
+export function presenceKey(participantId: string): TagKey {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < participantId.length; i++) {
+    h ^= participantId.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return PRESENCE_KEYS[h % PRESENCE_KEYS.length];
+}
+
 const TAG_SET = new Set<string>(TAG_KEYS);
 
 /**

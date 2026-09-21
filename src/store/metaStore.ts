@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { MetaTemplate } from '../types';
 import { parseNote, serializeNote } from '../io/noteFormat';
+import { patchNoteFile } from './sharedNoteSave';
 import { useWorkspace } from './workspaceStore';
 
 interface MetaState {
@@ -56,6 +57,12 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     const attached = await window.api.attachedNotes().catch(() => [] as string[]);
     await Promise.allSettled([...paths, ...attached].map(async (path) => {
       try {
+        // 공유 폴더의 노트라면 복제 매니저의 큐 안에서 고친다(원격 편집을 옛 본문으로 되돌리지 않게).
+        const shared = await patchNoteFile(path, (n) => {
+          if (!n.metaBlocks?.some((b) => b.templateId === id)) return null;
+          return { ...n, metaBlocks: n.metaBlocks.filter((b) => b.templateId !== id) };
+        });
+        if (shared.status !== 'not_shared') return;
         const raw = await window.api.readFile(path);
         const note = parseNote(raw, '');
         if (!note.metaBlocks?.some((b) => b.templateId === id)) return;

@@ -251,6 +251,8 @@ export function OverlaysFront({
   const setSectionLabelPos = useMap((s) => s.setSectionLabelPos);
   const setSectionColor = useMap((s) => s.setSectionColor);
   const removeSection = useMap((s) => s.removeSection);
+  // 뷰어(공유로 받은 읽기 전용 맵): 섹션·연결 메모는 보이기만 하고 편집·이동·삭제 어포던스가 없다.
+  const readOnly = useMap((s) => s.readOnly);
 
   const [editing, setEditing] = useState<string | null>(null);
   const grab = useRef<{ x: number; y: number } | null>(null);
@@ -312,6 +314,7 @@ export function OverlaysFront({
             y={pos.y}
             title={sec.title ?? ''}
             color={sec.color}
+            readOnly={readOnly}
             onTitle={(t) => setSectionTitle(sec.id, t)}
             onColor={(c) => setSectionColor(sec.id, c)}
             onDelete={() => removeSection(sec.id)}
@@ -335,6 +338,7 @@ export function OverlaysFront({
         const hasMemo = c.note != null || editing === c.id;
 
         if (!hasMemo) {
+          if (readOnly) return null; // 메모 없는 연결 — 뷰어에는 "메모 추가/연결 삭제" 손잡이를 그리지 않는다
           return (
             <div
               key={c.id}
@@ -358,6 +362,7 @@ export function OverlaysFront({
             x={memoPos.x}
             y={memoPos.y}
             note={c.note ?? ''}
+            readOnly={readOnly}
             startEditing={editing === c.id}
             onCommit={(text) => {
               if (text.trim() === '' && editing === c.id) setEditing(null);
@@ -384,6 +389,7 @@ function SectionLabel({
   y,
   title,
   color,
+  readOnly = false,
   onTitle,
   onColor,
   onDelete,
@@ -393,6 +399,7 @@ function SectionLabel({
   y: number;
   title: string;
   color?: string;
+  readOnly?: boolean;
   onTitle: (t: string) => void;
   onColor: (c: string | undefined) => void;
   onDelete: () => void;
@@ -427,20 +434,24 @@ function SectionLabel({
       style={{ left: x, top: y }}
       onPointerDown={(e) => {
         e.stopPropagation();
-        if (!edit) onDragStart(e);
+        if (!edit && !readOnly) onDragStart(e);
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        setEdit(true);
+        if (!readOnly) setEdit(true);
       }}
     >
-      <button
-        className="section-dot"
-        title="섹션 색상"
-        style={{ background: color ?? 'var(--ink-faint)' }}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => setShowColors((v) => !v)}
-      />
+      {readOnly ? (
+        <span className="section-dot" style={{ background: color ?? 'var(--ink-faint)' }} />
+      ) : (
+        <button
+          className="section-dot"
+          title="섹션 색상"
+          style={{ background: color ?? 'var(--ink-faint)' }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setShowColors((v) => !v)}
+        />
+      )}
       {edit ? (
         <input
           ref={ref}
@@ -459,16 +470,18 @@ function SectionLabel({
       ) : (
         <span className="section-title-text">{title || '섹션'}</span>
       )}
-      <button
-        className="section-del"
-        title="섹션 삭제"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={onDelete}
-      >
-        <Icon name="close" />
-      </button>
+      {!readOnly && (
+        <button
+          className="section-del"
+          title="섹션 삭제"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={onDelete}
+        >
+          <Icon name="close" />
+        </button>
+      )}
 
-      {showColors && (
+      {!readOnly && showColors && (
         <div className="section-swatches" onPointerDown={(e) => e.stopPropagation()}>
           {TAG_KEYS.map((c) => (
             <button
@@ -499,6 +512,7 @@ function ConnMemo({
   x,
   y,
   note,
+  readOnly = false,
   startEditing,
   onCommit,
   onDelete,
@@ -507,6 +521,7 @@ function ConnMemo({
   x: number;
   y: number;
   note: string;
+  readOnly?: boolean;
   startEditing: boolean;
   onCommit: (text: string) => void;
   onDelete: () => void;
@@ -529,11 +544,11 @@ function ConnMemo({
       style={{ left: x, top: y }}
       onPointerDown={(e) => {
         e.stopPropagation();
-        if (!edit) onDragStart(e);
+        if (!edit && !readOnly) onDragStart(e);
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        setEdit(true);
+        if (!readOnly) setEdit(true);
       }}
     >
       {edit ? (
@@ -560,14 +575,16 @@ function ConnMemo({
       ) : (
         <span className="conn-memo-text">{note || '메모'}</span>
       )}
-      <button
-        className="conn-del"
-        title="연결 삭제"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={onDelete}
-      >
-        <Icon name="close" />
-      </button>
+      {!readOnly && (
+        <button
+          className="conn-del"
+          title="연결 삭제"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={onDelete}
+        >
+          <Icon name="close" />
+        </button>
+      )}
     </div>
   );
 }

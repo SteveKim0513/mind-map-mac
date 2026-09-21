@@ -12,6 +12,10 @@ import { ContextMenu } from '../menu/ContextMenu';
 import { Breadcrumb } from '../ui/Breadcrumb';
 import { Icon } from '../ui/Icon';
 import { useSession, type Tab } from '../store/sessionStore';
+import { notifyFileSaved } from '../store/shareStore';
+import { ViewerBadge } from '../ui/ViewerBadge';
+import { CommentThread, anchorSelectorFor } from '../ui/CommentThread';
+import { useCommentFileTarget } from '../store/commentStore';
 
 interface Props {
   tab: Tab;
@@ -43,12 +47,17 @@ function PaneBody({
   const store = useMapStore();
   const doc = useMap((s) => s.doc);
   const dirty = useMap((s) => s.dirty);
+  // 공유로 받은 읽기 전용 맵(뷰어) — 편집 UI를 숨기고 절대 저장하지 않는다(스토어도 dirty를 막는다).
+  const readOnly = useMap((s) => s.readOnly);
   const filePath = useMap((s) => s.filePath);
   const markSaved = useMap((s) => s.markSaved);
   const notePopoverId = useUi((s) => s.notePopoverId);
   const schedulePopoverId = useUi((s) => s.schedulePopoverId);
   const addLinkFor = useUi((s) => s.addLinkFor);
   const contextMenu = useUi((s) => s.contextMenu);
+  // 공유 폴더 코멘트: 이 맵의 노드에 열린 스레드 팝오버(뷰어에서도 동작 — 코멘트는 문서를 바꾸지 않는다). 활성 창에만 그린다.
+  const commentThread = useUi((s) => s.commentThread);
+  const commentTarget = useCommentFileTarget(filePath);
 
   const [handle, setHandle] = useState<CanvasHandle | null>(null);
 
@@ -89,7 +98,7 @@ function PaneBody({
 
   // debounced autosave to this tab's file
   useEffect(() => {
-    if (!dirty || !filePath) return;
+    if (!dirty || !filePath || readOnly) return;
     const t = setTimeout(() => {
       // Save to the tab's *current* path (read at fire time), not the path captured
       // when the timer was scheduled — guards against writing to a just-renamed path.
@@ -97,30 +106,45 @@ function PaneBody({
       if (!target) return;
       // Never recreate a file that's being trashed — see useSession.deletingPaths.
       if (useSession.getState().isDeleting(target)) return;
+      if (store.getState().readOnly) return;
       void window.api.save(target, serialize(store.getState().doc)).then((p) => {
-        if (p) markSaved(p);
+        if (p) {
+          markSaved(p);
+          notifyFileSaved(p); // 공유 폴더의 소유자라면 이 저장을 참가자에게 발행한다(그 밖에는 아무 일도 없다)
+        }
       });
     }, 1000);
     return () => clearTimeout(t);
-  }, [dirty, doc, filePath, markSaved, store]);
+  }, [dirty, doc, filePath, markSaved, store, readOnly]);
 
   return (
     <>
       <Canvas ref={setHandle} active={isActive} />
       <Breadcrumb />
+      {readOnly && <ViewerBadge path={filePath} />}
 
       {isEmpty && (
         <div className="empty">
           <div className="title">빈 마인드맵</div>
           <div className="hint">
-            <kbd>Enter</kbd> 를 눌러 중심 주제를 만드세요
+            {readOnly ? (
+              '소유자가 아직 내용을 만들지 않았어요'
+            ) : (
+              <>
+                <kbd>Enter</kbd> 를 눌러 중심 주제를 만드세요
+              </>
+            )}
           </div>
         </div>
       )}
 
       <div className="toolbar">
-        <span className={`map-save${dirty ? ' saving' : ''}`} title={dirty ? '저장 중' : '저장됨'} />
-        <span className="sep" />
+        {!readOnly && (
+          <>
+            <span className={`map-save${dirty ? ' saving' : ''}`} title={dirty ? '저장 중' : '저장됨'} />
+            <span className="sep" />
+          </>
+        )}
         <button className="tool-btn icon" title="축소" onClick={() => handle?.zoomOut()}>
           <Icon name="minus" />
         </button>
@@ -143,15 +167,30 @@ function PaneBody({
         </button>
       </div>
 
-      {notePopoverId && doc.nodes[notePopoverId] && (
+      {!readOnly && notePopoverId && doc.nodes[notePopoverId] && (
         <NodePopover id={notePopoverId} onClose={() => useUi.getState().closeNote()} />
       )}
-      {schedulePopoverId && doc.nodes[schedulePopoverId] && (
+      {!readOnly && schedulePopoverId && doc.nodes[schedulePopoverId] && (
         <SchedulePopover id={schedulePopoverId} onClose={() => useUi.getState().closeSchedule()} />
       )}
-      {addLinkFor && doc.nodes[addLinkFor] && (
+      {!readOnly && addLinkFor && doc.nodes[addLinkFor] && (
         <LinkAddPopover id={addLinkFor} onClose={() => useUi.getState().closeAddLink()} />
       )}
+      {isActive &&
+        commentThread &&
+        commentTarget &&
+        commentThread.roomId === commentTarget.roomId &&
+        commentThread.anchor.kind !== 'note' &&
+        commentThread.anchor.fileId === commentTarget.fileId && (
+          <CommentThread
+            key={`${commentThread.roomId}|${commentThread.anchor.targetId ?? ''}`}
+            roomId={commentThread.roomId}
+            anchor={commentThread.anchor}
+            anchorSelector={commentThread.anchor.targetId ? anchorSelectorFor('data-node-id', commentThread.anchor.targetId) : null}
+            title={(commentThread.anchor.targetId && doc.nodes[commentThread.anchor.targetId]?.text) || commentThread.anchor.label || '코멘트'}
+            onClose={() => useUi.getState().closeCommentThread()}
+          />
+        )}
       {contextMenu && doc.nodes[contextMenu.id] && (
         <ContextMenu
           id={contextMenu.id}

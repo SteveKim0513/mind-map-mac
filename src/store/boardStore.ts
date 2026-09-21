@@ -14,6 +14,7 @@ import type {
 import type { TagKey } from '../theme/palette';
 import { emptyBoard } from '../io/boardFormat';
 import { newId } from '../io/formats';
+import { guardActions, guardSet } from './readOnlyGuard';
 
 const HISTORY_LIMIT = 100;
 
@@ -66,10 +67,30 @@ export type BoardElementPatch = Partial<{
   link: string;
 }>;
 
+/**
+ * 읽기 전용(뷰어) 보드에서도 동작하는 액션 — 로컬 표시 상태(선택·필터·팬/줌)와 문서 수명주기, 복사(읽기)뿐이다.
+ * 여기 없는 액션은 전부 자동 차단된다(`readOnlyGuard.guardActions`) — 문서를 바꾸는 새 액션은 절대 여기 넣지 않는다.
+ */
+export const BOARD_VIEWER_ALLOWED: ReadonlySet<string> = new Set([
+  'loadBoard',
+  'markSaved',
+  'setFilePath',
+  'setReadOnly',
+  'refreshViewerBoard',
+  'setSelection',
+  'setColorFilter',
+  'setShapeFilter',
+  'setView',
+  'selectAll',
+  'copyElements',
+]);
+
 interface BoardState {
   board: BoardDoc;
   filePath: string | null;
   dirty: boolean;
+  /** 공유 폴더에서 받은 보드(참가자 뷰어) — true면 문서를 바꾸는 모든 액션이 차단되고 저장되지 않는다. */
+  readOnly: boolean;
   selection: string[]; // selected element ids — ephemeral, not persisted
   colorFilter: string | null; // ephemeral — dim every sticky not tagged this color
   shapeFilter: StickyShape | null; // ephemeral — dim every sticky not this outline shape
@@ -79,6 +100,10 @@ interface BoardState {
   loadBoard: (board: BoardDoc, filePath: string | null) => void;
   markSaved: (filePath: string) => void;
   setFilePath: (filePath: string) => void;
+  /** 뷰어 표시를 켠다(끄지 않는다 — 공유가 끝나도 읽기 전용을 유지). 켜면 dirty도 즉시 해제. */
+  setReadOnly: (on: boolean) => void;
+  /** 뷰어 보드를 소유자의 새 버전으로 바꾼다(선택·팬/줌은 유지, 이력 없음). 읽기 전용이 아니면 아무 일도 안 한다. */
+  refreshViewerBoard: (board: BoardDoc) => void;
 
   addElement: (el: BoardElement) => void;
   /** Atomic multi-add (e.g. a new sticky + the connector that spawned it).
@@ -201,7 +226,9 @@ export function createBoardStore(): BoardStore {
   let inTransaction = false;
   let transactionBaseline: BoardDoc | null = null;
 
-  return createStore<BoardState>((set, get) => {
+  return createStore<BoardState>((rawSet, get) => {
+    // 뷰어(읽기 전용)에서는 어떤 경로로도 dirty가 되지 않게 set을 감싼다.
+    const set = guardSet<BoardState>(rawSet, get);
     /** Pushes `prevBoard` — the board as it was immediately BEFORE the
      *  caller's mutation — onto history, unless a drag transaction is already
      *  handling it. Every one-shot action below calls this with the `board`
@@ -211,10 +238,11 @@ export function createBoardStore(): BoardStore {
     const historyPatch = (prevBoard: BoardDoc) =>
       inTransaction ? {} : { past: [...get().past.slice(-HISTORY_LIMIT + 1), prevBoard], future: [] };
 
-    return {
+    const state: BoardState = {
       board: emptyBoard(),
       filePath: null,
       dirty: false,
+      readOnly: false,
       selection: [],
       colorFilter: null,
       shapeFilter: null,
@@ -225,6 +253,21 @@ export function createBoardStore(): BoardStore {
         set({ board, filePath, dirty: false, selection: [], colorFilter: null, shapeFilter: null, past: [], future: [] }),
       markSaved: (filePath) => set({ filePath, dirty: false }),
       setFilePath: (filePath) => set({ filePath }),
+      setReadOnly: (on) => {
+        if (on) set({ readOnly: true, dirty: false });
+      },
+      refreshViewerBoard: (board) => {
+        const s = get();
+        if (!s.readOnly) return;
+        // 소유자의 팬/줌은 가져오지 않는다 — 보는 사람의 시점을 유지한다.
+        set({
+          board: { ...board, view: s.board.view },
+          dirty: false,
+          selection: s.selection.filter((id) => board.elements[id]),
+          past: [],
+          future: [],
+        });
+      },
 
       addElement: (el) => get().addElements([el]),
 
@@ -525,6 +568,8 @@ export function createBoardStore(): BoardStore {
         set({ board: baseline }); // revert — no history entry, nothing to commit
       },
     };
+    // 문서를 바꾸는 모든 액션은 뷰어(readOnly)에서 기본 차단 — 허용 목록만 열려 있다.
+    return guardActions(state, get, { allow: BOARD_VIEWER_ALLOWED, blockedResult: { hasClipboard: false } });
   });
 }
 

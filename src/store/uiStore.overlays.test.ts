@@ -95,11 +95,79 @@ describe('uiStore overlay mutations', () => {
     expect(s.manualOpen).toBe(false);
   });
 
+  it('공유 패널·다이얼로그도 같은 스택 규칙을 따른다 (Esc는 위에서부터 한 단계씩)', () => {
+    const st = useUi.getState();
+    st.openShare('room-AAAAAAAA', { code: 'ABCD2345', expiresAt: 5 });
+    st.openShareJoin();
+    let s = useUi.getState();
+    expect(s.overlayStack).toEqual(['share', 'shareDialog']);
+    expect(s.shareRoomId).toBe('room-AAAAAAAA');
+    expect(s.shareInvite).toEqual({ code: 'ABCD2345', expiresAt: 5 });
+    expect(s.shareDialog).toEqual({ kind: 'join' });
+    s.closeShareDialog();
+    s = useUi.getState();
+    expect(s.shareDialog).toBeNull();
+    expect(s.overlayStack).toEqual(['share']);
+    s.closeShare();
+    s = useUi.getState();
+    expect(s.shareOpen).toBe(false);
+    expect(s.shareRoomId).toBeNull();
+    expect(s.shareInvite).toBeNull(); // 초대 코드는 패널을 닫으면 메모리에서도 사라진다
+    expect(s.overlayStack).toEqual([]);
+  });
+
+  it('openShareCreate는 폴더를 미리 정했는지 여부를 담는다', () => {
+    useUi.getState().openShareCreate('/ws/team');
+    expect(useUi.getState().shareDialog).toEqual({ kind: 'create', folderPath: '/ws/team' });
+    useUi.getState().openShareCreate(null);
+    expect(useUi.getState().shareDialog).toEqual({ kind: 'create', folderPath: null });
+    expect(useUi.getState().overlayStack).toEqual(['shareDialog']); // 다시 열어도 중복되지 않는다
+  });
+
+  it('closeAllOverlays는 공유 패널·다이얼로그·초대 코드도 정리한다', () => {
+    const st = useUi.getState();
+    st.openShare('room-AAAAAAAA', { code: 'ABCD2345', expiresAt: 5 });
+    st.openShareCreate('/ws/team');
+    useUi.getState().closeAllOverlays();
+    const s = useUi.getState();
+    expect(s.shareOpen).toBe(false);
+    expect(s.shareRoomId).toBeNull();
+    expect(s.shareInvite).toBeNull();
+    expect(s.shareDialog).toBeNull();
+    expect(s.overlayStack).toEqual([]);
+  });
+
   it('closeAllOverlays leaves whatsNew alone (out of the stack)', () => {
     useUi.getState().setWhatsNew('9.9.9');
     useUi.getState().openSettings();
     useUi.getState().closeAllOverlays();
     expect(useUi.getState().whatsNew).toBe('9.9.9');
     useUi.getState().setWhatsNew(null);
+  });
+  it('알림 센터도 같은 스택 규칙을 따르고, 목적 달성(closeAllOverlays)으로 함께 닫힌다', () => {
+    const st = useUi.getState();
+    st.openSettings();
+    st.openNotifications();
+    let s = useUi.getState();
+    expect(s.notificationsOpen).toBe(true);
+    expect(s.overlayStack).toEqual(['settings', 'notifications']);
+    s.closeNotifications(); // Esc는 맨 위(알림 센터)만 닫고 설정으로 돌아온다
+    s = useUi.getState();
+    expect(s.notificationsOpen).toBe(false);
+    expect(s.overlayStack).toEqual(['settings']);
+    s.openNotifications();
+    useUi.getState().closeAllOverlays(); // 알림을 눌러 해당 위치로 떠날 때
+    s = useUi.getState();
+    expect(s.notificationsOpen).toBe(false);
+    expect(s.overlayStack).toEqual([]);
+  });
+
+  it('코멘트 스레드는 관리형 오버레이가 아니라 스택에 들어가지 않는다', () => {
+    const st = useUi.getState();
+    st.openCommentThread('room-abcdef12', { kind: 'note', noteId: 'note-1' });
+    expect(useUi.getState().commentThread).toEqual({ roomId: 'room-abcdef12', anchor: { kind: 'note', noteId: 'note-1' } });
+    expect(useUi.getState().overlayStack).toEqual([]);
+    useUi.getState().closeCommentThread();
+    expect(useUi.getState().commentThread).toBeNull();
   });
 });

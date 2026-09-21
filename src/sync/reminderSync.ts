@@ -82,8 +82,9 @@ function patch(store: MapStore, id: string, fields: Record<string, unknown>) {
 
 /** Keep one subscription per open tab; reconcile when a tab's document mutates. */
 function refreshSubs() {
-  // only map tabs carry schedulable nodes; note tabs are ignored by sync
-  const tabs = useSession.getState().tabs.filter((t) => t.kind === 'map');
+  // only map tabs carry schedulable nodes; note tabs are ignored by sync.
+  // 공유로 받은 읽기 전용 맵(뷰어)은 제외한다 — 소유자의 노드 id·리마인더는 내 것이 아니다.
+  const tabs = useSession.getState().tabs.filter((t) => t.kind === 'map' && !(t.store as MapStore).getState().readOnly);
   const live = new Set(tabs.map((t) => t.id));
   for (const [id, s] of subs) {
     if (!live.has(id)) {
@@ -182,6 +183,9 @@ async function reconcile() {
     for (const t of useSession.getState().tabs) {
       if (t.kind !== 'map') continue;
       const store = t.store as MapStore;
+      // 공유로 받은 읽기 전용 맵(뷰어)은 동기화 대상이 아니다 — 리마인더 신원 필드가 제거된 사본이라 "원치 않음"으로 오해해
+      // 같은 Apple ID를 쓰는 소유자의 리마인더를 지울 수 있다(고아·삭제 위험). 소유자만 자기 리마인더를 관리한다.
+      if (store.getState().readOnly) continue;
       const nodes = store.getState().doc.nodes;
       for (const id in nodes) {
         owners.set(id, store);
@@ -376,3 +380,27 @@ export function stopReminderSync() {
   setReminderDeleteHook(null);
   started = false;
 }
+
+/**
+ * 테스트 전용 진입점 — 디바운스·폴링·포커스 리스너 없이 한 번의 대조 패스와 탭 구독 갱신을 직접 돌리고 모듈 상태를 되돌린다.
+ * 앱 코드에서는 쓰지 않는다(`startReminderSync`/`stopReminderSync`가 유일한 공개 수명주기).
+ */
+export const reminderSyncTestApi = {
+  reconcile: (): Promise<void> => reconcile(),
+  refreshSubs: (): void => refreshSubs(),
+  subscriptionCount: (): number => subs.size,
+  reset: (): void => {
+    for (const [, s] of subs) s.unsub();
+    subs.clear();
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (heartbeatTimer) clearTimeout(heartbeatTimer);
+    debounceTimer = null;
+    heartbeatTimer = null;
+    health = 'unknown';
+    warned = false;
+    syncing = false;
+    pending = false;
+    pollUntracked = false;
+    backoffIndex = 0;
+  },
+};

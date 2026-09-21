@@ -3,6 +3,7 @@ import { useUi } from '../store/uiStore';
 import { requestFocusStart } from '../focus/controller';
 import { ColorSwatchGrid } from '../ui/ColorSwatchGrid';
 import { useDismissablePosition } from '../ui/useDismissablePosition';
+import { useCommentFileTarget } from '../store/commentStore';
 
 interface Props {
   id: string;
@@ -15,6 +16,8 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
   const node = useMap((s) => s.doc.nodes[id]);
   const map = useMap((s) => s);
   const mapStore = useMapStore();
+  // 공유 폴더의 파일이면(소유자·뷰어 모두) 코멘트를 남길 수 있다 — 일반 파일에는 항목이 없다.
+  const commentTarget = useCommentFileTarget(map.filePath);
   // 76px bottom inset keeps the menu clear of the floating zoom toolbar,
   // which paints above us (the pane's stacking context outranks the canvas's)
   const { ref, pos } = useDismissablePosition<HTMLDivElement>(x, y, onClose, { bottomInset: 76 });
@@ -25,6 +28,57 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
     onClose();
   };
   const hasChildren = node.children.length > 0;
+  const openComment = () => {
+    if (commentTarget) {
+      useUi.getState().openCommentThread(commentTarget.roomId, { kind: 'map', fileId: commentTarget.fileId, targetId: id, label: node.text });
+    }
+  };
+
+  // 뷰어(공유로 받은 읽기 전용 맵): 편집 항목 없이 "보기" 동작만 — 접기·확대·이 노드만 보기·복사.
+  // (복사한 노드는 내 다른 맵에 붙여넣을 수 있다 — 리마인더 신원은 복사 때 항상 제거된다.)
+  if (map.readOnly) {
+    return (
+      <div
+        ref={ref}
+        className="ctx-menu"
+        style={{ left: pos.left, top: pos.top }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        {hasChildren && (
+          <button className="ctx-item" onClick={run(() => map.toggleCollapse(id))}>
+            <span>{node.collapsed ? '펼치기' : '접기'}</span>
+          </button>
+        )}
+        <button className="ctx-item" onClick={run(() => useUi.getState().zoomTo(id))}>
+          <span>이 노드로 확대</span>
+          <kbd>Z</kbd>
+        </button>
+        <button className="ctx-item" onClick={run(() => map.setFocus(id))}>
+          <span>이 노드만 보기</span>
+        </button>
+        <div className="ctx-sep" />
+        {/* 뷰어도 코멘트는 남길 수 있다 — 편집 대신 하는 일이라 가장 먼저 보인다 */}
+        {commentTarget && (
+          <>
+            <button className="ctx-item" data-testid="ctx-comment" onClick={run(openComment)}>
+              <span>코멘트 남기기</span>
+            </button>
+            <div className="ctx-sep" />
+          </>
+        )}
+        <button
+          className="ctx-item"
+          onClick={run(() => {
+            map.copyNode(id);
+            useUi.getState().toast('복사함');
+          })}
+        >
+          <span>복사</span>
+          <kbd>⌘C</kbd>
+        </button>
+      </div>
+    );
+  }
 
   // Multi-selection gets its OWN menu — only actions that apply to the whole
   // selection (the single-node items would silently act on just one node).
@@ -191,6 +245,11 @@ export function ContextMenu({ id, x, y, onClose }: Props) {
       >
         <span>노드에 노트 연결</span>
       </button>
+      {commentTarget && (
+        <button className="ctx-item" data-testid="ctx-comment" onClick={run(openComment)}>
+          <span>코멘트 남기기</span>
+        </button>
+      )}
       <div className="ctx-sep" />
       <button className="ctx-item danger" onClick={run(() => map.deleteNode(id))}>
         <span>삭제</span>

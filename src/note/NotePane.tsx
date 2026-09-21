@@ -4,15 +4,21 @@ import { NoteContext, useNote, useNoteStore, type NoteStore } from '../store/not
 import { emptyNote, serializeNote } from '../io/noteFormat';
 import { fileNameFromTitle } from '../io/autoName';
 import { NoteEditor } from './NoteEditor';
+import { CollabPeers, SharedNoteBadge, type SharedNoteStatus } from './CollabPresence';
+import type { NoteCollab } from './collabCaret';
 import { ImageLightbox } from './ImageLightbox';
 import { NodePicker } from './NodePicker';
 import { NoteMetaBlocks } from './NoteMetaBlock';
-import { addLinkToNoteFile, reindexFromNote, renameWikiLinks, revealNode } from './noteLinks';
+import { addLinkToNoteFile, reindexFromNote, renameWikiLinks, revealNode, shouldRewriteWikiLinksOnRename } from './noteLinks';
 import { useSession } from '../store/sessionStore';
-import { useWorkspace, openBoardSticky } from '../store/workspaceStore';
+import { useWorkspace, openBoardSticky, linkedNotePath } from '../store/workspaceStore';
 import { useUi } from '../store/uiStore';
 import { useMetaStore } from '../store/metaStore';
+import { useShare, useSharedNoteInfo, type ShareDocEntry, type SharedNoteInfo } from '../store/shareStore';
+import { saveSharedNote } from '../store/sharedNoteSave';
 import { Icon } from '../ui/Icon';
+import { CommentThread } from '../ui/CommentThread';
+import { useNoteCommentCount } from '../store/commentStore';
 import { fileDisplayName } from '../io/fileKind';
 import { fmtDuration } from '../focus/aggregate';
 import { endFocusSession, closeStaleSession } from '../focus/controller';
@@ -45,6 +51,95 @@ function NotePaneBody() {
   const markSaved = useNote((s) => s.markSaved);
   const removeLink = useNote((s) => s.removeLink);
   const setMetaBlocks = useNote((s) => s.setMetaBlocks);
+  const mirrorBody = useNote((s) => s.mirrorBody);
+
+  // ── 공유 폴더 노트(실시간 공동편집) ────────────────────────────────────────────
+  // 공유 여부는 파일 경로로 조회하되, 제목 변경으로 파일 이름이 바뀌어 새 경로가 등록되기 전(스캔이 따라잡는 몇백 ms)에도
+  // 같은 노트로 남도록 마지막으로 확인한 정보를 고정한다. 노트가 공유 노트면 파일의 본문은 복제 매니저가 단일 쓰기
+  // 주체이므로 이 창은 본문을 저장하지 않는다(아래 자동저장·rename·flushSaves 경로 참고).
+  const sharedLive = useSharedNoteInfo(filePath);
+  const sharedRef = useRef<SharedNoteInfo | null>(null);
+  if (sharedLive) sharedRef.current = sharedLive;
+  const sharedInfo = sharedLive ?? sharedRef.current;
+  const facts = useRoomFacts(sharedInfo?.roomId ?? null);
+  const [collabDoc, setCollabDoc] = useState<ShareDocEntry | null>(null);
+  const [docFailed, setDocFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  // 방이 사라졌는데(공유 해제·나가기) 문서를 한 번도 못 받았다면 공유 노트로 다루지 않는다(일반 노트).
+  const shared = sharedInfo && (facts.status !== 'gone' || collabDoc) ? sharedInfo : null;
+  const sharedRoomId = sharedInfo?.roomId ?? null;
+  const sharedNoteId = sharedInfo?.noteId ?? null;
+  // 공유 노트의 코멘트(노트 전체 단위) — 헤더의 "코멘트" 버튼과 스레드 팝오버. 일반 노트에는 그려지지 않는다.
+  const commentCount = useNoteCommentCount(sharedRoomId, sharedNoteId);
+  const commentThread = useUi((s) => s.commentThread);
+  const commentOpen =
+    !!shared && !!sharedRoomId && !!sharedNoteId && !!commentThread && commentThread.roomId === sharedRoomId && commentThread.anchor.kind === 'note' && commentThread.anchor.noteId === sharedNoteId;
+  useEffect(() => {
+    if (!sharedRoomId || !sharedNoteId || !facts.hasReplica) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    const attempt = () => {
+      const replica = useShare.getState().getRoom(sharedRoomId)?.replica;
+      if (!replica) return; // 복제 매니저가 다시 준비되면 이 효과가 다시 돈다
+      void replica.ensureNoteDoc(sharedNoteId).then(
+        (entry) => {
+          if (cancelled) return;
+          if (entry) {
+            setDocFailed(false);
+            setCollabDoc((prev) => (prev?.ydoc === entry.ydoc ? prev : entry));
+            return;
+          }
+          attempts += 1;
+          if (attempts >= 8) setDocFailed(true);
+          else timer = setTimeout(attempt, 1_000);
+        },
+        () => {
+          if (!cancelled) setDocFailed(true);
+        },
+      );
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [sharedRoomId, sharedNoteId, facts.hasReplica, retryTick]);
+  // 문서가 정리되면(방 연결 종료) 읽기 전용으로 — 죽은 문서에 계속 쓰지 않는다.
+  const [docDestroyed, setDocDestroyed] = useState(false);
+  useEffect(() => {
+    setDocDestroyed(false);
+    if (!collabDoc) return;
+    const onDestroy = () => setDocDestroyed(true);
+    collabDoc.ydoc.on('destroy', onDestroy);
+    return () => collabDoc.ydoc.off('destroy', onDestroy);
+  }, [collabDoc]);
+  // 공유 방이 다시 시작되면(폴더 이름 변경·이동, 역할 정정, 재연결) 새 Y.Doc이 만들어지고 옛 문서는 파기된다. 에디터는 만들 때의 Y.Doc에
+  // 묶이므로(Tiptap useEditor는 옵션이 바뀌어도 다시 만들지 않는다) 문서가 바뀌면 에디터를 새로 마운트해야 한다 — 안 그러면 파기된 문서에
+  // 계속 타이핑해 편집이 다른 참가자에게도 파일에도 가지 않는다.
+  const collabEpoch = useRef<{ ydoc: ShareDocEntry['ydoc'] | null; n: number }>({ ydoc: null, n: 0 });
+  if (collabDoc && collabEpoch.current.ydoc !== collabDoc.ydoc) collabEpoch.current = { ydoc: collabDoc.ydoc, n: collabEpoch.current.n + 1 };
+  const sharedEnded = !!shared && (facts.status === 'gone' || docDestroyed);
+  const sharedDenied = !!shared && facts.status === 'denied';
+  const sharedReadOnly = sharedEnded || sharedDenied;
+  const collab = useMemo<NoteCollab | undefined>(
+    () =>
+      shared && collabDoc
+        ? {
+            ydoc: collabDoc.ydoc,
+            awareness: collabDoc.awareness,
+            user: { participantId: facts.participantId, name: facts.displayName },
+            readOnly: sharedReadOnly,
+            onBody: mirrorBody,
+          }
+        : undefined,
+    [shared, collabDoc, facts.participantId, facts.displayName, sharedReadOnly, mirrorBody],
+  );
+  const sharedStatus: SharedNoteStatus = sharedEnded
+    ? 'ended'
+    : facts.status === 'connected' || facts.status === 'connecting' || facts.status === 'denied'
+      ? facts.status
+      : 'offline';
 
   const templates = useMetaStore((s) => s.templates);
   const metaLoaded = useMetaStore((s) => s.loaded);
@@ -98,10 +193,10 @@ function NotePaneBody() {
     () =>
       filePath
         ? boardIndex.flatMap((m) =>
-            m.noteLinks.filter((l) => l.notePath === filePath).map((l) => ({ path: m.path, stickyId: l.stickyId })),
+            m.noteLinks.filter((l) => linkedNotePath(noteIndex, l) === filePath).map((l) => ({ path: m.path, stickyId: l.stickyId })),
           )
         : [],
-    [boardIndex, filePath],
+    [boardIndex, noteIndex, filePath],
   );
   // open a peek of a related note, anchored to the clicked chip (same model as a
   // body wiki-link: glance first, "열기" promotes to the opposite pane)
@@ -166,6 +261,20 @@ function NotePaneBody() {
     const t = setTimeout(() => {
       // Never recreate a note that's being trashed — see useSession.deletingPaths.
       if (useSession.getState().isDeleting(filePath)) return;
+      if (shared) {
+        // 공유 노트: 본문은 쓰지 않는다 — 제목(공유 문서)과 로컬 프론트매터(노드 연결·메타 블록)만 저장한다.
+        const snap = store.getState();
+        void saveSharedNote(filePath, snap.note, { pushTitle: snap.titleEdited, info: shared }).then((p) => {
+          if (!p) return;
+          // 저장하는 동안 더 고쳤다면 dirty를 남겨 다음 자동저장이 이어받게 한다.
+          if (store.getState().note === snap.note) {
+            markSaved(p);
+            if (snap.titleEdited) store.getState().markTitleSynced();
+          }
+          reindexFromNote(filePath, store.getState().note);
+        });
+        return;
+      }
       void window.api.save(filePath, serializeNote(store.getState().note)).then((p) => {
         if (p) {
           markSaved(p);
@@ -176,7 +285,7 @@ function NotePaneBody() {
       });
     }, 800);
     return () => clearTimeout(t);
-  }, [dirty, note, filePath, markSaved, store]);
+  }, [dirty, note, filePath, markSaved, store, shared]);
 
   // The title drives the file name (spec: note-title-filename-sync). Debounced
   // rename, one-directional: editing the title renames the .md so the sidebar
@@ -220,8 +329,9 @@ function NotePaneBody() {
           const newPath = await window.api.rename(filePath, `${wanted}.md`);
           sess.renamePath(filePath, newPath);
           await useWorkspace.getState().refresh();
-          // keep note↔note links pointing here: [[oldTitle]] → [[newTitle]] everywhere
-          await renameWikiLinks(oldTitle, newTitle);
+          // keep note↔note links pointing here: [[oldTitle]] → [[newTitle]] everywhere.
+          // 다른 참가자가 바꾼 제목(공유 노트)은 그쪽이 이미 치환한다 — 여기서도 하면 같은 자리를 두 번 고쳐 중복된다.
+          if (shouldRewriteWikiLinksOnRename(store.getState().remoteTitle, newTitle)) await renameWikiLinks(oldTitle, newTitle);
           prevTitle.current = newTitle;
         } catch {
           /* keep the current name; a later edit retries */
@@ -251,18 +361,42 @@ function NotePaneBody() {
           className="note-title"
           value={note.title}
           placeholder="제목 없음"
-          readOnly={isSession}
+          readOnly={isSession || sharedReadOnly}
           onChange={(e) => setTitle(e.target.value)}
         />
+        {shared && <SharedNoteBadge status={sharedStatus} />}
+        {shared && sharedRoomId && sharedNoteId && (
+          <button
+            className={`note-comment-btn${commentOpen ? ' open' : ''}${commentCount > 0 ? ' has' : ''}`}
+            data-testid="note-comment-btn"
+            data-comment-anchor="note"
+            aria-pressed={commentOpen}
+            title="이 노트에 코멘트 남기기 — 노트 전체에 대한 대화예요"
+            onClick={() => {
+              if (commentOpen) useUi.getState().closeCommentThread();
+              else useUi.getState().openCommentThread(sharedRoomId, { kind: 'note', noteId: sharedNoteId, label: note.title });
+            }}
+          >
+            <Icon name="comment" />
+            <span>코멘트</span>
+            {commentCount > 0 && <span className="note-comment-count" data-testid="note-comment-count">{commentCount}</span>}
+          </button>
+        )}
+        {shared && collab && !sharedReadOnly && (
+          <CollabPeers awareness={collab.awareness} selfParticipantId={collab.user.participantId} />
+        )}
         {isTemplate && (
           <span className="note-template-badge" title="이 노트는 템플릿입니다 — 템플릿+ 로 다른 노트에 삽입할 수 있어요">
             <Icon name="template" />
             템플릿
           </span>
         )}
-        <span className={`note-save${dirty ? ' saving' : ''}`} title={dirty ? '저장 중' : '저장됨'}>
-          {dirty ? '저장 중…' : '저장됨'}
-        </span>
+        {/* 공유 노트는 변경이 계속 동기화되므로 "저장됨" 대신 위의 공유 표식이 상태를 말해 준다 */}
+        {!shared && (
+          <span className={`note-save${dirty ? ' saving' : ''}`} title={dirty ? '저장 중' : '저장됨'}>
+            {dirty ? '저장 중…' : '저장됨'}
+          </span>
+        )}
         {isAttached && (
           <button className="note-promote" title="사이드바에 표시" onClick={() => void promote()}>
             <Icon name="folder" />
@@ -290,6 +424,18 @@ function NotePaneBody() {
           </button>
         )}
       </div>
+
+      {commentOpen && sharedRoomId && sharedNoteId && (
+        <CommentThread
+          key={`${sharedRoomId}|${sharedNoteId}`}
+          roomId={sharedRoomId}
+          anchor={{ kind: 'note', noteId: sharedNoteId, label: note.title }}
+          anchorSelector='[data-comment-anchor="note"]'
+          title={note.title || '노트'}
+          toggleFromAnchor
+          onClose={() => useUi.getState().closeCommentThread()}
+        />
+      )}
 
       {infoOpen && metaCount > 0 && (
         <div className="note-info">
@@ -376,9 +522,23 @@ function NotePaneBody() {
         />
       )}
 
-      {/* key by note id so switching to another note loads its content fresh */}
+      {shared && sharedReadOnly && (
+        <div className="note-collab-notice" role="status" data-testid="note-collab-notice">
+          <Icon name="userOff" />
+          <span>
+            {sharedDenied
+              ? '이 공유 폴더에서 내보내져 더 이상 함께 편집할 수 없어요. 이 컴퓨터에 남은 파일은 그대로 있고, 여기서는 읽기만 할 수 있어요.'
+              : '이 폴더의 공유가 끝나 더 이상 함께 편집할 수 없어요. 파일은 그대로 남아 있어요 — 탭을 닫았다 다시 열면 일반 노트로 편집할 수 있어요.'}
+          </span>
+        </div>
+      )}
+      {shared && !collab ? (
+        <CollabLoading failed={docFailed} onRetry={() => { setDocFailed(false); setRetryTick((n) => n + 1); }} />
+      ) : (
+      /* key by note id so switching to another note loads its content fresh */
       <NoteEditor
-        key={note.id}
+        key={collab ? `${note.id}:collab:${collabEpoch.current.n}` : note.id}
+        collab={collab}
         body={note.body}
         onChange={setBody}
         scaffold={isSession}
@@ -399,11 +559,56 @@ function NotePaneBody() {
               }
         }
       />
+      )}
       {/* invisible: keeps the 목차 heading list / count live off the editor */}
       {editor && <NoteHeadingsProbe editor={editor} onChange={setHeadings} />}
       <ImageLightbox />
     </div>
   );
+}
+
+/** 공유 노트 문서가 아직 안 왔을 때의 조용한 자리표시(스켈레톤). 오래 걸리면 안내와 다시 시도를 보여 준다. */
+function CollabLoading({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  return (
+    <div className="note-collab-skeleton" data-testid="note-collab-loading" aria-busy={!failed}>
+      {failed ? (
+        <div className="note-collab-failed" role="status">
+          <span>공유 노트를 아직 불러오지 못했어요. 공유 폴더에 연결되면 다시 시도해 주세요.</span>
+          <button className="note-collab-retry" onClick={onRetry}>
+            다시 시도
+          </button>
+        </div>
+      ) : (
+        <div className="note-collab-skeleton-inner" role="status" aria-label="노트를 불러오는 중">
+          <span className="sk-line" style={{ width: '46%' }} />
+          <span className="sk-line" style={{ width: '92%' }} />
+          <span className="sk-line" style={{ width: '78%' }} />
+          <span className="sk-line" style={{ width: '86%' }} />
+          <span className="sk-line" style={{ width: '54%' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface RoomFacts {
+  status: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'denied' | 'gone';
+  participantId: string;
+  displayName: string;
+  hasReplica: boolean;
+}
+
+/** 방의 연결 상태·내 신원·복제 매니저 유무를 원시 값으로 구독한다(객체를 selector가 돌려주면 재렌더 루프가 난다). */
+function useRoomFacts(roomId: string | null): RoomFacts {
+  const key = useShare((s) => {
+    const room = roomId && Object.prototype.hasOwnProperty.call(s.rooms, roomId) ? s.rooms[roomId] : undefined;
+    if (!room) return `gone\u0000\u0000\u00000`;
+    return `${room.status}\u0000${room.marker.participantId}\u0000${room.marker.displayName}\u0000${room.replica ? 1 : 0}`;
+  });
+  return useMemo(() => {
+    const [status, participantId, displayName, replica] = key.split('\u0000');
+    return { status: status as RoomFacts['status'], participantId, displayName, hasReplica: replica === '1' };
+  }, [key]);
 }
 
 interface Head {

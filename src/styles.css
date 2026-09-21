@@ -1887,6 +1887,10 @@ button {
 .node-check .ic { width: 11px; height: 11px; }
 .node-check:hover { border-color: var(--primary); }
 .node-check.done { background: var(--state-done); border-color: var(--state-done); }
+/* 뷰어(공유로 받은 읽기 전용 맵) — 체크 표시는 상태만 보여 주고 눌리지 않는다 */
+.node.viewer .node-check { cursor: default; }
+.node.viewer .node-check:hover:not(.done) { border-color: var(--ink-faint); }
+.node.viewer .node-memo { cursor: default; }
 /* todo 노드 박스에 아주 옅은 실행 악센트(왼쪽) — 색이 지정된/선택된 노드는 그 상태가 우선 */
 .node.todo:not(.tinted):not(.selected):not(.done) {
   border-color: color-mix(in srgb, var(--state-done) 22%, var(--hairline));
@@ -7230,3 +7234,672 @@ textarea:focus-visible,
   width: 13px;
   height: 13px;
 }
+
+/* ── 공유 폴더 (ADR 0021) ──────────────────────────────────────────────────────
+   같은 역할은 같은 모양: 사람 아이콘 + 상태 점을 사이드바 행과 공유 설정 패널이 함께 쓴다.
+   새 hue를 만들지 않는다 — 연결됨 = 기존 "활성 초록"(--state-done), 나머지는 중립 잉크.
+   색만으로 전달하지 않도록 점 모양(채움/빈 고리)과 아이콘(사선)이 함께 다르고 텍스트 라벨이 붙는다. */
+.share-ic {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  color: var(--ink-muted);
+}
+.share-ic .ic { width: 14px; height: 14px; }
+.share-ic--denied { color: var(--ink-faint); }
+.share-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-faint);
+  background: transparent;
+}
+.share-dot--connected,
+.share-ic--connected .share-dot { background: var(--state-done); border-color: var(--state-done); }
+.share-ic--connecting .share-dot { border-color: var(--ink-muted); animation: sharePulse 1.2s ease-in-out infinite; }
+.share-ic--denied .share-dot { background: var(--ink-faint); }
+@keyframes sharePulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .share-ic--connecting .share-dot { animation: none; }
+}
+
+/* 사이드바 폴더 행의 표식 버튼 */
+.share-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 4px;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  cursor: pointer;
+}
+.share-badge:hover { background: var(--hover); }
+
+/* 공통 버튼 — 일반 32px, .small 26px (UI-DESIGN-PRINCIPLES 버튼 규칙) */
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.share-btn .ic { width: 14px; height: 14px; }
+.share-btn:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.share-btn:disabled { opacity: 0.55; cursor: default; }
+.share-btn.small { height: 26px; padding: 0 10px; font-size: 12px; }
+.share-btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.share-btn.primary:hover:not(:disabled) { background: var(--primary-active); color: var(--on-primary); }
+/* 파괴적 동작: 고스트 → hover에서만 위험색, 확인 단추(.solid)만 채운다 */
+.share-btn.danger:hover:not(:disabled) {
+  color: var(--state-danger);
+  border-color: color-mix(in srgb, var(--state-danger) 40%, var(--hairline));
+  background: color-mix(in srgb, var(--state-danger) 10%, transparent);
+}
+.share-btn.danger.solid { background: var(--state-danger); border-color: var(--state-danger); color: var(--on-primary); }
+.share-btn.danger.solid:hover:not(:disabled) { background: color-mix(in srgb, var(--state-danger) 86%, black); color: var(--on-primary); }
+
+.share-hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink-muted); }
+.share-error { margin: 0; font-size: 12px; line-height: 1.5; color: var(--state-danger); }
+.share-error--block { font-size: 13px; line-height: 1.6; color: var(--ink-secondary); } /* 안내일 뿐 오류가 아니다 — 빨강(삭제 전용) 대신 중립 잉크 */
+
+/* 만들기·참가 다이얼로그 */
+.share-dialog {
+  width: 400px;
+  max-width: 95vw;
+  max-height: 88vh;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  animation: modalPop 0.2s var(--spring) both;
+}
+.share-dialog-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px 4px; }
+.share-dialog-head > .ic { width: 17px; height: 17px; color: var(--ink-muted); }
+.share-dialog-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
+.share-dialog-body { display: flex; flex-direction: column; gap: 14px; padding: 12px 20px 4px; }
+.share-field { display: flex; flex-direction: column; gap: 6px; }
+.share-label { font-size: 12.5px; font-weight: 500; color: var(--ink-secondary); }
+.share-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--canvas-soft);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  outline: none;
+}
+.share-input::placeholder { color: var(--ink-faint); }
+.share-input:focus { border-color: var(--primary); }
+.share-input.invalid { border-color: var(--state-danger); }
+.share-input:disabled { opacity: 0.6; }
+.share-input--code {
+  height: 40px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.share-input--code::placeholder { text-transform: none; letter-spacing: 0.06em; }
+.share-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--canvas-soft);
+  color: var(--ink);
+  font-size: 13.5px;
+}
+.share-folder .ic { width: 15px; height: 15px; color: var(--ink-faint); flex: none; }
+.share-folder-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-actions { display: flex; justify-content: flex-end; gap: 6px; padding: 14px 20px 16px; }
+
+/* 공유 설정 패널 */
+.share-panel {
+  width: 460px;
+  max-width: 95vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  animation: modalPop 0.2s var(--spring) both;
+  outline: none;
+}
+.share-head-folder {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+.share-panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 20px 4px; }
+.share-sec {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.share-sec:last-child { border-bottom: none; }
+.share-sec-label { font-size: 12.5px; font-weight: 600; color: var(--ink-secondary); }
+.share-count { margin-left: 4px; font-weight: 400; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.share-status { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink); }
+.share-status .ic { width: 16px; height: 16px; }
+.share-status-label { font-weight: 500; }
+.share-code-row { display: flex; align-items: stretch; gap: 8px; width: 100%; }
+.share-code {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  color: var(--ink);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  user-select: all;
+}
+.share-code-row .share-btn { height: auto; min-width: 72px; }
+.share-remaining { font-variant-numeric: tabular-nums; color: var(--ink-secondary); font-weight: 500; }
+.share-people { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 2px; }
+.share-person { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--r-md); }
+.share-person:hover { background: var(--canvas-soft); }
+.share-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.share-person-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.share-person-name { display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-me { flex: none; padding: 0 6px; border-radius: var(--r-full); background: var(--canvas-soft); border: 1px solid var(--hairline); font-size: 11px; color: var(--ink-muted); }
+.share-person-role { font-size: 11px; color: var(--ink-faint); }
+.share-presence { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-muted); }
+.share-presence.on { color: var(--ink-secondary); }
+.share-panel-foot { display: flex; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid var(--hairline); }
+.share-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 20px 0;
+  border-top: 1px solid var(--hairline);
+  background: var(--canvas-soft);
+}
+.share-confirm .share-actions { padding: 8px 0 14px; }
+.share-confirm-title { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+
+/* ── 공유 노트 공동편집 (ADR 0021 단계 6b) ─────────────────────────────────────
+   참가자 표시색은 새 색을 만들지 않는다 — 태그 팔레트 hue(--tag-*)를 참가자 id 해시로 골라(theme/palette.ts
+   presenceKey, 노랑 제외) `--collab-c`로 넘긴다. 몸체 틴트(태그)나 상태 칩과 같은 픽셀 역할을 쓰지 않도록 색은
+   "옅은 배경 + 진한 선(잉크를 섞어 라이트/다크 모두 대비 확보)"으로만 쓰고, 이름은 항상 텍스트로 함께 보인다.
+   파랑(--primary)은 애초에 팔레트에 없어 선택·포커스와 겹치지 않는다. */
+.collab-caret {
+  --collab-line: color-mix(in srgb, var(--collab-c) 75%, var(--ink));
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid var(--collab-line);
+  pointer-events: none;
+  word-break: normal;
+}
+.collab-caret-label {
+  position: absolute;
+  left: -2px;
+  bottom: 100%;
+  z-index: 3;
+  display: block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border: 1px solid var(--collab-line);
+  border-radius: 5px 5px 5px 0;
+  background: color-mix(in srgb, var(--collab-c) 26%, var(--surface));
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+  user-select: none;
+}
+.collab-selection {
+  background: color-mix(in srgb, var(--collab-c) 24%, transparent);
+}
+
+/* 헤더의 "지금 함께 보는 사람" 칩 — 이름 첫 글자(텍스트) + 참가자 색, 겹쳐 쌓고 최대 4명 + "+N" */
+.collab-peers { flex: none; display: inline-flex; align-items: center; padding-left: 4px; }
+.collab-peer {
+  flex: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: -4px;
+  border: 1.5px solid color-mix(in srgb, var(--collab-c) 75%, var(--ink));
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--collab-c) 26%, var(--surface));
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--canvas);
+  cursor: default;
+}
+.collab-peer.more {
+  border-color: var(--hairline);
+  background: var(--canvas-soft);
+  color: var(--ink-muted);
+}
+
+/* 헤더의 "공유됨" 표식 — 중립 잉크 칩 + 사이드바 행과 같은 사람 아이콘·상태 점(연결됨 = 채운 초록 점,
+   오프라인·연결 중 = 빈 고리, 끊김 = 사선 아이콘). 텍스트 라벨이 항상 함께 있다. */
+.note-shared-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--canvas-soft);
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.note-shared-badge .ic { width: 13px; height: 13px; }
+.note-shared-badge[data-status='connected'] .share-dot { background: var(--state-done); border-color: var(--state-done); }
+.note-shared-badge[data-status='connecting'] .share-dot { border-color: var(--ink-muted); animation: sharePulse 1.2s ease-in-out infinite; }
+.note-shared-badge[data-status='denied'] .share-dot,
+.note-shared-badge[data-status='ended'] .share-dot { background: var(--ink-faint); }
+.note-shared-badge[data-status='denied'],
+.note-shared-badge[data-status='ended'] { color: var(--ink-faint); }
+
+/* 강퇴·공유 종료 안내 */
+.note-collab-notice {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--canvas-soft);
+  color: var(--ink-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.note-collab-notice .ic { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--ink-muted); }
+.note-rich.readonly .note-rich-body { cursor: default; }
+
+/* 공유 노트 문서가 도착하기 전의 조용한 자리표시 */
+.note-collab-skeleton { flex: 1; min-height: 0; padding: 26px clamp(18px, 8%, 64px); }
+.note-collab-skeleton-inner { display: flex; flex-direction: column; gap: 14px; max-width: 68ch; margin: 0 auto; }
+.note-collab-skeleton .sk-line {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--hover);
+  animation: savePulse 1.4s ease-in-out infinite;
+}
+.note-collab-failed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 68ch;
+  margin: 0 auto;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.note-collab-retry {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.note-collab-retry:hover { background: var(--hover); }
+
+/* ── 보기 전용(뷰어) 표식 — 공유로 받은 맵·보드 (ADR 0021, 단계 7) ─────────────────────────
+   캔버스 위 상단 중앙의 알약. 아이콘(눈)+텍스트라 색에 기대지 않는다. 색은 중립(--ink*) — 상태색을 새로 만들지 않는다.
+   공유가 끝난 경우(data-state='ended')는 글자만 한 단계 옅어진다. */
+.viewer-badge {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 18;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 28px);
+  padding: 5px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--ink-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+.viewer-badge .ic { flex: none; width: 14px; height: 14px; color: var(--ink-muted); }
+.viewer-badge span { overflow: hidden; text-overflow: ellipsis; }
+.viewer-badge[data-state='ended'] { color: var(--ink-muted); }
+
+/* ── 공유 폴더 코멘트·알림 센터 (ADR 0021 단계 8) ────────────────────────────────────────────
+   색은 새로 만들지 않는다: 코멘트 UI는 중립(--ink*/--canvas-soft/--hairline), 눌러서 여는 것·읽지 않음의 강조는
+   인터랙션색(--primary). 상태(안 읽음·읽음·내 코멘트)는 색이 아니라 굵기·점·글자로 함께 말한다. */
+
+/* 노드의 코멘트 칩 — 상태 거터(.gchip 계열)의 한 칸. 중립색이라 일정·링크 칩(상태색)과 겹치지 않는다. */
+.gchip.comment .ic { color: var(--ink-muted); }
+.gchip.comment:hover { color: var(--ink); }
+
+/* 보드 요소의 코멘트 칩 — 요소 우상단 모서리에 걸친 작은 알약(요소 안 글자를 가리지 않는다). */
+.board-el-comment {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  box-shadow: var(--shadow-1);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.board-el-comment .ic { width: 12px; height: 12px; color: var(--ink-muted); }
+.board-el-comment:hover { border-color: color-mix(in srgb, var(--ink) 22%, var(--hairline)); color: var(--ink); }
+
+/* 노트 헤더의 "코멘트" 버튼 — 공유 표식(.note-shared-badge) 옆. 열려 있으면 인터랙션색 테두리. */
+.note-comment-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.note-comment-btn .ic { width: 13px; height: 13px; color: var(--ink-muted); }
+.note-comment-btn:hover { background: var(--hover); color: var(--ink); }
+.note-comment-btn.open { border-color: color-mix(in srgb, var(--primary) 40%, var(--hairline)); color: var(--ink); }
+.note-comment-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: var(--r-full);
+  background: var(--canvas-soft);
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* 스레드 팝오버 — 일정·노드 팝오버(.sched-pop)와 같은 계열(z 60, fixed). */
+.cmt-pop {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  max-height: min(460px, calc(100vh - 24px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  transform-origin: top left;
+  animation: ctxIn 0.17s var(--spring);
+}
+.cmt-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 9px 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+.cmt-head-ic {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--r-md);
+  background: var(--canvas-soft);
+  color: var(--ink-muted);
+}
+.cmt-head-ic svg { width: 14px; height: 14px; }
+.cmt-head-title { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmt-head-count { flex: none; min-width: 18px; padding: 0 6px; border-radius: var(--r-full); background: var(--canvas-soft); color: var(--ink-muted); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
+.cmt-x {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  background: transparent;
+  border-radius: var(--r-md);
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.cmt-x:hover { background: var(--canvas-soft); color: var(--ink); }
+.cmt-x svg { width: 13px; height: 13px; }
+.cmt-x.sm { width: 18px; height: 18px; }
+.cmt-list { flex: 1 1 auto; min-height: 64px; overflow-y: auto; padding: 6px 0; }
+.cmt-empty { padding: 22px 16px; text-align: center; font-size: 12.5px; line-height: 1.7; color: var(--ink-muted); white-space: pre-line; }
+.cmt-item { padding: 7px 14px; }
+.cmt-item.reply { margin-left: 14px; padding-left: 12px; border-left: 2px solid var(--hairline); }
+.cmt-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; min-height: 20px; }
+.cmt-author { font-weight: 600; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmt-me { flex: none; padding: 0 5px; border-radius: var(--r-full); border: 1px solid var(--hairline); color: var(--ink-muted); font-size: 11px; line-height: 15px; }
+.cmt-time { flex: none; color: var(--ink-faint); font-size: 11px; }
+.cmt-grow { flex: 1; }
+.cmt-act {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.cmt-act:hover { background: var(--canvas-soft); color: var(--ink); }
+.cmt-act.danger { padding: 3px; color: var(--ink-faint); }
+.cmt-act.danger .ic { width: 13px; height: 13px; }
+.cmt-act.danger:hover { color: var(--state-danger); background: color-mix(in srgb, var(--state-danger) 12%, transparent); }
+.cmt-text { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmt-text.muted { color: var(--ink-faint); }
+.cmt-compose { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--hairline); }
+.cmt-replying { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11.5px; color: var(--ink-muted); }
+.cmt-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px;
+  max-height: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--canvas-soft);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+}
+.cmt-input::placeholder { color: var(--ink-faint); }
+.cmt-input:focus, .cmt-input:focus-visible { border-color: var(--primary); outline: none; box-shadow: none; }
+.cmt-error { font-size: 12px; color: var(--state-danger); }
+.cmt-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cmt-hint { font-size: 11px; color: var(--ink-faint); }
+.cmt-note { flex: none; padding: 12px 14px; border-top: 1px solid var(--hairline); font-size: 12.5px; color: var(--ink-muted); }
+
+/* 사이드바 종 버튼의 안 읽음 뱃지 — 휴지통의 점(.sb-dot-badge)과 같은 자리, 다만 개수가 곧 정보라 숫자다(11px 이상). */
+.sb-count-badge {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  box-sizing: border-box;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-full);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* 알림 센터 패널 — 휴지통 패널(.trash-panel)과 같은 껍데기. */
+.noti-panel {
+  width: 480px;
+  max-width: 95vw;
+  max-height: 88vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  animation: modalPop 0.2s var(--spring) both;
+}
+.noti-readall {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.noti-readall:hover:not(:disabled) { background: var(--canvas-soft); }
+.noti-readall:disabled { color: var(--ink-faint); cursor: default; }
+.noti-close { margin-left: 0; }
+.noti-body { padding: 6px 8px 10px; }
+.noti-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  outline: none;
+}
+.noti-row:hover, .noti-row:focus-visible { background: var(--canvas-soft); }
+.noti-row:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 45%, transparent); }
+.noti-dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--primary); }
+.noti-dot.read { background: transparent; box-shadow: inset 0 0 0 1.5px var(--hairline); }
+.noti-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.noti-line { display: flex; align-items: center; gap: 6px; font-size: 12.5px; min-width: 0; }
+.noti-author { font-weight: 500; color: var(--ink-secondary); white-space: nowrap; }
+.noti-row.unread .noti-author { font-weight: 700; color: var(--ink); }
+.noti-where { min-width: 0; color: var(--ink-faint); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.noti-tag { flex: none; padding: 0 6px; border-radius: var(--r-full); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); font-size: 11px; font-weight: 600; line-height: 16px; }
+.noti-preview { font-size: 13px; line-height: 1.45; color: var(--ink-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.noti-row.unread .noti-preview { font-weight: 600; color: var(--ink); }
+.noti-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-faint); min-width: 0; }
+.noti-target { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.noti-time { flex: none; }
+.noti-time::before { content: '·'; margin-right: 6px; }
+.noti-meta > .noti-time:first-child::before { content: none; }
+.noti-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.noti-toggle .ic { width: 12px; height: 12px; color: var(--ink-faint); }
+.noti-toggle:hover { background: var(--hover); color: var(--ink); }
+.noti-toggle.on { color: var(--ink-muted); }
+.noti-toggle.on .ic { color: var(--state-done); }

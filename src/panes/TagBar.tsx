@@ -16,12 +16,15 @@ function TagChip({
   tagKey,
   label,
   active,
+  readOnly = false,
   onToggle,
   onRename,
 }: {
   tagKey: TagKey;
   label: string;
   active: boolean;
+  /** 뷰어(공유로 받은 읽기 전용 문서) — 색 필터는 되지만 라벨 수정은 숨긴다. */
+  readOnly?: boolean;
   onToggle: () => void;
   onRename: (label: string) => void;
 }) {
@@ -64,9 +67,11 @@ function TagChip({
         <span className="tagbar-chip-dot" style={{ background: tagVar(tagKey) }} />
         <span className="tagbar-chip-label">{label}</span>
       </button>
-      <button className="tagbar-chip-edit" title="라벨 수정" onClick={() => setEditing(true)}>
-        <Icon name="edit" />
-      </button>
+      {!readOnly && (
+        <button className="tagbar-chip-edit" title="라벨 수정" onClick={() => setEditing(true)}>
+          <Icon name="edit" />
+        </button>
+      )}
     </span>
   );
 }
@@ -127,6 +132,7 @@ function MapTagBarSide({ store }: { store: MapStore }) {
   const colorFilter = useStore(store, (s) => s.colorFilter);
   const filterAncestors = useStore(store, (s) => s.filterAncestors);
   const filterDescendants = useStore(store, (s) => s.filterDescendants);
+  const readOnly = useStore(store, (s) => s.readOnly);
 
   const chips = useMemo(() => {
     const used = new Set<string>();
@@ -150,6 +156,7 @@ function MapTagBarSide({ store }: { store: MapStore }) {
             tagKey={key}
             label={doc.tagLabels?.[key] ?? TAG_DEFAULT_LABELS[key]}
             active={colorFilter === key}
+            readOnly={readOnly}
             onToggle={() => store.getState().setColorFilter(colorFilter === key ? null : key)}
             onRename={(label) => store.getState().setTagLabel(key, label)}
           />
@@ -175,7 +182,7 @@ function MapTagBarSide({ store }: { store: MapStore }) {
           </>
         )}
       </div>
-      {remaining.length > 0 && (
+      {!readOnly && remaining.length > 0 && (
         <AddTagButton remaining={remaining} onPick={(key, label) => store.getState().setTagLabel(key, label)} />
       )}
     </div>
@@ -185,6 +192,7 @@ function MapTagBarSide({ store }: { store: MapStore }) {
 function BoardTagBarSide({ store }: { store: BoardStore }) {
   const board = useStore(store, (s) => s.board);
   const colorFilter = useStore(store, (s) => s.colorFilter);
+  const readOnly = useStore(store, (s) => s.readOnly);
 
   const chips = useMemo(() => {
     const used = new Set<string>();
@@ -206,12 +214,13 @@ function BoardTagBarSide({ store }: { store: BoardStore }) {
             tagKey={key}
             label={board.tagLabels?.[key] ?? TAG_DEFAULT_LABELS[key]}
             active={colorFilter === key}
+            readOnly={readOnly}
             onToggle={() => store.getState().setColorFilter(colorFilter === key ? null : key)}
             onRename={(label) => store.getState().setTagLabel(key, label)}
           />
         ))}
       </div>
-      {remaining.length > 0 && (
+      {!readOnly && remaining.length > 0 && (
         <AddTagButton remaining={remaining} onPick={(key, label) => store.getState().setTagLabel(key, label)} />
       )}
     </div>

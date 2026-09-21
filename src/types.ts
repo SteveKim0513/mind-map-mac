@@ -134,7 +134,8 @@ export interface BoardMeta {
   // EXACT sticky that references the node/note (a board can have more than
   // one sticky linking the same target).
   nodeLinks: { stickyId: string; link: NoteLink }[];
-  noteLinks: { stickyId: string; notePath: string }[];
+  // `notePath`/`noteId` mirror BoardNoteRef — a link can carry either or both (0022).
+  noteLinks: { stickyId: string; notePath?: string; noteId?: string }[];
 }
 
 /** A node with its computed on-canvas position. `x` is the node's LEFT edge;
@@ -237,9 +238,19 @@ export interface BoardStickyElement extends BoardBoxElement {
   link?: string; // external URL (2026-09-06) — same concept as MindNode.link
 }
 
-/** A sticky's forward reference to a note file — see `BoardStickyElement.noteLink`. */
+/** A sticky's forward reference to a note file — see `BoardStickyElement.noteLink`.
+ *  2026-09-21 (ADR 0022): the stable note id (frontmatter `id`) is the primary key;
+ *  `notePath` is the legacy / fallback locator. Optional additive field — no
+ *  `BoardDoc.version` bump (ADR 0012 precedent). */
 export interface BoardNoteRef {
-  notePath: string;
+  /** Absolute path of the note file on the machine that created the link. Legacy boards
+   *  carry only this. ABSENT in a shared-folder copy (an owner's absolute path is
+   *  meaningless — and unsafe — on a participant's machine; see io/sharedFile.ts). */
+  notePath?: string;
+  /** Stable note id (the note's frontmatter `id`). Resolved against the LOCAL workspace note
+   *  index at click time, so it survives renames/moves and works for shared-folder participants
+   *  (the note is materialised locally with the same id). Absent on boards linked before 0022. */
+  noteId?: string;
   title?: string; // cached label snapshot; may go stale if the note is renamed
 }
 
@@ -298,4 +309,86 @@ export interface BoardDoc {
   // (색상 태그 범례, 2026-09-03). Independent per file, not shared with maps.
   tagLabels?: Partial<Record<TagKey, string>>;
   view: { zoom: number; panX: number; panY: number };
+}
+
+// ── 공유 폴더 (ADR 0021) ─────────────────────────────────────────────────────
+// 공유 메타데이터는 문서 스키마(MindMapDoc/BoardDoc.version)와 무관한 별도 파일
+// (`<folder>/.mindshare/room.json`)에 둔다 — 스키마 무범프.
+
+/** 공유 폴더에서의 역할. 소유자만 맵/보드를 편집하고 참가자 강퇴·초대를 할 수 있다. */
+export type ShareRole = 'owner' | 'participant';
+
+/** 공유 폴더 표식(`<folder>/.mindshare/room.json`). 토큰은 여기 두지 않는다(safeStorage). */
+export interface ShareMarker {
+  v: 1;
+  roomId: string;
+  relayUrl: string;
+  role: ShareRole;
+  participantId: string;
+  folderName: string;
+  displayName: string;
+}
+
+/** 릴레이가 알려주는 방 참가자. `joinedAt`은 epoch ms, `online`은 접속 중 여부. */
+export interface ShareParticipant {
+  participantId: string;
+  displayName: string;
+  role: ShareRole;
+  joinedAt: number;
+  online: boolean;
+}
+
+/** 공유 방 연결 상태. `idle`=세션 없음(미연결/미설정), `denied`=토큰 거부(강퇴·만료). */
+export type ShareConnStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'denied';
+
+// ── 코멘트·알림 (공유 폴더, ADR 0021 단계 8) ─────────────────────────────────
+// 코멘트는 문서(맵·보드·노트)를 바꾸지 않는 별도 Y.Doc(`comments`)의 `Y.Map<commentId, Comment>`에 산다 —
+// 문서 스키마(`version`)와 무관하다. 알림은 이 기기의 로컬 상태(userData/notifications.json)다.
+
+/**
+ * 코멘트가 붙는 곳. 맵은 노드 id, 보드는 요소 id(`targetId`)에 붙고 `targetId`가 없으면 파일 전체다.
+ * 노트는 이번 버전에서 노트 전체 단위(텍스트 범위 앵커 없음). `label`은 남길 때 화면에 보이던 대상 이름
+ * (노드·요소 글자)의 스냅샷 — 알림이 "어디에 달렸는지" 말해 줄 때 쓴다(원본이 바뀌면 낡을 수 있다).
+ */
+export type CommentAnchor =
+  | { kind: 'map' | 'board'; fileId: string; targetId?: string; label?: string }
+  | { kind: 'note'; noteId: string; label?: string };
+
+/** 코멘트 하나. 텍스트는 평문이며 절대 HTML로 렌더하지 않는다. `deleted`면 작성자가 지운 것(본문은 비운다). */
+export interface Comment {
+  id: string;
+  anchor: CommentAnchor;
+  /** 작성자 참가자 id — 서버가 검증하지 못하는 자기 신고 값이다(모두 쓰기 가능한 문서). */
+  authorId: string;
+  authorName: string;
+  text: string;
+  /** epoch ms(작성자 기기 시계). */
+  createdAt: number;
+  /** 답글이면 원 코멘트 id. */
+  parentId?: string;
+  deleted?: true;
+}
+
+/** 알림 한 건(현재는 코멘트 알림뿐 — `type` 필드로 확장 여지를 둔다). id는 코멘트 id다(중복 방지 키). */
+export interface NotificationItem {
+  id: string;
+  type: 'comment';
+  roomId: string;
+  folderName: string;
+  anchor: CommentAnchor;
+  /** 사람이 읽는 대상 이름(파일 이름 · 노드/요소 글자). */
+  targetLabel: string;
+  authorName: string;
+  /** 코멘트 본문 앞부분(평문). */
+  preview: string;
+  createdAt: number;
+  read: boolean;
+}
+
+/** `userData/notifications.json`의 내용 — 읽음 상태는 이 기기의 것이며 서버로 보내지 않는다. */
+export interface NotificationsFile {
+  version: 1;
+  items: NotificationItem[];
+  /** 방별 "이 기기가 이 방의 코멘트를 알기 시작한 시각" — 그 이전 코멘트는 알림을 만들지 않는다. */
+  baselines: Record<string, number>;
 }

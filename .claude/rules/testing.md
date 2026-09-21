@@ -36,7 +36,7 @@ description: "테스트 작성 규칙 — Vitest(단위) + Playwright(E2E)"
 test('제목', { tag: ['@calendar', '@schedule'] }, async () => { /* ... */ });
 ```
 
-- **고정 어휘 (11개)**: `@map` `@calendar` `@schedule` `@focus` `@todo` `@note` `@capture` `@command` `@nav` `@view` `@board`
+- **고정 어휘 (12개)**: `@map` `@calendar` `@schedule` `@focus` `@todo` `@note` `@capture` `@command` `@nav` `@view` `@board` `@share`(공유 폴더 — 릴레이·참가·공동편집·코멘트/알림)
 - 한 spec은 여러 태그를 가질 수 있다 → `tag=@todo`로 돌리면 `@todo @map`인 `todo-node`, `@focus @todo`인 `focus-lifecycle`까지 함께 실행돼 "연관 기능"이 자연스럽게 딸려온다.
 - **새 spec·새 test는 반드시 도메인 태그를 단다.** 태그 없는 test는 어떤 부분 실행에도 안 잡혀 개발 루프의 회귀 그물에 구멍이 난다(전체 `pre-release`에는 잡히지만 늦다). `make harness-check`의 `check-e2e-tags.mjs`가 미태깅·도메인 태그 누락·어휘 밖 태그를 실패 처리한다.
 - 새 도메인이 필요하면 `scripts/harness/check-e2e-tags.mjs`의 `DOMAIN`과 이 표를 **먼저** 갱신한다.
@@ -70,6 +70,16 @@ test('제목', { tag: ['@calendar', '@schedule'] }, async () => { /* ... */ });
 - 시간 기반 `sleep` 대기 대신 명시적인 준비 상태 확인(`waitForSelector` 등)을 사용한다.
 - VSCode 환경에서는 `ELECTRON_RUN_AS_NODE`를 반드시 제거한다 (`e2e/helpers.ts` 참조).
 
+## 공유 폴더(`@share`) E2E
+
+- **릴레이는 테스트마다 자체로 띄운다.** `e2e/shareHelpers.ts`의 `startTestRelay()`가 `server/dist/relay.js`의 `startRelay({ port: 0, silent: true })`를 import해 실행한다 — 메모리 DB(`dbPath` 생략)·임의 포트라 공유 상태와 고정 포트가 없어 병렬 안전하다. test 끝(`finally`)에서 `relay.close()`. 초대 만료를 다루는 test만 `startTestRelay({ inviteTtlMs })`.
+- **`server/dist`는 빌드 산출물**(gitignore)이다. `scripts/e2e-run.mjs`가 시작 시(병렬 워커가 동시에 빌드하지 않게) `server/dist/relay.js`가 없거나 `server/src`보다 오래됐으면 `npm --prefix server run build`를 실행한다. `make verify`·`verify-full`·`verify-feature`·`pre-release`도 server 빌드를 먼저 한다. `playwright test`를 직접 돌릴 때는 먼저 `npm --prefix server run build`, `server/node_modules`가 없으면 `make setup`(`npm --prefix server ci`).
+- **앱 인스턴스를 릴레이에 연결**: `launchApp({ env: { MINDMAP_RELAY_URL: relay.url } })` — `env`는 기본값 위에 마지막으로 덮어써진다(필요한 변수만). `MINDMAP_RELAY_URL` 없이 띄우면 공유는 "릴레이 미설정"으로 동작한다.
+- **앱 재시작 시뮬레이션**: 첫 인스턴스를 `await first.app.close()`한 뒤 `launchApp({ reuse: { userData, workspace } })` — 같은 userData·workspace(토큰·알림·세션·사이드카)로 다시 뜬다. 재기동 handle의 `cleanup`은 앱만 끄고, 디렉터리는 원래 handle의 `cleanup`이 지운다.
+- **두 인스턴스(소유자·참가자) 시나리오도 병렬 안전 원칙 그대로**: 인스턴스마다 고유한 userData·workspace(`launchApp()` 기본), 릴레이는 그 test 전용, OS 전역 자원(전역 단축키·frontmost·클립보드)에 의존하지 않는다. test 사이에 릴레이·폴더·토큰을 공유하지 않는다. 동시 타이핑처럼 타이밍에 민감한 단계는 `sleep` 대신 조건 대기(포커스·연결 상태·수렴한 텍스트)를 쓴다.
+- **시각 확인**: `SHARE_E2E_SHOTS=<dir>`을 주면 라이트·다크 스크린샷을 저장한다(기본은 저장 안 함).
+- **릴레이 자체의 규칙**(초대 코드 TTL·1회용·강퇴 시 연결 종료·`file:*` 서버측 읽기 전용·콘텐츠 비영속·로그 무페이로드)은 서버 단위 테스트(`server/test/`, `npm --prefix server test`)가 보증한다 — `make verify`에 포함. E2E는 앱 쪽 통합만 본다.
+
 ## 배포 전 게이트
 
 ```bash
@@ -96,6 +106,6 @@ await waitFor(() => expect(element).toBeVisible());
 - Electron IPC 핸들러 (통합 테스트 또는 E2E로 커버)
 - 단순 타입 재수출
 
-## `make verify` = `npm run typecheck && npm test`
+## `make verify` = `npm run typecheck && npm test && npm --prefix server run build && npm --prefix server test`
 
 - `make verify`가 통과하지 않으면 작업을 완료 처리하지 않는다.

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace } from '../store/workspaceStore';
 import { emptyNote, serializeNote } from '../io/noteFormat';
+import { boardNoteRef } from '../io/boardFormat';
 import { Icon } from '../ui/Icon';
 import type { BoardNoteRef } from '../types';
 
@@ -39,9 +40,9 @@ export function BoardNoteLinkPicker({ boardFilePath, onPick, onClose }: Props) {
     listRef.current?.querySelector('.picker-item.active')?.scrollIntoView({ block: 'nearest' });
   }, [active]);
 
-  const linkExisting = (path: string, title: string) => {
+  const linkExisting = (path: string, title: string, id?: string) => {
     onClose();
-    onPick({ notePath: path, title });
+    onPick(boardNoteRef(path, title, id));
   };
 
   const createAndLink = async () => {
@@ -50,8 +51,9 @@ export function BoardNoteLinkPicker({ boardFilePath, onPick, onClose }: Props) {
     const dir = boardDir || root;
     const title = (q.trim() || '제목 없음').slice(0, 80);
     try {
-      const path = await window.api.createFile(dir, title, serializeNote(emptyNote(title)), '.md');
-      onPick({ notePath: path, title });
+      const doc = emptyNote(title); // the id we serialise is the id the file carries — link by it
+      const path = await window.api.createFile(dir, title, serializeNote(doc), '.md');
+      onPick(boardNoteRef(path, title, doc.id));
       await refresh();
     } catch (e) {
       console.error('[board-link] createFile failed', e);
@@ -60,7 +62,7 @@ export function BoardNoteLinkPicker({ boardFilePath, onPick, onClose }: Props) {
 
   const runActive = () => {
     if (active === 0) void createAndLink();
-    else linkExisting(notes[active - 1].path, notes[active - 1].title);
+    else linkExisting(notes[active - 1].path, notes[active - 1].title, notes[active - 1].id);
   };
   const onKey = (e: React.KeyboardEvent) => {
     // 2026-09-07: see BoardNodePicker.tsx's identical comment — Backspace in
@@ -117,7 +119,7 @@ export function BoardNoteLinkPicker({ boardFilePath, onPick, onClose }: Props) {
               key={m.path}
               className={`picker-item${active === i + 1 ? ' active' : ''}`}
               onMouseMove={() => setActive(i + 1)}
-              onClick={() => linkExisting(m.path, m.title)}
+              onClick={() => linkExisting(m.path, m.title, m.id)}
             >
               <span className="picker-node">
                 <Icon name="note" />

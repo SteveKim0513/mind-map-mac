@@ -3,16 +3,11 @@ import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import type { MetaTemplate } from '../types';
 import { sinkListItem } from 'prosemirror-schema-list';
 import { outdentListItem } from './listOutdent';
-import StarterKit from '@tiptap/starter-kit';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
-import Image from '@tiptap/extension-image';
-import { TableMarkdown as Table } from './tableMarkdown';
-import { TableRow } from '@tiptap/extension-table-row';
-import { TableHeader } from '@tiptap/extension-table-header';
-import { TableCell } from '@tiptap/extension-table-cell';
-import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
+import type { MarkdownStorage } from 'tiptap-markdown';
+import { buildNoteExtensions, finalizeMarkdown } from './extensions';
+import { buildCollabExtensions, type NoteCollab } from './collabCaret';
+import { VIEWING_FIELD } from './collabPeers';
 import { CodeBlock } from './CodeBlock';
 import { EditorToolbar } from './EditorToolbar';
 import { SlashMenu, type SlashItem } from './SlashMenu';
@@ -72,7 +67,16 @@ interface Props {
   notePath?: string;
   templates?: MetaTemplate[];
   onAddMeta?: (templateId: string) => void;
+  /**
+   * 공유 폴더 노트(실시간 공동편집) 전용. 주어지면 Y.Doc이 진실이 된다: `body`/`onChange`는 쓰지 않고(파일 저장은
+   * 복제 매니저가 단일 쓰기 주체), 본문 변경은 `collab.onBody`(저장 없는 화면 상태용)로만 알린다.
+   * 없으면(일반 노트) 동작은 이전과 동일하다.
+   */
+  collab?: NoteCollab;
 }
+
+/** 공유 노트 본문 변경을 화면 상태로 미러링하기까지의 디바운스(ms). */
+const COLLAB_BODY_DEBOUNCE_MS = 300;
 
 const PLACEHOLDER = '노트를 작성하세요…  (“/” 를 눌러 블록 추가)';
 const TEMPLATE_PLACEHOLDER = '템플릿 내용을 작성하세요…  (“/” 를 눌러 블록 추가)';
@@ -100,7 +104,7 @@ interface MenuState {
 
 /** Notion-style rich editor: Markdown is applied live as you type, no edit/preview
  *  toggle. Stored on disk as Markdown via tiptap-markdown. A "/" opens a block menu. */
-export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, notePath, templates, onAddMeta }: Props) {
+export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, notePath, templates, onAddMeta, collab }: Props) {
   const isTemplate = !!notePath && notePath.includes('/.templates/');
   const [menu, setMenu] = useState<MenuState | null>(null);
   // mirror used by the (creation-time) keydown handler so it sees fresh values
@@ -114,6 +118,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
   const imagePathMap = useRef(new Map<string, string>());
   const pendingContent = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const bodyTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // collab: 본문 미러 디바운스
 
   // ── Note templates (템플릿+) ──────────────────────────────────────────────
   const templatesEnabled = useTemplates((s) => s.enabled);
@@ -180,6 +185,12 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
   // Returns true when it took over the event so the editor skips default paste.
   const insertImages = (files: File[]): boolean => {
     if (!files.length) return false;
+    if (collab) {
+      // v1: 공유 폴더 노트에는 이미지를 넣지 않는다. 이미지는 data URL이 본문에 들어가 공유 문서(Y) 상태가 커지고,
+      // 이미지 자산 파일은 참가자에게 동기화되지 않아 상대 화면에서는 깨진 이미지가 된다(exec-plan 6a 사실).
+      useUi.getState().toast('공유 폴더 노트에는 아직 이미지를 넣을 수 없어요');
+      return true; // 붙여넣기·드롭의 기본 동작(이미지 삽입)도 함께 막는다
+    }
     void (async () => {
       for (const file of files) {
         try {
@@ -315,28 +326,17 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
   };
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
-        link: { openOnClick: false, autolink: true },
-        codeBlock: false, // replaced by the lowlight CodeBlock (syntax highlighting)
-      }),
-      CodeBlock,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Placeholder.configure({
+    extensions: buildNoteExtensions({
+      codeBlock: CodeBlock,
+      placeholder: Placeholder.configure({
         placeholder: scaffold ? SESSION_NOTE_PLACEHOLDER : isTemplate ? TEMPLATE_PLACEHOLDER : PLACEHOLDER,
       }),
-      Image.configure({ inline: false, allowBase64: true }),
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
-      WikiLink,
-      DragHandle,
-    ],
-    content: body,
+      extras: [WikiLink, DragHandle],
+      collab: collab ? buildCollabExtensions(collab) : undefined,
+    }),
+    // 공유 노트는 Y.Doc이 내용의 진실이다 — content를 주면 시드가 중복되거나 무시되므로 주지 않는다.
+    content: collab ? undefined : body,
+    ...(collab ? { editable: !collab.readOnly } : {}),
     editorProps: {
       // accessible name for the contenteditable surface (axe aria-input-field-name)
       attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': scaffold ? '작업 기록' : '노트 본문' },
@@ -351,6 +351,8 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
           return false;
         },
       },
+      // 공유 노트: 웹에서 복사한 서식 있는 내용의 <img>는 이미지 노드가 되므로 걷어 낸다(이미지 v1 제외 — insertImages 주석).
+      ...(collab ? { transformPastedHTML: (html: string) => html.replace(/<img\b[^>]*>/gi, '') } : {}),
       handlePaste: (_view, event) => insertImages(imageFilesFrom(event.clipboardData)),
       handleDrop: (_view, event) => insertImages(imageFilesFrom(event.dataTransfer)),
       // Cmd/Ctrl-click a link to open it externally (plain click keeps editing).
@@ -447,6 +449,17 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
       },
     },
     onUpdate: ({ editor }) => {
+      if (collab) {
+        // 파일 저장(onChange) 대신 화면 상태용 미러만 — 로컬·원격 변경 모두 여기로 온다.
+        if (bodyTimer.current) clearTimeout(bodyTimer.current);
+        bodyTimer.current = setTimeout(() => {
+          bodyTimer.current = null;
+          const md = (editor.storage as unknown as { markdown: MarkdownStorage }).markdown.getMarkdown();
+          collab.onBody?.(finalizeMarkdown(md));
+        }, COLLAB_BODY_DEBOUNCE_MS);
+        recompute(editor);
+        return;
+      }
       const md = (editor.storage as unknown as { markdown: MarkdownStorage }).markdown.getMarkdown();
       const imap = imagePathMap.current;
       const withRefs =
@@ -457,14 +470,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
               return fp ? `![${alt}](${encodeAssetRef(fp)})` : match;
             })
           : md;
-      const clean = withRefs
-        // tiptap-markdown escapes "[" / "]" → a typed [[note]] serializes as
-        // \[\[note\]\] on disk, which breaks the wiki-link regex (index, backlinks,
-        // preview). Un-escape just the wiki-link brackets so the file stays clean.
-        .replace(/\\\[\\\[(.+?)\\\]\\\]/g, '[[$1]]')
-        // tiptap-markdown serializes task lists "loose" (a blank line between items);
-        // collapse it to a standard tight GFM checklist (- [ ] a\n- [ ] b).
-        .replace(/^(- \[[ xX]\].*)\n\n(?=- \[[ xX]\])/gm, '$1\n');
+      const clean = finalizeMarkdown(withRefs);
       onChange(clean);
       recompute(editor);
     },
@@ -480,7 +486,8 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
   // On mount: if the body has relative image paths (./note.assets/…), load them via IPC
   // and substitute data URLs so the editor can display them.
   useEffect(() => {
-    if (!notePath) return;
+    // 공유 노트는 setContent가 Y를 덮어쓰므로 이미지 치환 마운트 처리를 건너뛴다(이미지 v1 제외).
+    if (!notePath || collab) return;
     const relPaths = [...body.matchAll(/!\[[^\]]*\]\((\.\/[^)]+)\)/g)].map((m) => m[1]);
     if (!relPaths.length) return;
     void Promise.all(
@@ -540,6 +547,33 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
     };
   }, [notePath, editor]);
 
+  // 공유 노트: 이 노트를 열어 보는 중임을 awareness에 싣는다(헤더의 "함께 보는 사람" 칩이 읽는다).
+  // 편집기를 닫으면(탭 전환·닫기) 내리고, 대기 중인 본문 미러 타이머도 정리한다.
+  const collabAwareness = collab?.awareness;
+  useEffect(() => {
+    if (!collabAwareness) return;
+    try {
+      collabAwareness.setLocalStateField(VIEWING_FIELD, true);
+    } catch {
+      /* 문서가 이미 정리됨 */
+    }
+    return () => {
+      if (bodyTimer.current) clearTimeout(bodyTimer.current);
+      bodyTimer.current = null;
+      try {
+        collabAwareness.setLocalStateField(VIEWING_FIELD, null);
+      } catch {
+        /* 문서가 이미 정리됨 */
+      }
+    };
+  }, [collabAwareness]);
+
+  // 강퇴·공유 종료 등으로 읽기 전용이 되면 편집기를 잠근다.
+  const collabReadOnly = !!collab?.readOnly;
+  useEffect(() => {
+    if (collabAwareness && editor) editor.setEditable(!collabReadOnly);
+  }, [editor, collabAwareness, collabReadOnly]);
+
   useEffect(() => {
     if (editor && pendingContent.current !== null) {
       editor.commands.setContent(pendingContent.current, { emitUpdate: false });
@@ -563,17 +597,19 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
   if (!editor) return null;
 
   return (
-    <div className="note-rich">
-      <EditorToolbar
-        editor={editor}
-        onInsertImages={insertImages}
-        templates={templates}
-        onAddMeta={onAddMeta}
-        templatesEnabled={templatesEnabled}
-        templateItems={templateItems}
-        onInsertTemplate={(name) => void insertTemplate(name)}
-        onCreateTemplate={() => void createTemplate()}
-      />
+    <div className={`note-rich${collab ? ' collab' : ''}${collabReadOnly ? ' readonly' : ''}`}>
+      {!collabReadOnly && (
+        <EditorToolbar
+          editor={editor}
+          onInsertImages={insertImages}
+          templates={templates}
+          onAddMeta={onAddMeta}
+          templatesEnabled={templatesEnabled}
+          templateItems={templateItems}
+          onInsertTemplate={(name) => void insertTemplate(name)}
+          onCreateTemplate={() => void createTemplate()}
+        />
+      )}
       <div ref={bodyRef} className="note-rich-body" onClick={() => editor.chain().focus().run()}>
         <EditorContent editor={editor} />
       </div>

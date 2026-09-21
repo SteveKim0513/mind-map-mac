@@ -1,11 +1,11 @@
 # MindMap — Agent Operating Contract
 
 macOS용 키보드 중심 마인드맵 앱. 생각(맵), 기록(노트), 할 일(리마인더)을 로컬 파일 기반으로 통합한다.
-핵심 제약: 로컬 파일이 원본, 서버 없음, Electron + React + TypeScript.
+핵심 제약: 로컬 파일이 원본(서버는 사용자가 공유 폴더로 지정한 폴더에 한한 릴레이뿐 — 결정 0021), Electron + React + TypeScript.
 
 ## 가장 중요한 불변 조건
 
-- 사용자 데이터(`.mind`, `.md`)는 절대 서버로 전송하지 않는다.
+- 사용자 파일(`.mind`, `.md`, `.board`)은 로컬이 원본이다. 사용자가 명시적으로 공유 폴더로 지정한 폴더의 내용만 우리가 운영하는 릴레이를 통해 참가자에게 전달되며 릴레이는 콘텐츠를 영속 저장하지 않는다. 공유하지 않은 폴더는 어떤 경우에도 전송되지 않는다 (결정 `docs/decisions/0021-shared-folder-relay.md`).
 - 노드 ID는 생성 후 변경하지 않는다 — note↔node 링크의 안정 키다.
 - `MindMapDoc.version`은 현재 `1`이다. 스키마 변경 시 마이그레이션 필요.
 - `reminderOn/reminderId`는 항상 함께 관리한다 — 분리되면 Reminders 고아가 생긴다.
@@ -22,6 +22,7 @@ src/canvas/              캔버스 렌더링 (SVG edge + React node)
 src/note/                Tiptap 노트 에디터 + 마크다운 변환
 src/focus/               포커스 모드 / 작업 세션 대시보드
 src/sync/                macOS Reminders 양방향 동기화
+src/share/               공유 폴더 (릴레이 연결·노트 복제·맵/보드 발행/미러·코멘트 동기화) — 다른 도메인과는 store/shareStore·App.tsx 주입으로만 연결
 src/layout/              트리 레이아웃 계산 (d3-hierarchy)
 src/ui/                  공용 UI 컴포넌트
 src/sidebar/             사이드바 (파일 트리)
@@ -31,6 +32,8 @@ src/search/              전역 검색 · Quick Open
 electron/main.ts         Electron 메인 프로세스 (IPC 핸들러)
 electron/preload.ts      window.api 브리지 (contextBridge)
 electron/reminders.ts    AppleScript Reminders 드라이버
+electron/share.ts        공유 폴더 main 로직 (릴레이 REST·표식·사이드카·토큰). electron/notifications.ts = 코멘트 알림 저장소
+server/                  릴레이 서버 — 앱과 의존성이 분리된 독립 패키지(Node ≥ 22). 운영: docs/operations/relay-server.md
 docs/                    → 아래 참조
 .claude/                 Claude Code 설정 (rules, skills, agents, hooks)
 ```
@@ -43,6 +46,7 @@ docs/                    → 아래 참조
 | 버그 수정 | `ARCHITECTURE.md`, 관련 `src/` 모듈, `src/**/*.test.ts` |
 | **UI·컴포넌트 변경** | **`docs/design/UI-DESIGN-PRINCIPLES.md` (필수)**, `docs/design/COLOR-SYSTEM.md`, `/design-ui` 스킬 사용 |
 | 스타일·색상 변경 | `docs/design/UI-DESIGN-PRINCIPLES.md`, `docs/design/COLOR-SYSTEM.md`, `src/theme/palette.ts` |
+| 공유 폴더 (릴레이·공동편집·코멘트·알림) | `docs/decisions/0021-shared-folder-relay.md`, `docs/product/specs/2026-09-21-shared-folder-collab.md`, `docs/operations/relay-server.md`, `src/share/`, `electron/share.ts` |
 | Reminders 동기화 | `docs/decisions/0002-reminder-osascript-serialization.md`, `src/sync/`, `electron/reminders.ts` |
 | 노트 시스템 | `docs/decisions/0003-notes-as-standalone-files.md`, `src/note/`, `src/io/noteFormat.ts` |
 | 릴리즈·배포 | `docs/release/DEPLOY-UPDATE-SPEC.md`, `docs/release/RELEASE-PROCESS.md` |
@@ -52,10 +56,10 @@ docs/                    → 아래 참조
 ## 필수 개발 명령
 
 ```bash
-make setup                    # npm ci (최초 또는 package.json 변경 후)
+make setup                    # npm ci — 앱 + server/ (최초 또는 package.json 변경 후)
 make dev-safe                 # Electron + Vite 개발 서버 (격리된 임시 환경)
 make dev-safe quiet=1         # 위와 동일 + 화면 밖·포커스 안 뺏음 (사람이 안 볼 때, 에이전트 자체 검증용)
-make verify                   # typecheck + unit test (완료 전 필수)
+make verify                   # typecheck + unit test + server/ test (완료 전 필수)
 make verify-feature tag=@x    # verify + 해당 도메인 E2E만 (기능 단위 검증 — 개발 루프)
 make verify-full              # typecheck + unit test + build (PR 전 필수)
 make pre-release              # verify-full + 전체 E2E (배포 전 필수 — make bump 전에 실행)
@@ -87,6 +91,7 @@ make harness-check            # 아키텍처 + 문서 + E2E 태그 무결성 검
 ## 인간 승인이 필요한 작업
 
 - 운영 배포 (`npm run dist` → GitHub Release)
+- 릴레이 서버 배포(`railway up`)와 `electron/shareConfig.ts`의 `DEFAULT_RELAY_URL` 변경 (모든 사용자의 공유 트래픽 목적지가 바뀐다)
 - `package.json` 버전 범프
 - `MindMapDoc.version` 스키마 변경 (마이그레이션 포함)
 - GitHub Secrets 변경

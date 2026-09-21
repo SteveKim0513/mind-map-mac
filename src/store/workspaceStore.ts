@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { TreeNode } from '../../electron/preload';
-import type { NoteMeta, FocusSession, BoardMeta } from '../types';
+import type { NoteMeta, FocusSession, BoardMeta, BoardNoteRef } from '../types';
 import { parseNote } from '../io/noteFormat';
 import { parseBoard } from '../io/boardFormat';
 import { extractWikiTargets } from '../note/wikiLinkText';
@@ -27,6 +27,9 @@ interface WorkspaceState {
   // link-index queries / updates
   notesForNode: (mapId: string, nodeId: string) => NoteMeta[];
   noteByPath: (path: string) => NoteMeta | undefined;
+  /** resolve a note by its stable frontmatter id (board note links, ADR 0022). Local index only — never a
+   *  path taken from a link. Undefined ⇒ not in this workspace (yet). */
+  noteById: (id: string) => NoteMeta | undefined;
   /** resolve a `[[wiki link]]` by note title (case-insensitive); excludes session
    *  notes so a work-log can't shadow a real note. Undefined ⇒ unresolved link. */
   noteByTitle: (title: string) => NoteMeta | undefined;
@@ -62,6 +65,25 @@ function collectBoardPaths(tree: TreeNode[], out: string[] = []): string[] {
   return out;
 }
 
+/** BoardMeta.noteLinks entry for one sticky's noteLink — carries the id AND the legacy path (either may be absent). */
+export function boardNoteLinkEntry(stickyId: string, ref: BoardNoteRef): BoardMeta['noteLinks'][number] {
+  return {
+    stickyId,
+    ...(typeof ref.notePath === 'string' ? { notePath: ref.notePath } : {}),
+    ...(typeof ref.noteId === 'string' ? { noteId: ref.noteId } : {}),
+  };
+}
+
+/** The note file a board note link points at NOW: id → current path in the note index (survives renames/moves),
+ *  else the legacy path. Same resolution order as a chip click (board/boardLinks.ts). Null ⇒ unresolvable. */
+export function linkedNotePath(noteIndex: NoteMeta[], l: { notePath?: string; noteId?: string }): string | null {
+  if (l.noteId) {
+    const m = noteIndex.find((n) => n.id === l.noteId);
+    if (m) return m.path;
+  }
+  return l.notePath ?? null;
+}
+
 async function buildBoardIndex(tree: TreeNode[]): Promise<BoardMeta[]> {
   const paths = collectBoardPaths(tree);
   const metas = await Promise.all(
@@ -74,7 +96,7 @@ async function buildBoardIndex(tree: TreeNode[]): Promise<BoardMeta[]> {
         for (const el of Object.values(board.elements)) {
           if (el.kind !== 'sticky') continue;
           if (el.nodeLink) nodeLinks.push({ stickyId: el.id, link: el.nodeLink });
-          if (el.noteLink) noteLinks.push({ stickyId: el.id, notePath: el.noteLink.notePath });
+          if (el.noteLink) noteLinks.push(boardNoteLinkEntry(el.id, el.noteLink));
         }
         return { path, nodeLinks, noteLinks };
       } catch {
@@ -163,6 +185,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   notesForNode: (mapId, nodeId) =>
     get().noteIndex.filter((m) => m.links.some((l) => l.mapId === mapId && l.nodeId === nodeId)),
   noteByPath: (path) => get().noteIndex.find((m) => m.path === path),
+  noteById: (id) => get().noteIndex.find((m) => m.id === id),
   noteByTitle: (title) => {
     const t = title.trim().toLowerCase();
     return get().noteIndex.find((m) => !m.session && m.title.trim().toLowerCase() === t);
@@ -200,7 +223,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   boardsForNode: (mapId, nodeId) =>
     get().boardIndex.filter((m) => m.nodeLinks.some((l) => l.link.mapId === mapId && l.link.nodeId === nodeId)),
-  boardsForNote: (notePath) => get().boardIndex.filter((m) => m.noteLinks.some((l) => l.notePath === notePath)),
+  boardsForNote: (notePath) => {
+    const { boardIndex, noteIndex } = get();
+    return boardIndex.filter((m) => m.noteLinks.some((l) => linkedNotePath(noteIndex, l) === notePath));
+  },
   reindexBoard: (meta) =>
     set((s) => {
       const rest = s.boardIndex.filter((m) => m.path !== meta.path);

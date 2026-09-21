@@ -27,6 +27,8 @@ interface Props {
 export function BoardToolbar({ handle, boardFilePath }: Props) {
   const board = useBoard((s) => s.board);
   const dirty = useBoard((s) => s.dirty);
+  // 공유로 받은 읽기 전용 보드(뷰어): 추가·삭제·순서·정리 버튼을 숨긴다(필터·줌은 그대로).
+  const readOnly = useBoard((s) => s.readOnly);
   const selection = useBoard((s) => s.selection);
   const shapeFilter = useBoard((s) => s.shapeFilter);
   const addElement = useBoard((s) => s.addElement);
@@ -88,6 +90,8 @@ export function BoardToolbar({ handle, boardFilePath }: Props) {
 
   return (
     <div className="toolbar board-toolbar">
+      {!readOnly && (
+        <>
       <span className={`map-save${dirty ? ' saving' : ''}`} title={dirty ? '저장 중' : '저장됨'} />
       <span className="sep" />
       <button className="tool-btn icon" title="스티키노트 추가" onClick={addSticky}>
@@ -127,10 +131,12 @@ export function BoardToolbar({ handle, boardFilePath }: Props) {
       <button className="tool-btn icon" title="정리 — 연결된 스티키를 자동 배치" disabled={!canTidy} onClick={() => handle?.tidySelected()}>
         <Icon name="layout" />
       </button>
+        </>
+      )}
 
       {usedShapes.length > 1 && (
         <>
-        <span className="sep" />
+        {!readOnly && <span className="sep" />}
         <span className="board-shape-picker" title="모양으로 필터">
           {usedShapes.map((sh) => (
             <button

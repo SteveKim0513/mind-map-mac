@@ -47,6 +47,8 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   const filterAncestors = useMap((s) => s.filterAncestors);
   const filterDescendants = useMap((s) => s.filterDescendants);
   const mapStore = useMapStore();
+  // 공유로 받은 읽기 전용 맵(뷰어): 드래그·더블클릭 생성·선택 툴바 등 편집 제스처를 모두 끈다(팬/줌·선택은 그대로).
+  const readOnly = useMap((s) => s.readOnly);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const { zoom, panX, panY } = doc.view;
@@ -370,6 +372,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   const handleNodePointerDown = (id: string, e: React.PointerEvent) => {
     e.stopPropagation();
     if (e.button !== 0) return;
+    if (readOnly) return; // 뷰어: 노드를 끌어 옮기거나 다른 노드에 붙이는 제스처 없음(클릭 선택은 NodeView가 처리)
     interaction.current = { mode: 'pending-drag', id, startX: e.clientX, startY: e.clientY };
   };
 
@@ -474,6 +477,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
   // chip heights (below) and a little pad for section blob ink, so resolving the
   // boxes clears node/chip/section overlaps in one go.
   const tidy = useCallback(() => {
+    if (mapStore.getState().readOnly) return; // 뷰어: 노드 위치를 바꾸는 정돈은 하지 않는다
     const PAD = 12;
     const acc = new Map<
       string,
@@ -626,6 +630,8 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
 
   // floating selection toolbar position (screen space, above the node)
   const selToolbar = (() => {
+    // 뷰어(읽기 전용)는 편집 툴바를 아예 띄우지 않는다
+    if (readOnly) return null;
     // hide while dragging a node/tree, and stay hidden after a drag until the next click
     if (draggingId || rootDrag || dragSuppress) return null;
     // hide at extreme zoom-out (same LOD threshold as chips/badges) — otherwise the
@@ -647,6 +653,7 @@ export const Canvas = forwardRef<CanvasHandle, { active?: boolean }>(function Ca
         // double-click empty canvas → new center topic at the cursor — but not when
         // the gesture was used to dismiss an editor (its pointerdown just committed).
         const st = mapStore.getState();
+        if (st.readOnly) return; // 뷰어: 빈 곳 더블클릭으로 새 주제를 만들지 않는다
         if (st.editingId || Date.now() - st.editCommittedAt < 250) return;
         const w = toWorld(e.clientX, e.clientY);
         addRootAt(w.x, w.y);

@@ -54,3 +54,36 @@ describe('markdown preview tables (GFM, the format notes are saved in)', () => {
     expect(find(renderMarkdown('| 이름 | 값 |\n다음 줄'), 'table')).toHaveLength(0);
   });
 });
+
+// 원격(공유 노트)이 쓴 마크다운의 링크는 http(s)·mailto만 <a>로 만든다 — 클릭이 file:·smb:·javascript: 등을 OS로 넘기지 못하게(F1b).
+describe('markdown preview links — 안전한 스킴만 <a>', () => {
+  const hrefs = (md: string) => find(renderMarkdown(md), 'a').map((a) => (a.props as { href: string }).href);
+
+  it('http·https·mailto는 링크가 된다', () => {
+    expect(hrefs('[a](https://example.com/x) [b](http://example.com) [c](mailto:a@b.co)')).toEqual([
+      'https://example.com/x',
+      'http://example.com',
+      'mailto:a@b.co',
+    ]);
+  });
+
+  it.each([
+    'file:///Users/x/.ssh/id_rsa',
+    'smb://host/share',
+    'ssh://user@host',
+    'javascript:alert(1)',
+    'JavaScript:alert(1)',
+    '  file:///etc/passwd',
+    'java\tscript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'vbscript:msgbox(1)',
+    'x-apple-reminder://ABC',
+    '../../etc/passwd',
+    'other-note.md',
+  ])('허용 밖 스킴·상대 경로는 링크로 만들지 않는다: %s', (u) => {
+    const tree = renderMarkdown(`[누르세요](${u})`);
+    expect(find(tree, 'a')).toHaveLength(0);
+    // 글자는 그대로 보인다(내용 손실 없음)
+    expect(find(tree, 'span').some((s) => (s.props as { children?: unknown }).children === '누르세요')).toBe(true);
+  });
+});

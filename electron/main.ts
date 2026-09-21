@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell, globalShortcut } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, session, shell, globalShortcut } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -14,6 +14,12 @@ import {
 } from './reminders';
 import log, { logEvent, openLogsDir, type LogLevel } from './logger';
 import { initAutoUpdate, checkForUpdatesManually, installUpdate } from './updater';
+import { addCspHeader, buildConnectSrc, createShareHandlers, resolveRelayConfig } from './share';
+import { DEFAULT_RELAY_URL } from './shareConfig';
+import { createNotificationHandlers } from './notifications';
+import { sanitizeUncaughtConsoleMessage } from '../src/io/logSanitize';
+import { isAllowedExternalProtocol } from '../src/io/linkSafety';
+import { walk } from './workspaceTree';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -84,6 +90,7 @@ function buildMenu() {
         { label: '새 노트', accelerator: 'CmdOrCtrl+Shift+N', click: () => send('menu', 'new-note') },
         { label: '새 보드', click: () => send('menu', 'new-board') },
         { label: '열기…', accelerator: 'CmdOrCtrl+O', click: () => send('menu', 'open') },
+        { label: '공유 폴더 참가…', click: () => send('menu', 'join-share') },
         { type: 'separator' },
         { label: '저장', accelerator: 'CmdOrCtrl+S', click: () => send('menu', 'save') },
         { label: '다른 이름으로 저장…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('menu', 'saveAs') },
@@ -151,6 +158,15 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+/** 로그용: 차단된 URL의 스킴만(URL 전체·경로는 사용자 데이터일 수 있어 남기지 않는다). */
+function blockedScheme(url: string): string {
+  try {
+    return new URL(url).protocol;
+  } catch {
+    return 'unparsable';
+  }
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1280,
@@ -176,9 +192,12 @@ function createWindow() {
     },
   });
 
-  // Open external links in the browser, not in-app.
+  // Open external links in the browser, not in-app — but only http(s)/mailto. Link fields in shared maps/boards
+  // and shared-note bodies can be filled by a remote peer; `file://`, `smb://`, `ssh://` or a custom scheme would
+  // otherwise be handed to the OS on click. Anything else (or an unparsable URL) is denied and dropped (ADR 0021).
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isAllowedExternalProtocol(url)) void shell.openExternal(url);
+    else log.warn(`[security] blocked window.open to a non-http(s)/mailto URL (scheme: ${blockedScheme(url)})`);
     return { action: 'deny' };
   });
 
@@ -186,8 +205,12 @@ function createWindow() {
   // Electron CSP security warning.
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
     // level: 2 = warning, 3 = error — preserve the severity in the file log
-    if (level >= 2 && !message.includes('Electron Security Warning'))
-      log[level >= 3 ? 'error' : 'warn'](`[renderer] ${message} (${sourceId}:${line})`);
+    if (level >= 2 && !message.includes('Electron Security Warning')) {
+      // 잡히지 않은 오류("Uncaught …")는 던진 값·입력 조각이 그대로 실릴 수 있어 정제해서 남긴다(src/diagnostics.ts). 스택 프레임은
+      // 렌더러의 전역 오류 캡처(`[renderer] uncaught …`)가 더한다.
+      const text = message.startsWith('Uncaught') ? sanitizeUncaughtConsoleMessage(message) : message;
+      log[level >= 3 ? 'error' : 'warn'](`[renderer] ${text} (${sourceId}:${line})`);
+    }
   });
   win.webContents.on('render-process-gone', (_e, details) => {
     log.error(`[renderer] process gone: ${details.reason}`);
@@ -268,6 +291,26 @@ function showCaptureWindow() {
   captureWin.webContents.send('capture:shown');
 }
 
+// ─── 렌더러 CSP: connect-src만 제한 (ADR 0021 결정 6) ─────────────────────────
+// 렌더러(Yjs WebSocket 프로바이더)가 나갈 수 있는 네트워크 목적지를 설정된 릴레이 origin
+// 하나로 묶는다. 다른 디렉티브(default-src 등)는 의도적으로 넣지 않는다 — 기존 동작 보존.
+// 릴레이 미설정이면 'self' data: blob: 뿐(네트워크 없음). localhost는 비패키지(dev/E2E)에서만.
+// 문서(mainFrame/subFrame) 응답에만 붙인다.
+function installShareCsp() {
+  const cfg = resolveRelayConfig(process.env.MINDMAP_RELAY_URL, DEFAULT_RELAY_URL);
+  const csp = buildConnectSrc(cfg.ok ? cfg.info : null, !app.isPackaged);
+  session.defaultSession.webRequest.onHeadersReceived(
+    { urls: ['http://*/*', 'https://*/*', 'file://*/*'] },
+    (details, callback) => {
+      if (details.resourceType !== 'mainFrame' && details.resourceType !== 'subFrame') {
+        callback({});
+        return;
+      }
+      callback({ responseHeaders: addCspHeader(details.responseHeaders, csp) });
+    },
+  );
+}
+
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return; // a second instance is quitting — set nothing up
   log.info(`[app] start v${app.getVersion()} on ${process.platform}`);
@@ -280,6 +323,7 @@ app.whenReady().then(() => {
   if (E2E_QUIET && process.platform === 'darwin') {
     app.setActivationPolicy('accessory');
   }
+  installShareCsp();
   buildMenu();
   createWindow();
   initAutoUpdate(() => win);
@@ -620,40 +664,6 @@ async function getWorkspace(): Promise<string> {
   await fs.mkdir(ws, { recursive: true });
   await ensureTemplatesDir(ws);
   return ws;
-}
-
-interface TreeNode {
-  name: string;
-  path: string;
-  type: 'dir' | 'file';
-  children?: TreeNode[];
-  mtimeMs?: number; // files only — powers the "최근 수정" smart view (REDESIGN-VISION §3-3)
-}
-
-/** Recursively list folders, .mind maps, .board moodboards, and .md notes (hidden entries skipped). */
-async function walk(dir: string): Promise<TreeNode[]> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  const nodes: TreeNode[] = [];
-  for (const ent of entries) {
-    if (ent.name.startsWith('.')) continue;
-    if (ent.name.endsWith('.assets')) continue; // image asset dirs — hide from sidebar
-    const full = path.join(dir, ent.name);
-    if (ent.isDirectory()) {
-      nodes.push({ name: ent.name, path: full, type: 'dir', children: await walk(full) });
-    } else if (ent.name.endsWith('.mind') || ent.name.endsWith('.md') || ent.name.endsWith('.board')) {
-      const stat = await fs.stat(full);
-      nodes.push({ name: ent.name, path: full, type: 'file', mtimeMs: stat.mtimeMs });
-    }
-  }
-  // Natural sort so "제목 없음 3" comes before "제목 없음 21" (numeric-aware).
-  nodes.sort((a, b) =>
-    a.type === b.type
-      ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-      : a.type === 'dir'
-        ? -1
-        : 1,
-  );
-  return nodes;
 }
 
 /** Local image attachments live in a dot-prefixed sibling folder so they stay out
@@ -1410,6 +1420,53 @@ ipcMain.handle('ai:getActive', async () => {
 ipcMain.handle('ai:setActive', async (_e, provider: 'claude' | 'openai') => {
   await atomicWrite(ACTIVE_PROVIDER_PATH, JSON.stringify({ provider }));
 });
+
+// ─── 공유 폴더 (ADR 0021) — 로직은 electron/share.ts, 등록은 여기서만 ────────
+// 모든 인자는 신뢰하지 않는 입력이다(검증은 share.ts). 토큰 본문은 tokenGet 외에는
+// 렌더러로 나가지 않고, 릴레이 REST는 main에서 설정된 릴레이 origin으로만 나간다.
+const share = createShareHandlers({
+  userDataDir: () => app.getPath('userData'),
+  getWorkspace,
+  atomicWrite,
+  safeStorage,
+  fetch,
+  envRelayUrl: process.env.MINDMAP_RELAY_URL,
+  defaultRelayUrl: DEFAULT_RELAY_URL,
+  isPackaged: app.isPackaged,
+  log: (level, message) => logEvent(level, 'share', message),
+});
+ipcMain.handle('share:relayUrl', () => share.relayUrl());
+ipcMain.handle('share:readMarker', (_e, folderPath: unknown) => share.readMarker(folderPath));
+ipcMain.handle('share:writeMarker', (_e, folderPath: unknown, marker: unknown) =>
+  share.writeMarker(folderPath, marker),
+);
+ipcMain.handle('share:removeMarker', (_e, folderPath: unknown) => share.removeMarker(folderPath));
+ipcMain.handle('share:listMarkers', () => share.listMarkers());
+ipcMain.handle('share:tokenGet', (_e, roomId: unknown) => share.tokenGet(roomId));
+ipcMain.handle('share:tokenSet', (_e, roomId: unknown, token: unknown) => share.tokenSet(roomId, token));
+ipcMain.handle('share:tokenDelete', (_e, roomId: unknown) => share.tokenDelete(roomId));
+ipcMain.handle('share:createRoom', (_e, args: unknown) => share.createRoom(args));
+ipcMain.handle('share:join', (_e, args: unknown) => share.join(args));
+ipcMain.handle('share:invite', (_e, roomId: unknown) => share.invite(roomId));
+ipcMain.handle('share:participants', (_e, roomId: unknown) => share.participants(roomId));
+ipcMain.handle('share:revoke', (_e, roomId: unknown, participantId: unknown) =>
+  share.revoke(roomId, participantId),
+);
+ipcMain.handle('share:deleteRoom', (_e, roomId: unknown) => share.deleteRoom(roomId));
+ipcMain.handle('share:sidecarRead', (_e, folderPath: unknown, id: unknown) => share.sidecarRead(folderPath, id));
+ipcMain.handle('share:sidecarWrite', (_e, folderPath: unknown, id: unknown, data: unknown) =>
+  share.sidecarWrite(folderPath, id, data),
+);
+
+// ─── 코멘트 알림 저장소 (공유 폴더 단계 8) — 로직은 electron/notifications.ts ─────
+// 이 기기의 알림·읽음 상태·기준선(userData/notifications.json). 서버로 보내지 않는다. 인자는 신뢰하지 않는 입력(main에서 검증).
+const notifications = createNotificationHandlers({
+  userDataDir: () => app.getPath('userData'),
+  atomicWrite,
+  log: (level, message) => logEvent(level, 'notifications', message),
+});
+ipcMain.handle('notifications:load', () => notifications.load());
+ipcMain.handle('notifications:save', (_e, data: unknown) => notifications.save(data));
 
 // ─── Shell ────────────────────────────────────────────────────────────────
 ipcMain.handle('shell:openExternal', async (_e, url: string) => {

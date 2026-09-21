@@ -17,8 +17,36 @@
  * 빌드는 호출 측(npm run test:e2e / make)에서 먼저 수행한다.
  */
 import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const domain = process.argv[2]; // 선택적 도메인 grep (없으면 전체)
+
+// 공유 폴더 E2E(@share)는 각 테스트가 server/dist/relay.js의 startRelay()로 자체 릴레이를 띄운다.
+// dist가 없거나 소스보다 오래됐으면 여기서 한 번 빌드한다(병렬 워커가 동시에 빌드하지 않게 시작 전에).
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+function newestMtime(dir) {
+  let newest = 0;
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, ent.name);
+    newest = Math.max(newest, ent.isDirectory() ? newestMtime(full) : statSync(full).mtimeMs);
+  }
+  return newest;
+}
+function ensureRelayBuilt() {
+  const entry = join(root, 'server/dist/relay.js');
+  if (!existsSync(join(root, 'server/node_modules'))) {
+    // @share 이외의 도메인은 릴레이가 필요 없으므로 막지 않고 알리기만 한다(@share spec이 명확한 오류를 낸다).
+    console.warn('⚠ server/node_modules 없음 — 릴레이 빌드를 건너뜁니다. @share E2E는 `make setup`(npm --prefix server ci) 뒤에 실행하세요.');
+    return;
+  }
+  if (existsSync(entry) && statSync(entry).mtimeMs >= newestMtime(join(root, 'server/src'))) return;
+  console.log('\n▶ 릴레이 서버 빌드 (server/dist가 없거나 오래됨)\n');
+  const r = spawnSync('npm', ['--prefix', 'server', 'run', 'build'], { stdio: 'inherit', cwd: root });
+  if (r.status !== 0) process.exit(r.status ?? 1);
+}
+ensureRelayBuilt();
 
 function play(args, label) {
   console.log(`\n▶ ${label}\n`);

@@ -9,6 +9,10 @@ interface Props {
   x: number;
   y: number;
   onClose: () => void;
+  /** 공유 폴더의 보드면 "코멘트 남기기" — 요소 하나에만 붙는다. 없으면(일반 보드) 항목을 그리지 않는다. */
+  onComment?: (id: string) => void;
+  /** 뷰어(공유로 받은 읽기 전용 보드): 편집 항목 없이 코멘트만. */
+  viewer?: boolean;
 }
 
 /** Board's own right-click menu for a sticky/image — kept separate from
@@ -20,7 +24,7 @@ interface Props {
  *  CSS (styles.css) for visual parity — same pattern `panes/TabBar.tsx`
  *  already uses for its own independent right-click menu (local `useState`
  *  + this same hook, not the mindmap's `uiStore.contextMenu`). */
-export function BoardContextMenu({ ids, x, y, onClose }: Props) {
+export function BoardContextMenu({ ids, x, y, onClose, onComment, viewer = false }: Props) {
   const duplicateElements = useBoard((s) => s.duplicateElements);
   const removeElements = useBoard((s) => s.removeElements);
   const { ref, pos } = useDismissablePosition<HTMLDivElement>(x, y, onClose, { bottomInset: 76 });
@@ -31,12 +35,29 @@ export function BoardContextMenu({ ids, x, y, onClose }: Props) {
     onClose();
   };
 
+  const canComment = !!onComment && ids.length === 1;
+  if (viewer) {
+    if (!canComment) return null;
+    return (
+      <div ref={ref} className="ctx-menu" style={{ left: pos.left, top: pos.top }} onPointerDown={(e) => e.stopPropagation()}>
+        <button className="ctx-item" data-testid="ctx-comment" onClick={run(() => onComment(ids[0]))}>
+          <span>코멘트 남기기</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div ref={ref} className="ctx-menu" style={{ left: pos.left, top: pos.top }} onPointerDown={(e) => e.stopPropagation()}>
       {ids.length > 1 && <div className="ctx-head">{ids.length}개 선택됨</div>}
       <button className="ctx-item" onClick={run(() => duplicateElements())}>
         <span>복제</span>
       </button>
+      {canComment && (
+        <button className="ctx-item" data-testid="ctx-comment" onClick={run(() => onComment(ids[0]))}>
+          <span>코멘트 남기기</span>
+        </button>
+      )}
       <div className="ctx-sep" />
       <button className="ctx-item danger" onClick={run(() => removeElements(ids))}>
         <span>삭제</span>
