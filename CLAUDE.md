@@ -2,6 +2,8 @@
 
 # Claude Code Instructions
 
+공통 개발 규칙(일하는 법·코드 규칙·팀 원칙·스킬)은 스튜디오 플러그인 팀 문서가 맡는다. 이 문서는 이 프로젝트의 값만 둔다.
+
 ## Start Here
 
 - 작업 전 `git status --short` 확인.
@@ -36,7 +38,6 @@ make harness-check           # 아키텍처·문서·E2E 태그 구조 검사
 - 도메인 태그 어휘와 상세 규칙은 `.claude/rules/testing.md`의 "테스트 계층 전략" 참조.
 
 - `make verify` 없이 완료를 주장하지 않는다.
-- 버그 수정은 가능한 경우 실패를 재현하는 테스트를 먼저 추가한다.
 - UI·Electron 변경은 테스트만으로 끝내지 않고 `make dev-safe`로 실제 동작을 확인한다. 사람이 지켜보지 않고 자동화로만 검증할 때는 `make dev-safe quiet=1`을 써서 다른 세션의 포커스를 뺏지 않는다.
 - **새 기능·UI 변경을 포함한 배포**: `make pre-release` 통과 후 `make bump`.
 - **새 기능·UI 변경 시 E2E 추가 의무**: `e2e/*.spec.ts`에 해당 기능의 핵심 시나리오를 작성한다.
@@ -53,7 +54,6 @@ electron/(main.ts) ← IPC → electron/preload.ts → window.api → src/
 
 - 외부 입력(파일, IPC 응답)은 `src/io/`나 `electron/preload.ts` 경계에서 검증한다.
 - 도메인 경계를 우회해 다른 도메인의 내부 파일을 직접 import하지 않는다.
-- 새 의존성 추가 전에 기존 도구로 해결 가능한지 확인한다.
 
 ## Working Rules
 
@@ -93,8 +93,6 @@ UI·CSS 작업 시 **반드시** 먼저 읽는다:
 4. 새 기능·UI 변경 시 E2E 추가 여부 (없으면 이유 명시)
 5. 남아 있는 위험·미검증 항목
 6. 인간 판단이 필요한 사항
-
-검증하지 않은 내용을 검증했다고 주장하지 않는다.
 
 ## Context Management
 
