@@ -4744,6 +4744,23 @@ textarea:focus-visible,
 }
 .note-rich .ProseMirror a, .note-preview a { color: var(--primary); text-decoration: none; cursor: pointer; }
 .note-rich .ProseMirror a:hover, .note-preview a:hover { text-decoration: underline; }
+/* 링크 hover 시 실제 주소 — 마우스를 가로막지 않게 pointer-events 없음, 긴 주소는 한 줄 말줄임 */
+.note-link-tip {
+  position: fixed;
+  z-index: 85;
+  max-width: min(420px, 80vw);
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--ink-secondary);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, var(--hairline));
+  border-radius: var(--r-sm);
+  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
 .note-rich .ProseMirror code, .note-preview code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.88em;

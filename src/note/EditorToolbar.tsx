@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useEditorState, type Editor } from '@tiptap/react';
 import { Icon } from '../ui/Icon';
 import { fileToDataUrl } from '../io/imageAssets';
+import { normalizeLinkHref } from './linkHref';
 import type { MetaTemplate } from '../types';
 import type { TemplateSummary } from '../../electron/preload';
 
@@ -83,8 +84,9 @@ export function EditorToolbar({
     setLinking(true);
   };
   const applyLink = () => {
-    const href = url.trim();
-    if (href && href !== 'https://') {
+    const typed = url.trim();
+    const href = typed === 'https://' ? '' : normalizeLinkHref(typed); // 스킴 없이 입력해도 열리게 https://를 붙인다
+    if (href) {
       if (editor.state.selection.empty) {
         // no text selected → insert the URL itself as the linked text
         chain()

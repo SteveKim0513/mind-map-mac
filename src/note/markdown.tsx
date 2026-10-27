@@ -41,7 +41,7 @@ function inline(text: string): ReactNode[] {
       const href = safeExternalUrl(m[12]);
       out.push(
         href ? (
-          <a key={k()} href={href} target="_blank" rel="noreferrer">
+          <a key={k()} href={href} target="_blank" rel="noreferrer" title={href}>
             {m[11]}
           </a>
         ) : (

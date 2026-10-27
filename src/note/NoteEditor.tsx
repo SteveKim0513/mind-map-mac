@@ -22,6 +22,8 @@ import { useSession } from '../store/sessionStore';
 import { useTemplates } from '../store/templateStore';
 import { parseNote } from '../io/noteFormat';
 import { openLightbox } from './ImageLightbox';
+import { normalizeLinkHref } from './linkHref';
+import { isAllowedExternalProtocol } from '../io/linkSafety';
 
 // Scroll position per note, keyed by file path — survives the remount that
 // happens every time the tab bar switches away and back (App.tsx renders only
@@ -141,6 +143,9 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
       useUi.getState().toast('템플릿을 만들지 못했습니다 — 폴더 권한을 확인해 보세요');
     }
   };
+
+  // 링크 위에 마우스를 올렸을 때 보여 주는 실제 주소(링크 글자와 주소가 다를 수 있다).
+  const [linkTip, setLinkTip] = useState<{ href: string; left: number; top: number } | null>(null);
 
   // ── "[[" note-link autocomplete ──────────────────────────────────────────
   type LinkItem = { title: string; path: string; create?: boolean };
@@ -350,13 +355,25 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
           }
           return false;
         },
+        mouseover: (_view, event) => {
+          const a = (event.target as HTMLElement)?.closest?.('a[href]') as HTMLAnchorElement | null;
+          if (!a || a.closest('[data-wikilink]')) return false;
+          const r = a.getBoundingClientRect();
+          setLinkTip({ href: normalizeLinkHref(a.getAttribute('href') ?? ''), left: r.left, top: r.bottom + 6 });
+          return false;
+        },
+        mouseout: (_view, event) => {
+          const a = (event.target as HTMLElement)?.closest?.('a[href]');
+          if (a && !a.contains(event.relatedTarget as Node | null)) setLinkTip(null);
+          return false;
+        },
       },
       // 공유 노트: 웹에서 복사한 서식 있는 내용의 <img>는 이미지 노드가 되므로 걷어 낸다(이미지 v1 제외 — insertImages 주석).
       ...(collab ? { transformPastedHTML: (html: string) => html.replace(/<img\b[^>]*>/gi, '') } : {}),
       handlePaste: (_view, event) => insertImages(imageFilesFrom(event.clipboardData)),
       handleDrop: (_view, event) => insertImages(imageFilesFrom(event.dataTransfer)),
-      // Cmd/Ctrl-click a link to open it externally (plain click keeps editing).
-      // openOnClick stays false so a bare click never navigates the Electron shell.
+      // 링크를 클릭하면 외부 브라우저로 연다(더블클릭·드래그 선택은 편집으로 둔다). 글자를 고치려면 방향키로 링크 안에 들어가거나
+      // 링크 옆을 클릭한다. openOnClick은 false로 유지 — Electron 셸이 직접 이동하지 않고 아래 window.open 경로만 쓴다.
       handleClick: (_view, _pos, event) => {
         const imgEl = (event.target as HTMLElement)?.closest('img') as HTMLImageElement | null;
         if (imgEl?.src) {
@@ -397,10 +414,16 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
           }
           return true; // behave like a link (don't drop the caret into it)
         }
-        if (!event.metaKey && !event.ctrlKey) return false;
         const a = (event.target as HTMLElement)?.closest('a');
-        const href = a?.getAttribute('href');
-        if (!href) return false;
+        const raw = a?.getAttribute('href');
+        if (!raw) return false;
+        if (event.detail > 1 || !window.getSelection()?.isCollapsed) return false;
+        // 스킴 없는 옛 링크(naver.com)도 열리게 보정하고, 열 수 없는 주소는 조용히 무시하지 않고 알린다.
+        const href = normalizeLinkHref(raw);
+        if (!isAllowedExternalProtocol(href)) {
+          useUi.getState().toast('열 수 없는 링크입니다 (http·https·메일 주소만 열 수 있어요)');
+          return true;
+        }
         window.open(href, '_blank'); // → main setWindowOpenHandler → shell.openExternal
         return true;
       },
@@ -610,9 +633,23 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
           onCreateTemplate={() => void createTemplate()}
         />
       )}
-      <div ref={bodyRef} className="note-rich-body" onClick={() => editor.chain().focus().run()}>
+      <div
+        ref={bodyRef}
+        className="note-rich-body"
+        onClick={(e) => {
+          // 본문 아래 빈 공간을 누르면 커서를 문서 맨 끝에 둔다(그냥 focus()는 이전 선택, 곧 맨 위로 돌아간다).
+          const pm = e.currentTarget.querySelector('.ProseMirror');
+          const below = e.target === e.currentTarget && !!pm && e.clientY > pm.getBoundingClientRect().bottom;
+          editor.chain().focus(below ? 'end' : undefined).run();
+        }}
+      >
         <EditorContent editor={editor} />
       </div>
+      {linkTip && (
+        <div className="note-link-tip" style={{ left: linkTip.left, top: linkTip.top }}>
+          {linkTip.href}
+        </div>
+      )}
       {menu && (
         <SlashMenu
           items={menu.items}
