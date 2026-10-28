@@ -200,6 +200,7 @@ export default function App() {
   const [gsInitialQuery, setGsInitialQuery] = useState('');
   const searchOpen = useUi((s) => s.searchOpen);
   const globalSearchOpen = useUi((s) => s.globalSearchOpen);
+  const mapSearchInit = useUi((s) => s.mapSearchInit);
   const settingsOpen = useUi((s) => s.settingsOpen);
   const manualOpen = useUi((s) => s.manualOpen);
   const shareOpen = useUi((s) => s.shareOpen);
@@ -417,11 +418,15 @@ export default function App() {
         case 'redo':
           st ? st.redo() : sess.activeBoardStore()?.getState().redo();
           break;
-        case 'find':
-          // ⌘F: in a map → in-canvas node find; in a note / home → workspace search
+        case 'find': {
+          // ⌘F = find in this file: map → node find bar, note → note find bar.
+          // Elsewhere (home, calendar, board) → workspace search.
+          const tab = sess.activeTab();
           if (sess.activeStore()) useUi.getState().setSearchOpen(true);
+          else if (tab?.kind === 'note') useUi.getState().requestNoteFind(tab.path, '');
           else useUi.getState().setGlobalSearch(true);
           break;
+        }
         case 'join-share':
           useUi.getState().openShareJoin();
           break;
@@ -680,7 +685,14 @@ export default function App() {
         {activeStore && (
           <MapContext.Provider value={activeStore}>
             <DocTitle title={activeTab?.title ?? 'MindMap'} />
-            {searchOpen && <Search onClose={closeSearch} />}
+            {searchOpen && (
+              <Search
+                key={mapSearchInit?.nonce ?? 0}
+                onClose={closeSearch}
+                initialQuery={mapSearchInit?.query}
+                initialActiveId={mapSearchInit?.activeId}
+              />
+            )}
           </MapContext.Provider>
         )}
       </div>

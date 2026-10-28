@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import type { MetaTemplate } from '../types';
 import { sinkListItem } from 'prosemirror-schema-list';
@@ -14,6 +14,7 @@ import { SlashMenu, type SlashItem } from './SlashMenu';
 import { fileToImageData, imageFilesFrom } from '../io/imageAssets';
 import { SESSION_NOTE_PLACEHOLDER } from '../focus/sessionNote';
 import { WikiLink } from './wikiLink';
+import { SearchHighlight } from './searchHighlight';
 import { DragHandle } from './DragHandle';
 import { Icon } from '../ui/Icon';
 import { useUi } from '../store/uiStore';
@@ -31,6 +32,13 @@ import { isAllowedExternalProtocol } from '../io/linkSafety';
 // plain module-level cache is enough; it doesn't need to be reactive or
 // survive an app restart, only a tab switch within this session.
 const scrollPositions = new Map<string, number>();
+
+/** Drop a note's remembered scroll position — used when opening it to jump to a
+ *  search match, so the restore (which also re-runs after images load) can't
+ *  pull the view back to where the user last left it. */
+export function forgetNoteScroll(path: string): void {
+  scrollPositions.delete(path);
+}
 
 // On-disk image refs live as "./.<stem>.assets/img.png". A raw space (or "(", ")",
 // "#") in that path renders fine in our custom in-app reader but breaks STANDARD
@@ -66,6 +74,8 @@ interface Props {
   onCreateNote?: (title: string) => Promise<string | null>;
   /** Hand the live editor up to the pane (for the 정보 panel's 목차 section). */
   onReady?: (editor: Editor | null) => void;
+  /** Floats at the top of the scrolling body (the find bar). */
+  overlay?: ReactNode;
   notePath?: string;
   templates?: MetaTemplate[];
   onAddMeta?: (templateId: string) => void;
@@ -106,7 +116,7 @@ interface MenuState {
 
 /** Notion-style rich editor: Markdown is applied live as you type, no edit/preview
  *  toggle. Stored on disk as Markdown via tiptap-markdown. A "/" opens a block menu. */
-export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, notePath, templates, onAddMeta, collab }: Props) {
+export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, overlay, notePath, templates, onAddMeta, collab }: Props) {
   const isTemplate = !!notePath && notePath.includes('/.templates/');
   const [menu, setMenu] = useState<MenuState | null>(null);
   // mirror used by the (creation-time) keydown handler so it sees fresh values
@@ -336,7 +346,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
       placeholder: Placeholder.configure({
         placeholder: scaffold ? SESSION_NOTE_PLACEHOLDER : isTemplate ? TEMPLATE_PLACEHOLDER : PLACEHOLDER,
       }),
-      extras: [WikiLink, DragHandle],
+      extras: [WikiLink, DragHandle, SearchHighlight],
       collab: collab ? buildCollabExtensions(collab) : undefined,
     }),
     // 공유 노트는 Y.Doc이 내용의 진실이다 — content를 주면 시드가 중복되거나 무시되므로 주지 않는다.
@@ -643,6 +653,7 @@ export function NoteEditor({ body, onChange, scaffold, onCreateNote, onReady, no
           editor.chain().focus(below ? 'end' : undefined).run();
         }}
       >
+        {overlay}
         <EditorContent editor={editor} />
       </div>
       {linkTip && (

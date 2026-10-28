@@ -106,6 +106,16 @@ interface UiState {
   // overlays (controllable from anywhere)
   searchOpen: boolean;
   setSearchOpen: (b: boolean) => void;
+  // map find bar seed — set when a global-search node result opens the map, so the
+  // bar starts with that query and the picked node as the current match (nonce
+  // remounts the bar even when it was already open on another map)
+  mapSearchInit: { query: string; activeId: string; nonce: number } | null;
+  openMapSearch: (query: string, activeId: string) => void;
+  // note find bar request — the note pane showing `path` opens its find bar with
+  // `query` and clears this (consumed once, so a later remount doesn't reopen it)
+  noteFindReq: { path: string; query: string } | null;
+  requestNoteFind: (path: string, query: string) => void;
+  takeNoteFind: (path: string) => string | null;
   // workspace-wide search (all maps' nodes + all notes' title/body)
   globalSearchOpen: boolean;
   setGlobalSearch: (b: boolean) => void;
@@ -375,7 +385,18 @@ export const useUi = create<UiState>((set, get) => ({
   focusNode: (id) => set((s) => ({ focusReq: { id, nonce: (s.focusReq?.nonce ?? 0) + 1 } })),
 
   searchOpen: false,
-  setSearchOpen: (b) => set({ searchOpen: b }),
+  setSearchOpen: (b) => set(b ? { searchOpen: true } : { searchOpen: false, mapSearchInit: null }),
+  mapSearchInit: null,
+  openMapSearch: (query, activeId) =>
+    set((s) => ({ searchOpen: true, mapSearchInit: { query, activeId, nonce: (s.mapSearchInit?.nonce ?? 0) + 1 } })),
+  noteFindReq: null,
+  requestNoteFind: (path, query) => set({ noteFindReq: { path, query } }),
+  takeNoteFind: (path) => {
+    const req = get().noteFindReq;
+    if (!req || req.path !== path) return null;
+    set({ noteFindReq: null });
+    return req.query;
+  },
   globalSearchOpen: false,
   setGlobalSearch: (b) => set({ globalSearchOpen: b }),
 

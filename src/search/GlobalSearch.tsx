@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace } from '../store/workspaceStore';
+import { useSession } from '../store/sessionStore';
+import { useUi } from '../store/uiStore';
 import { loadMindDoc, loadNote, loadBoardDoc, pruneMindCache, pruneNoteCache, pruneBoardCache, type FileRef } from '../io/scanCache';
 import { revealNode } from '../note/noteLinks';
 import { openBoardSticky } from '../board/boardLinks';
@@ -197,9 +199,22 @@ export function GlobalSearch({
     const h = results[i];
     if (!h) return;
     onClose();
-    if (h.kind === 'node') void revealNode({ mapId: h.mapId, nodeId: h.nodeId, mapPath: h.mapPath });
-    else if (h.kind === 'board') void openBoardSticky(h.boardPath, h.stickyId);
-    else onOpen(h.path);
+    // Hand the query to the opened file so it can highlight and step through the
+    // matches (spec 2026-10-29-search-reveal-match). Boards have no find bar yet.
+    const query = q.trim();
+    if (h.kind === 'node') {
+      void revealNode({ mapId: h.mapId, nodeId: h.nodeId, mapPath: h.mapPath }).then(() => {
+        // only once that map is the active tab — otherwise the bar would bind to
+        // (and select nodes in) whichever map was active before
+        if (query && useSession.getState().activeStore()?.getState().doc.id === h.mapId) {
+          useUi.getState().openMapSearch(query, h.nodeId);
+        }
+      });
+    } else if (h.kind === 'board') void openBoardSticky(h.boardPath, h.stickyId);
+    else {
+      if (query) useUi.getState().requestNoteFind(h.path, query);
+      onOpen(h.path);
+    }
   };
 
   return (

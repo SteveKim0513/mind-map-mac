@@ -352,6 +352,8 @@ export async function revealNode(link: NoteLink): Promise<void> {
     .getState()
     .tabs.find((t) => t.kind === 'map' && (t.store as MapStore).getState().doc.id === link.mapId);
   if (!tab) return;
+  // a node under a collapsed branch isn't laid out, so centering it would silently do nothing
+  (tab.store as MapStore).getState().expandTo(link.nodeId);
   (tab.store as MapStore).getState().select(link.nodeId);
   // let the pane mount/activate, then center the node
   setTimeout(() => useUi.getState().focusNode(link.nodeId), 0);

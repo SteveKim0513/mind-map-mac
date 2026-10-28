@@ -23,6 +23,7 @@
 - [2026-07-16-todo-node.md](2026-07-16-todo-node.md) — 할 일(todo) 노드: 생각과 실행 분리. 완료·일정·집중은 todo 노드 전용, [decisions/0014](../../decisions/0014-todo-node.md)
 - [2026-09-03-board-moodboard.md](2026-09-03-board-moodboard.md) — 보드(무드보드): 텍스트·스티키·이미지·도형·연결선 자유배치 캔버스, 세 번째 독립 파일 타입, [decisions/0020](../../decisions/0020-board-file-type.md)
 - [2026-09-21-shared-folder-collab.md](2026-09-21-shared-folder-collab.md) — 공유 폴더: 초대 코드로 참가, 노트는 Yjs 기반 실시간 공동편집, 맵/보드는 소유자 전용 편집+보기+코멘트, 코멘트 즉시 알림·알림 센터, 자체 호스팅 릴레이(`server/`). 구현 완료 · 릴리즈 게이트 통과, [decisions/0021](../../decisions/0021-shared-folder-relay.md)
+- [2026-10-29-search-reveal-match.md](2026-10-29-search-reveal-match.md) — 검색 결과 위치로 이동: 노트 찾기 바(강조·스크롤·다음/이전, 노트 ⌘F), 맵 결과는 맵 찾기 바가 검색어를 이어받음, 접힌 가지 펼치기
 
 ## 명세만 완료 · 구현 예정 / 아이디어 단계
 

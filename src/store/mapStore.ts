@@ -87,6 +87,7 @@ export const MAP_VIEWER_ALLOWED: ReadonlySet<string> = new Set([
   'toggleFilterAncestors',
   'toggleFilterDescendants',
   'toggleCollapse',
+  'expandTo',
   'copyNode',
   'navigate',
   'setView',
@@ -175,6 +176,9 @@ interface MapState {
   /** IF-08 · push overlapping root subtrees apart (down). Returns how many moved. */
   tidyOverlaps: (roots: TidyRoot[]) => number;
   toggleCollapse: (id: string) => void;
+  /** Expand every collapsed ancestor of `id` so it is laid out and can be centered.
+   *  One undo step; no-op (not dirty) when nothing above it is collapsed. */
+  expandTo: (id: string) => void;
 
   // connections (node-to-node cross links)
   addConnection: (from: string, to: string) => void;
@@ -1042,6 +1046,19 @@ export function createMapStore(): MapStore {
       return shifts.size;
     },
 
+    expandTo: (id) => {
+      const nodes = get().doc.nodes;
+      const closed: string[] = [];
+      const seen = new Set<string>(); // cycle guard on a corrupt doc
+      for (let cur = nodes[id]?.parentId ?? null; cur && nodes[cur] && !seen.has(cur); cur = nodes[cur].parentId) {
+        seen.add(cur);
+        if (nodes[cur].collapsed) closed.push(cur);
+      }
+      if (closed.length === 0) return;
+      commit((d) => {
+        for (const a of closed) d.nodes[a].collapsed = false;
+      });
+    },
     toggleCollapse: (id) => {
       const n0 = get().doc.nodes[id];
       if (!n0 || n0.children.length === 0) return;

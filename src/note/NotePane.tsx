@@ -3,7 +3,8 @@ import { useEditorState, type Editor } from '@tiptap/react';
 import { NoteContext, useNote, useNoteStore, type NoteStore } from '../store/noteStore';
 import { emptyNote, serializeNote } from '../io/noteFormat';
 import { fileNameFromTitle } from '../io/autoName';
-import { NoteEditor } from './NoteEditor';
+import { NoteEditor, forgetNoteScroll } from './NoteEditor';
+import { NoteFindBar } from './NoteFindBar';
 import { CollabPeers, SharedNoteBadge, type SharedNoteStatus } from './CollabPresence';
 import type { NoteCollab } from './collabCaret';
 import { ImageLightbox } from './ImageLightbox';
@@ -166,6 +167,26 @@ function NotePaneBody() {
   const [infoOpen, setInfoOpen] = useState(false);
   // live editor (handed up from NoteEditor) + its headings, for the 목차 section
   const [editor, setEditor] = useState<Editor | null>(null);
+
+  // ── find in note (⌘F, or a global-search result opening this note) ──────────
+  // The request waits in uiStore until this pane's editor exists, then is taken
+  // once — so reopening the tab later doesn't pop the bar again.
+  // `gen` restarts the bar (new search-result query); `nonce` only refocuses it.
+  const [find, setFind] = useState<{ query: string; gen: number; nonce: number } | null>(null);
+  const noteFindReq = useUi((s) => s.noteFindReq);
+  useEffect(() => {
+    if (!noteFindReq || !filePath || !editor) return;
+    const query = useUi.getState().takeNoteFind(filePath);
+    if (query === null) return;
+    // a jump to a match must not be undone by the saved-scroll restore
+    if (query) forgetNoteScroll(filePath);
+    // a bare ⌘F while open keeps whatever is typed in the bar and just refocuses it
+    setFind((f) =>
+      f && !query
+        ? { ...f, nonce: f.nonce + 1 }
+        : { query, gen: (f?.gen ?? 0) + 1, nonce: (f?.nonce ?? 0) + 1 },
+    );
+  }, [noteFindReq, filePath, editor]);
   const [headings, setHeadings] = useState<Head[]>([]);
   const tocCount = headings.length >= 2 ? headings.length : 0; // a TOC needs ≥2 headings
   const goHeading = (pos: number) => {
@@ -544,6 +565,17 @@ function NotePaneBody() {
         scaffold={isSession}
         onCreateNote={isSession ? undefined : createSiblingNote}
         onReady={setEditor}
+        overlay={
+          find && editor ? (
+            <NoteFindBar
+              key={`${find.gen}:${editor.instanceId}`}
+              editor={editor}
+              initialQuery={find.query}
+              focusNonce={find.nonce}
+              onClose={() => setFind(null)}
+            />
+          ) : null
+        }
         notePath={filePath ?? undefined}
         templates={isTemplate ? undefined : templates}
         onAddMeta={

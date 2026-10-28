@@ -2796,6 +2796,45 @@ button {
   height: 14px;
 }
 
+/* Note find bar — same card as the map's, floated at the top-right of the note
+   body and kept in view while scrolling (zero-height sticky anchor, so it takes
+   no layout space and the text never shifts when it opens). */
+.note-find-anchor {
+  position: sticky;
+  top: 8px;
+  height: 0;
+  z-index: 6;
+}
+.search.note-find {
+  top: 0;
+  right: 0;
+  left: auto;
+  transform: none;
+  cursor: default;
+}
+.search.note-find input {
+  width: 180px;
+}
+.search.note-find .count {
+  white-space: nowrap;
+}
+/* matches in the note body: all faint, the current one strong */
+.note-rich .search-hit {
+  background: color-mix(in srgb, var(--state-search) 28%, transparent);
+  border-radius: 2px;
+}
+.note-rich .search-hit-active {
+  background: color-mix(in srgb, var(--state-search) 60%, transparent);
+  box-shadow: 0 0 0 1.5px var(--state-search);
+}
+:root[data-theme='dark'] .note-rich .search-hit {
+  background: color-mix(in srgb, var(--state-search) 20%, transparent);
+}
+/* lighter fill on dark so the light text keeps its contrast; the ring carries the emphasis */
+:root[data-theme='dark'] .note-rich .search-hit-active {
+  background: color-mix(in srgb, var(--state-search) 38%, transparent);
+}
+
 /* ── Inspector panel (note / link / icon) ───────────────────────────────────── */
 .inspector {
   position: absolute;
