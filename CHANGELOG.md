@@ -4,6 +4,20 @@
 버전은 [유의적 버전(SemVer)](https://semver.org/lang/ko/)을 따릅니다.
 이 파일은 앱의 "업데이트 내역"에도 그대로 표시됩니다.
 
+## [0.14.1] - 2026-10-29
+
+### 추가
+- **검색 결과 위치로 이동** (spec `2026-10-29-search-reveal-match`) — 전체 검색 결과를 고르면 연 파일 안에서 검색어를 이어받는다.
+  - 노트: `src/note/searchHighlight.ts`(ProseMirror Decoration, 텍스트블록 단위 대소문자 무시 일치·마크 경계 통과, 순수 함수 `findTextMatches` 단위 테스트) + `NoteFindBar.tsx`(`n/m`, Enter/⇧Enter/↑↓ 순환, Esc는 현재 일치 선택 후 닫기). 저장된 스크롤 복원보다 검색 이동이 우선(`forgetNoteScroll`), 공유 노트처럼 내용이 늦게 차면 첫 일치가 생길 때 스크롤.
+  - 노트에서 ⌘F는 노트 안 찾기 바(전체 검색은 ⌘⇧F).
+  - 맵: 노드 결과는 `revealNode` 완료 후 활성 맵이 그 맵이면 맵 찾기 바를 검색어·현재 노드와 함께 연다(`uiStore.openMapSearch`).
+  - 도메인 간 전달은 `uiStore`(`noteFindReq`/`takeNoteFind`, `mapSearchInit`)로만.
+- `mapStore.expandTo(id)` — 접힌 조상을 한 번의 undo 단계로 펼친다(보기 전용 허용). `revealNode`·맵 찾기 바 이동이 사용.
+- 노트 링크 클릭으로 외부 열기·주소 툴팁, 본문 아래 빈 공간 클릭 시 커서를 문서 끝으로(`src/note/linkHref.ts`).
+
+### 수정
+- 맵 찾기 바가 열린 채 편집하면 일치 목록 배열이 새로 만들어져 첫 일치로 다시 점프하던 문제 — 일치 id 문자열을 키로 비교.
+
 ## [0.14.0] - 2026-09-21
 
 ### 추가
