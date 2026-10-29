@@ -36,12 +36,16 @@ function BoardPaneBody({ active }: { active: boolean }) {
   const readOnly = useBoard((s) => s.readOnly);
   const filePath = useBoard((s) => s.filePath);
   const markSaved = useBoard((s) => s.markSaved);
+  // board 참조가 바뀔 때마다 아래 자동저장 타이머가 다시 시작된다(진짜 디바운스).
+  const board = useBoard((s) => s.board);
   const [handle, setHandle] = useState<BoardCanvasHandle | null>(null);
   // 공유 폴더 코멘트: 이 보드의 요소에 열린 스레드 팝오버(뷰어에서도 동작). 활성 창에만 그린다.
   const commentThread = useUi((s) => s.commentThread);
   const commentTarget = useCommentFileTarget(filePath);
 
   // debounced autosave to this tab's .board file — mirrors Pane.tsx/NotePane.tsx
+  // 2026-10-29: 예전에는 dirty가 true인 동안 타이머가 다시 시작되지 않아 입력 도중(첫 변경 1초 뒤)에 저장이 나갔고,
+  // 저장이 끝나면 markSaved가 dirty를 꺼서 그 사이에 입력한 나머지가 다음 변경 전까지 디스크에 안 써졌다.
   useEffect(() => {
     if (!dirty || !filePath || readOnly) return;
     const t = setTimeout(() => {
@@ -49,9 +53,12 @@ function BoardPaneBody({ active }: { active: boolean }) {
       if (!target) return;
       if (store.getState().readOnly) return;
       if (useSession.getState().isDeleting(target)) return;
-      void window.api.save(target, serializeBoard(store.getState().board)).then((p) => {
+      const snap = store.getState().board;
+      void window.api.save(target, serializeBoard(snap)).then((p) => {
         if (p) {
-          markSaved(p);
+          // 저장하는 동안 더 고쳤다면 dirty를 남겨 다음 자동저장(위 board 의존성으로 이미 예약됨)이 이어받게 한다.
+          if (store.getState().board === snap) markSaved(p);
+          else store.setState({ filePath: p });
           notifyFileSaved(p); // 공유 폴더의 소유자라면 이 저장을 참가자에게 발행한다(그 밖에는 아무 일도 없다)
           // keep the "referenced from a board" reverse index fresh — read-only,
           // no rename/delete GC (see types.ts's BoardMeta doc comment)
@@ -67,7 +74,7 @@ function BoardPaneBody({ active }: { active: boolean }) {
       });
     }, 1000);
     return () => clearTimeout(t);
-  }, [dirty, filePath, markSaved, store, readOnly]);
+  }, [dirty, board, filePath, markSaved, store, readOnly]);
 
   return (
     <>

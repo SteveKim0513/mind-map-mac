@@ -296,9 +296,12 @@ function NotePaneBody() {
         });
         return;
       }
-      void window.api.save(filePath, serializeNote(store.getState().note)).then((p) => {
+      const snap = store.getState().note;
+      void window.api.save(filePath, serializeNote(snap)).then((p) => {
         if (p) {
-          markSaved(p);
+          // 저장하는 동안 더 고쳤다면 dirty를 남겨 이미 예약된 다음 자동저장이 이어받게 한다.
+          if (store.getState().note === snap) markSaved(p);
+          else store.setState({ filePath: p });
           // keep the workspace link index (titles/links) fresh so pickers,
           // node chips and popups reflect edits immediately
           reindexFromNote(filePath, store.getState().note);

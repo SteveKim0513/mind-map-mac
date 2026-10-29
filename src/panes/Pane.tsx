@@ -107,9 +107,13 @@ function PaneBody({
       // Never recreate a file that's being trashed — see useSession.deletingPaths.
       if (useSession.getState().isDeleting(target)) return;
       if (store.getState().readOnly) return;
-      void window.api.save(target, serialize(store.getState().doc)).then((p) => {
+      const snap = store.getState().doc;
+      void window.api.save(target, serialize(snap)).then((p) => {
         if (p) {
-          markSaved(p);
+          // 저장하는 동안 더 고쳤다면 dirty를 남겨 이미 예약된 다음 자동저장이 이어받게 한다
+          // (markSaved가 dirty를 끄면 그 타이머가 취소돼 마지막 편집이 디스크에 안 써진다).
+          if (store.getState().doc === snap) markSaved(p);
+          else store.setState({ filePath: p });
           notifyFileSaved(p); // 공유 폴더의 소유자라면 이 저장을 참가자에게 발행한다(그 밖에는 아무 일도 없다)
         }
       });
