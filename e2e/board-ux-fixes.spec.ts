@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { launchApp } from './helpers';
 
 // 2026-09-06 실사용 피드백 11건에 대한 회귀 테스트. 7/8/9번은 실제 마우스 좌표
@@ -170,7 +172,7 @@ test('노드 연결 피커에서 실제 마우스 클릭으로 항목을 고르�
 });
 
 test('노트 연결 피커에서 실제 마우스 클릭으로 항목을 고르면 연결이 완료된다 (좌표 클릭 회귀 방지)', { tag: ['@board'] }, async () => {
-  const { page, cleanup } = await launchApp();
+  const { page, workspace, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 노트"]');
     await page.waitForSelector('.note-title', { timeout: 5_000 });
@@ -178,7 +180,10 @@ test('노트 연결 피커에서 실제 마우스 클릭으로 항목을 고르�
     await titleInput.click({ clickCount: 3 });
     await titleInput.fill('좌표클릭노트');
     await titleInput.press('Tab');
-    await page.waitForTimeout(700); // debounced rename + sidebar/noteIndex refresh
+    // debounced rename + sidebar/noteIndex refresh — 고정 대기 대신 파일이 새 이름이 될 때까지 기다린다
+    // (이름 변경 도중에 피커를 열면 옛 이름·새 이름 항목이 함께 보여 항목이 2개가 된다).
+    await expect.poll(() => existsSync(join(workspace, '좌표클릭노트.md')), { timeout: 10_000 }).toBe(true);
+    await expect(page.locator('.row', { hasText: '좌표클릭노트' })).toHaveCount(1);
     await page.click('.sb-section-btn[title="새 보드"]');
     await page.waitForSelector('.board-canvas', { timeout: 5_000 });
     await page.click('.board-canvas');

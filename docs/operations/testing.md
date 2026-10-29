@@ -56,7 +56,8 @@ make pre-release              # verify-full + 전체 E2E (배포 게이트 — m
 로컬 E2E는 같은 화면에서 창을 화면 밖에 띄우는 방식이라, macOS 버전·`CI=1` 우회에 따라 포커스를 뺏을 수 있다. VM 실행은 테스트를 화면 없는 macOS VM 안에서 돌려 이 문제를 구조적으로 없앤다. 게이트 내용은 같다(VM 안에서 같은 make 타겟을 실행).
 
 ```bash
-make pre-release-vm          # = VM 안에서 make pre-release
+make pre-release             # = make pre-release-vm (기본이 VM 실행. VM이 없으면 안내 후 멈춤)
+make pre-release-local       # 이 Mac 화면에서 직접 실행 (VM 안에서 호출되는 실제 게이트이기도 함)
 make e2e-vm tag=@calendar    # = VM 안에서 make e2e-tag tag=@calendar
 make e2e-vm-stop             # 중간에 끊겼을 때 VM 끄기
 scripts/e2e-vm.sh status     # VM 상태
@@ -66,6 +67,7 @@ scripts/e2e-vm.sh shell      # VM 안 셸(디버깅, 끝나면 stop)
 - **무엇을 테스트하나**: 커밋 여부와 상관없이 지금 작업 폴더의 디스크 내용. 읽기 전용 공유 폴더로 넘긴 뒤 VM 디스크(`~/mind-map`)로 복사한다. `node_modules`·빌드 산출물은 VM 쪽 것을 쓰고, `package-lock.json`이 바뀌었을 때만 `npm ci`를 다시 한다.
 - **결과**: `.e2e-vm/run.log`, `.e2e-vm/playwright-report/index.html`, `.e2e-vm/test-results/`.
 - **동시 실행 불가**: VM 하나를 쓰므로 실행은 한 번에 하나. VM이 켜져 있으면 run은 거절한다.
+- **재시도 2회**: VM은 로컬보다 느려 타이밍에 민감한 test가 흔들리므로 `playwright.config.ts`가 VM(`MINDMAP_E2E_VM`)에서만 `retries: 2`를 쓴다(로컬·CI는 1). 결정적 실패는 세 번 다 깨져 게이트를 막는다. 재시도로 통과한 test는 리포트에 `flaky`로 남으니 주기적으로 원인을 본다.
 - **VM 안 동작 차이**: `MINDMAP_E2E_VM=1`이라 `launchApp()`이 quiet 모드를 켜지 않는다. 창이 VM 화면에 정상으로 뜨고 `win.focus()`가 실제로 동작하므로 macOS 26의 `CI=1` 우회가 필요 없다.
 
 ### 최초 설정 (한 번)

@@ -1,4 +1,4 @@
-.PHONY: setup dev-safe build test typecheck verify verify-full pre-release dist harness-check e2e e2e-tag verify-feature smoke bump tag release e2e-vm-setup pre-release-vm e2e-vm e2e-vm-stop
+.PHONY: setup dev-safe build test typecheck verify verify-full pre-release dist harness-check e2e e2e-tag verify-feature smoke bump tag release e2e-vm-setup pre-release-vm pre-release-local e2e-vm e2e-vm-stop
 
 # Install dependencies
 setup:
@@ -36,8 +36,12 @@ verify-full:
 	npm --prefix server run build && npm run typecheck && npm test && npm --prefix server test && npm run build
 
 # Pre-release gate: verify-full + E2E — must pass before make bump
+# 기본은 화면 없는 VM에서 실행(pre-release-vm). VM을 못 쓰는 환경이면 make pre-release-local.
 # 새 기능·UI 변경이 포함된 릴리즈는 반드시 이 타겟을 통과한 뒤 bump한다.
-pre-release:
+pre-release: pre-release-vm
+
+# 로컬(이 Mac 화면)에서 직접 실행 — 창이 뜨고 포커스를 뺏을 수 있다. VM 안에서도 이 타겟을 호출한다.
+pre-release-local:
 	npm --prefix server run build && npm run typecheck && npm test && npm --prefix server test && npm run build && npm run test:e2e
 
 # 같은 게이트·E2E를 화면 없는 macOS VM 안에서 실행 — 테스트가 이 Mac의 창·포커스를 건드리지 않는다.
@@ -46,7 +50,8 @@ e2e-vm-setup:
 	scripts/e2e-vm.sh setup
 
 pre-release-vm:
-	scripts/e2e-vm.sh run pre-release
+	scripts/e2e-vm.sh ready
+	scripts/e2e-vm.sh run pre-release-local
 
 e2e-vm:
 	@[ "$(tag)" ] || { echo 'Usage: make e2e-vm tag=@<domain>  (예: @calendar)'; exit 1; }

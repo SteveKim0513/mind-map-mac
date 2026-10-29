@@ -73,6 +73,9 @@ test('탭이 5개 이상 열리면 화면 분할을 1회 제안한다', { tag: [
   try {
     for (let i = 0; i < 5; i++) {
       await createNoteFromMenu(page);
+      // createNoteFromMenu는 탭이 "하나라도" 있으면 바로 돌아온다 — 이전 노트가 다 만들어지기 전에 다음 클릭이
+      // 겹치지 않도록 탭 개수가 실제로 늘 때까지 기다린다(느린 환경에서 한 개가 유실되던 경합).
+      await expect(page.locator('.tab')).toHaveCount(i + 1);
     }
     await expect(page.locator('.tab')).toHaveCount(5);
 

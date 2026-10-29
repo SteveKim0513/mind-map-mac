@@ -62,8 +62,8 @@ make dev-safe quiet=1         # 위와 동일 + 화면 밖·포커스 안 뺏음
 make verify                   # typecheck + unit test + server/ test (완료 전 필수)
 make verify-feature tag=@x    # verify + 해당 도메인 E2E만 (기능 단위 검증 — 개발 루프)
 make verify-full              # typecheck + unit test + build (PR 전 필수)
-make pre-release              # verify-full + 전체 E2E (배포 전 필수 — make bump 전에 실행)
-make pre-release-vm           # 같은 게이트를 화면 없는 macOS VM에서 (포커스 안 뺏음, 최초 make e2e-vm-setup)
+make pre-release              # verify-full + 전체 E2E (배포 전 필수) — 화면 없는 macOS VM에서 실행(외장 SSD 필요, 최초 make e2e-vm-setup)
+make pre-release-local        # 같은 게이트를 이 Mac 화면에서 직접 (포커스를 뺏음 — VM을 못 쓸 때만)
 make e2e-vm tag=@x            # 도메인 E2E를 VM에서
 make test                     # 단위 테스트만
 make typecheck                # 타입 검사만
@@ -79,7 +79,7 @@ make harness-check            # 아키텍처 + 문서 + E2E 태그 무결성 검
 2. UI·기능 변경 → `make dev-safe`로 실제 앱에서 직접 시나리오 검증 (사람이 지켜보지 않고 에이전트 혼자 자동화로 검증할 때는 `make dev-safe quiet=1`로 실행 — 다른 세션의 포커스를 뺏지 않는다)
 3. 새 기능·UI 변경 → `e2e/*.spec.ts`에 핵심 시나리오 E2E 추가
 4. Reminders 관련 → macOS 리마인더 앱에서 직접 확인
-5. 배포 전 → `make pre-release` (verify-full + E2E) 통과 확인 후 `make bump`. VM이 준비돼 있으면 같은 게이트인 `make pre-release-vm`을 쓴다(사용자 화면을 건드리지 않음)
+5. 배포 전 → `make pre-release` (verify-full + E2E) 통과 확인 후 `make bump`. (기본이 VM 실행이라 사용자 화면을 건드리지 않음)
 
 ## 금지된 작업 (명시적 승인 없이)
 

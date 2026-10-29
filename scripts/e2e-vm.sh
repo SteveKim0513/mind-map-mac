@@ -5,7 +5,7 @@
 #
 #   scripts/e2e-vm.sh setup              VM 만들기 + Node 22 설치 (최초 1회, 이미지 약 25GB)
 #   scripts/e2e-vm.sh run <make 인자…>   VM을 켜고 지금 작업 폴더 그대로 make 실행 후 VM을 끈다
-#                                        예) run pre-release · run e2e-tag tag=@nav
+#                                        예) run pre-release-local · run e2e-tag tag=@nav
 #   scripts/e2e-vm.sh shell              VM을 켜고 셸 열기(디버깅용, 끄려면 stop)
 #   scripts/e2e-vm.sh stop | status | destroy
 #
@@ -41,7 +41,7 @@ store_mnt() {
 }
 open_store() {
   [ -n "$BUNDLE" ] || return 0
-  [ -d "$BUNDLE" ] || die "VM 저장소가 없다: $BUNDLE — 외장 SSD가 연결돼 있는지 확인한다"
+  [ -d "$BUNDLE" ] || die "VM 저장소가 없다(SSD가 연결 안 됐거나 끊겼다): $BUNDLE — 외장 SSD가 연결돼 있는지 확인한다. VM 없이 이 Mac 화면에서 돌리려면 'make pre-release-local'"
   local mnt; mnt="$(store_mnt)"
   if [ -z "$mnt" ]; then
     hdiutil attach -nobrowse -quiet "$BUNDLE" || die "VM 저장소를 열지 못했다: $BUNDLE"
@@ -58,10 +58,21 @@ close_store() {
   [ -n "$mnt" ] || return 0
   vm_running && return 0
   for _ in 1 2 3 4 5; do hdiutil detach -quiet "$mnt" 2>/dev/null && return 0; sleep 1; done
+  store_alive || { hdiutil detach -force -quiet "$mnt" 2>/dev/null && return 0; }
   echo "e2e-vm: VM 저장소를 닫지 못했다($mnt). 나중에 'hdiutil detach \"$mnt\"'" >&2
 }
+# 외장 SSD가 실행 도중 빠지면 게스트 디스크가 사라져 `seq`·`rsync`가 없다는 식의 엉뚱한 오류가 난다.
+# 실패했을 때 저장소가 아직 붙어 있는지 확인해 진짜 원인을 알린다. 붙어 있으면 0, 끊겼으면 1.
+store_alive() {
+  [ -n "$BUNDLE" ] || return 0
+  [ -d "$BUNDLE" ] && [ -d "${TART_HOME:-/nonexistent}" ]
+}
+store_lost_msg() {
+  echo "e2e-vm: ✗ 외장 SSD 연결이 끊겼다($BUNDLE). VM 디스크가 사라져 테스트가 중단됐다 — 위쪽 'command not found' 류 오류는 이것 때문이다." >&2
+  echo "e2e-vm: SSD를 다시 연결하고(케이블·허브 확인) 'hdiutil detach -force' 로 남은 마운트를 정리한 뒤 다시 실행한다." >&2
+}
 need_tart() {
-  command -v tart >/dev/null || die "tart가 없다. docs/operations/testing.md의 'VM에서 E2E' 설치 절차를 따른다"
+  command -v tart >/dev/null || die "tart가 없다. docs/operations/testing.md의 'VM에서 E2E' 설치 절차를 따른다. VM 없이 이 Mac 화면에서 돌리려면 'make pre-release-local'"
   open_store
 }
 # 주의: pipefail 아래서 `tart … | grep -q`는 grep이 일찍 끝나며 tart가 SIGPIPE로 죽어 "없음"으로 오판한다. 출력을 먼저 변수에 담는다.
@@ -113,7 +124,7 @@ EOF
 
 cmd_run() {
   need_tart
-  [ $# -gt 0 ] || die "make 인자가 필요하다(예: run pre-release)"
+  [ $# -gt 0 ] || die "make 인자가 필요하다(예: run pre-release-local)"
   vm_exists || die "VM '$VM'이 없다. 먼저 'make e2e-vm-setup'"
   # 같은 VM 안 같은 폴더를 두 실행이 나눠 쓰면 서로 덮어쓴다 — 켜져 있으면 다른 실행이 도는 중으로 본다.
   vm_running && die "VM이 이미 켜져 있다(다른 실행 중이거나 shell로 켠 상태). 끝났으면 'scripts/e2e-vm.sh stop'"
@@ -149,6 +160,7 @@ exit \$code
 EOF
   code=${PIPESTATUS[0]}
   set -e
+  if [ "$code" -ne 0 ] && ! store_alive; then store_lost_msg; exit 3; fi
   if [ "$code" -eq 0 ]; then echo "e2e-vm: ✓ 통과 (make $*)"; else
     echo "e2e-vm: ✗ 실패 (make $*, 종료 코드 $code) — 보고서: $OUT/playwright-report/index.html"
   fi
@@ -165,6 +177,10 @@ case "${1:-}" in
   setup) cmd_setup ;;
   run) shift; cmd_run "$@" ;;
   shell) cmd_shell ;;
+  ready)
+    # make pre-release가 VM을 쓸 수 있는지 미리 확인 — 안 되면 이유와 대안을 알리고 멈춘다(조용히 로컬로 넘어가지 않는다).
+    need_tart; vm_exists || die "VM '$VM'이 없다. 'make e2e-vm-setup'을 먼저 한다. VM 없이 이 Mac 화면에서 돌리려면 'make pre-release-local'"
+    close_store ;;
   stop) need_tart; tart stop "$VM" || true; close_store ;;
   status) need_tart; tart list | awk -v vm="$VM" 'NR==1 || $2==vm {print; if ($2==vm) f=1} END {if (!f) print "(VM \x27" vm "\x27 없음)"}'; close_store ;;
   destroy) need_tart; tart delete "$VM"; close_store ;;

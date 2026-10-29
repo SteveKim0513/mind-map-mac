@@ -8,7 +8,9 @@ export default defineConfig({
   // 병렬 실행에서는 CPU 포화로 개별 액션 타임아웃(노드 생성 등)이 드물게 밀릴 수
   // 있다 — 1회 재시도로 이런 부하성 flake를 흡수한다(실패 시에만 재시도).
   // 결정적 실패는 두 번 다 깨지므로 진짜 회귀는 그대로 드러난다.
-  retries: 1,
+  // VM(scripts/e2e-vm.sh, MINDMAP_E2E_VM)은 CPU·디스크가 느려 타이밍에 민감한 test가 매번 다른 곳에서 1~2개 흔들린다 → 2회.
+  // 결정적 실패는 세 번 다 깨지므로 진짜 회귀는 여전히 게이트를 막는다.
+  retries: process.env.MINDMAP_E2E_VM ? 2 : 1,
   // 각 test는 격리된 userData·workspace로 자체 Electron 인스턴스를 띄우므로
   // 병렬 실행이 안전하다. 유일한 OS 전역 자원 충돌(캡처 단축키 Alt+Space)은
   // 기본 등록 비활성화 + 단일 opt-in 테스트로 제거했고(e2e/helpers.ts,

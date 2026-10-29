@@ -42,16 +42,16 @@ test('renaming a note rewrites its embedded image references to the new (hidden)
     await titleInput.fill('시장 리서치');
     await titleInput.press('Tab');
 
-    // debounced rename (600ms) + our image-path rewrite
+    // debounced rename (600ms) 다음에 이미지 경로 재작성이 이어진다 — 파일이 생겼다고 끝이 아니라
+    // 내용이 새 경로로 바뀔 때까지 기다린다(느린 디스크에서는 두 단계 사이가 벌어진다).
     await expect
       .poll(() => {
         try {
-          readFileSync(join(workspace, '시장 리서치.md'), 'utf-8');
-          return true;
+          return readFileSync(join(workspace, '시장 리서치.md'), 'utf-8').includes('./.시장%20리서치.assets/img.png');
         } catch {
           return false;
         }
-      }, { timeout: 5_000 })
+      }, { timeout: 10_000, message: '노트 이름 변경과 이미지 경로 재작성이 끝남' })
       .toBe(true);
 
     const body = readFileSync(join(workspace, '시장 리서치.md'), 'utf-8');
