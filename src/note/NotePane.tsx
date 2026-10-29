@@ -25,6 +25,7 @@ import { fmtDuration } from '../focus/aggregate';
 import { endFocusSession, closeStaleSession } from '../focus/controller';
 import type { FocusSession } from '../types';
 import type { Tab } from '../store/sessionStore';
+import { finishSave } from '../store/saveGuard';
 
 interface Props {
   tab: Tab;
@@ -302,9 +303,7 @@ function NotePaneBody() {
           // 저장하는 동안 이름 변경으로 경로가 바뀌었다면 새 경로가 상태를 이어받는다 — 옛 경로를 다시 인덱스에
           // 올리면 존재하지 않는 항목이 노트 목록(피커·사이드바)에 같은 제목으로 한 번 더 생긴다.
           if (store.getState().filePath !== filePath) return;
-          // 저장하는 동안 더 고쳤다면 dirty를 남겨 이미 예약된 다음 자동저장이 이어받게 한다.
-          if (store.getState().note === snap) markSaved(p);
-          else store.setState({ filePath: p });
+          finishSave(store, 'note', snap, p); // 저장 중 더 고쳤다면 dirty를 남긴다(saveGuard.ts)
           // keep the workspace link index (titles/links) fresh so pickers,
           // node chips and popups reflect edits immediately
           reindexFromNote(filePath, store.getState().note);

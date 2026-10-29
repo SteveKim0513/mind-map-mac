@@ -51,8 +51,10 @@ test('탭을 왔다 갔다 해도 노트의 스크롤 위치가 유지된다', {
     await page.click('.tab:has-text("긴 노트")');
     await page.waitForSelector('.note-rich-body', { timeout: 5_000 });
 
-    const scrollTop = await page.locator('.note-rich-body').evaluate((el) => el.scrollTop);
-    expect(scrollTop).toBeGreaterThan(700);
+    // 탭 복귀 직후 스크롤 복원은 렌더 뒤에 이어진다 — 바로 읽지 않고 복원될 때까지 기다린다(느린 환경에서 0으로 읽힘).
+    await expect
+      .poll(() => page.locator('.note-rich-body').evaluate((el) => el.scrollTop), { timeout: 5_000 })
+      .toBeGreaterThan(700);
   } finally {
     await app.close().catch(() => {});
     rmSync(userData, { recursive: true, force: true });

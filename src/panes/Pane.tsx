@@ -16,6 +16,7 @@ import { notifyFileSaved } from '../store/shareStore';
 import { ViewerBadge } from '../ui/ViewerBadge';
 import { CommentThread, anchorSelectorFor } from '../ui/CommentThread';
 import { useCommentFileTarget } from '../store/commentStore';
+import { finishSave } from '../store/saveGuard';
 
 interface Props {
   tab: Tab;
@@ -50,7 +51,6 @@ function PaneBody({
   // 공유로 받은 읽기 전용 맵(뷰어) — 편집 UI를 숨기고 절대 저장하지 않는다(스토어도 dirty를 막는다).
   const readOnly = useMap((s) => s.readOnly);
   const filePath = useMap((s) => s.filePath);
-  const markSaved = useMap((s) => s.markSaved);
   const notePopoverId = useUi((s) => s.notePopoverId);
   const schedulePopoverId = useUi((s) => s.schedulePopoverId);
   const addLinkFor = useUi((s) => s.addLinkFor);
@@ -110,16 +110,13 @@ function PaneBody({
       const snap = store.getState().doc;
       void window.api.save(target, serialize(snap)).then((p) => {
         if (p) {
-          // 저장하는 동안 더 고쳤다면 dirty를 남겨 이미 예약된 다음 자동저장이 이어받게 한다
-          // (markSaved가 dirty를 끄면 그 타이머가 취소돼 마지막 편집이 디스크에 안 써진다).
-          if (store.getState().doc === snap) markSaved(p);
-          else store.setState({ filePath: p });
+          finishSave(store, 'doc', snap, p); // 저장 중 더 고쳤다면 dirty를 남긴다(saveGuard.ts)
           notifyFileSaved(p); // 공유 폴더의 소유자라면 이 저장을 참가자에게 발행한다(그 밖에는 아무 일도 없다)
         }
       });
     }, 1000);
     return () => clearTimeout(t);
-  }, [dirty, doc, filePath, markSaved, store, readOnly]);
+  }, [dirty, doc, filePath, store, readOnly]);
 
   return (
     <>

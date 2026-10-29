@@ -8,6 +8,7 @@ import { parseBoard, serializeBoard } from './../io/boardFormat';
 import { useUi } from './uiStore';
 import { isViewerFile, notifyFileSaved, useShare } from './shareStore';
 import { saveSharedNote } from './sharedNoteSave';
+import { finishSave } from './saveGuard';
 
 export type TabKind = 'map' | 'note' | 'board' | 'calendar';
 
@@ -111,18 +112,6 @@ function base(path: string): string {
   return (path.split('/').pop() ?? path).replace(/\.(mind|md|board)$/, '');
 }
 
-/** 저장이 끝났을 때, 저장하는 동안 더 고친 게 없을 때만 "저장됨"으로 표시한다. 더 고쳤다면 dirty를 남겨
- *  이미 예약된 다음 자동저장이 이어받게 한다(markSaved가 dirty를 끄면 그 타이머가 취소돼 마지막 편집이 유실된다). */
-function markSavedUnlessEdited<S extends { filePath: string | null; markSaved: (p: string) => void }, K extends keyof S>(
-  store: { getState: () => S; setState: (p: Partial<S>) => void },
-  key: K,
-  saved: S[K],
-  path: string,
-): void {
-  if (store.getState()[key] === saved) store.getState().markSaved(path);
-  else store.setState({ filePath: path } as unknown as Partial<S>);
-}
-
 /** Write out a tab's pending (debounced) edit immediately, if it has one.
  *  Used both by `flushSaves` (rename/move race guard) and by every tab-close
  *  path — closing a dirty tab must never discard the last ~1s of autosave-
@@ -141,7 +130,7 @@ async function flushTab(t: Tab): Promise<void> {
         }
       } else {
         const p = await window.api.save(st.filePath, serializeNote(st.note));
-        if (p) markSavedUnlessEdited(t.store as NoteStore, 'note', st.note, p);
+        if (p) finishSave(t.store as NoteStore, 'note', st.note, p);
       }
     }
   } else if (t.kind === 'board') {
@@ -150,7 +139,7 @@ async function flushTab(t: Tab): Promise<void> {
     if (st.dirty && st.filePath && !st.readOnly) {
       const p = await window.api.save(st.filePath, serializeBoard(st.board));
       if (p) {
-        markSavedUnlessEdited(t.store as BoardStore, 'board', st.board, p);
+        finishSave(t.store as BoardStore, 'board', st.board, p);
         notifyFileSaved(p); // 공유 폴더 소유자면 발행(그 밖에는 아무 일도 없다)
       }
     }
@@ -159,7 +148,7 @@ async function flushTab(t: Tab): Promise<void> {
     if (st.dirty && st.filePath && !st.readOnly) {
       const p = await window.api.save(st.filePath, serialize(st.doc));
       if (p) {
-        markSavedUnlessEdited(t.store as MapStore, 'doc', st.doc, p);
+        finishSave(t.store as MapStore, 'doc', st.doc, p);
         notifyFileSaved(p);
       }
     }

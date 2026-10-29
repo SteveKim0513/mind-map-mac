@@ -11,6 +11,7 @@ import { useWorkspace, boardNoteLinkEntry } from '../store/workspaceStore';
 import { BoardCanvasArea, type BoardCanvasHandle } from './BoardCanvasArea';
 import { BoardToolbar } from './BoardToolbar';
 import type { Tab } from '../store/sessionStore';
+import { finishSave } from '../store/saveGuard';
 import type { BoardMeta } from '../types';
 
 interface Props {
@@ -35,7 +36,6 @@ function BoardPaneBody({ active }: { active: boolean }) {
   // 공유로 받은 읽기 전용 보드(뷰어) — 편집 UI를 숨기고 절대 저장하지 않는다(스토어도 dirty를 막는다).
   const readOnly = useBoard((s) => s.readOnly);
   const filePath = useBoard((s) => s.filePath);
-  const markSaved = useBoard((s) => s.markSaved);
   // board 참조가 바뀔 때마다 아래 자동저장 타이머가 다시 시작된다(진짜 디바운스).
   const board = useBoard((s) => s.board);
   const [handle, setHandle] = useState<BoardCanvasHandle | null>(null);
@@ -56,9 +56,7 @@ function BoardPaneBody({ active }: { active: boolean }) {
       const snap = store.getState().board;
       void window.api.save(target, serializeBoard(snap)).then((p) => {
         if (p) {
-          // 저장하는 동안 더 고쳤다면 dirty를 남겨 다음 자동저장(위 board 의존성으로 이미 예약됨)이 이어받게 한다.
-          if (store.getState().board === snap) markSaved(p);
-          else store.setState({ filePath: p });
+          finishSave(store, 'board', snap, p); // 저장 중 더 고쳤다면 dirty를 남긴다(saveGuard.ts)
           notifyFileSaved(p); // 공유 폴더의 소유자라면 이 저장을 참가자에게 발행한다(그 밖에는 아무 일도 없다)
           // keep the "referenced from a board" reverse index fresh — read-only,
           // no rename/delete GC (see types.ts's BoardMeta doc comment)
@@ -74,7 +72,7 @@ function BoardPaneBody({ active }: { active: boolean }) {
       });
     }, 1000);
     return () => clearTimeout(t);
-  }, [dirty, board, filePath, markSaved, store, readOnly]);
+  }, [dirty, board, filePath, store, readOnly]);
 
   return (
     <>
