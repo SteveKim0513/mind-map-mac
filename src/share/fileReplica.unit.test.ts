@@ -2,11 +2,12 @@
 // 실제 릴레이와의 통합은 fileReplica.integration.test.ts. 여기서는 상한(maxFiles)과 공유 검증 거부 안내를 다룬다.
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
+import { emptyBoard, serializeBoard } from '../io/boardFormat';
 import { emptyDoc, serialize } from '../io/formats';
 import type { MindMapDoc, ShareRole } from '../types';
 import { MANIFEST_KEY, fileKey } from './docKeys';
-import { createFileReplicaManager, writeFileDoc, type FileReplicaHooks, type FileReplicaManager } from './fileReplica';
-import { readManifestFiles, upsertManifestFileEntry } from './manifest';
+import { createFileReplicaManager, readFileDoc, writeFileDoc, type FileReplicaHooks, type FileReplicaManager } from './fileReplica';
+import { getManifestFileEntry, readManifestFiles, upsertManifestFileEntry } from './manifest';
 import { MemFileFs, until } from './replicaTestKit';
 import { createShareSession, type ShareSession } from './shareClient';
 import { makeFakeFactories, makeFakeShareApi, type FakeProvider } from './testFakes';
@@ -203,5 +204,89 @@ describe('공유 검증 거부 — 사용자 안내와 로그(사유 코드만)'
     expect(e.fs.paths()).toEqual([]);
     expect(e.hooks.messages[0]).toContain('안전하지 않은 값');
     expect(e.hooks.logs.join('\n')).toContain('mirror rejected: unsafe_key');
+  });
+});
+
+describe('소유자 발행 — view(팬·줌)만 바뀐 저장은 다시 발행하지 않는다', () => {
+  type View = { zoom: number; panX: number; panY: number };
+  const V0: View = { zoom: 1, panX: 0, panY: 0 };
+  const V1: View = { zoom: 1.4, panX: 272.4, panY: 302.2 };
+
+  function mapWith(text: string, view: View): string {
+    const doc: MindMapDoc = emptyDoc();
+    doc.id = 'map-v';
+    doc.rootIds = ['r'];
+    doc.nodes = { r: { id: 'r', text, parentId: null, children: [], collapsed: false } };
+    doc.view = view;
+    return serialize(doc);
+  }
+  function boardWith(text: string, view: View): string {
+    const b = emptyBoard();
+    b.id = 'board-v';
+    b.elements = { s: { id: 's', kind: 'sticky', x: 0, y: 0, width: 160, height: 120, text } };
+    b.order = ['s'];
+    b.view = view;
+    return serializeBoard(b);
+  }
+  const snap = (e: Env, id: string) => ({ doc: readFileDoc(e.session.getDoc(fileKey(id))!.ydoc)!, entry: getManifestFileEntry(e.manifestDoc, id)! });
+  const save = async (e: Env, path: string, text: string) => {
+    e.fs.put(path, text);
+    e.manager.onFileSaved(path);
+    await e.manager.flush();
+  };
+
+  const cases = [
+    { label: '맵', path: `${FOLDER}/v.mind`, id: 'map-v', make: mapWith, read: (c: string) => (JSON.parse(c) as MindMapDoc).nodes.r.text },
+    {
+      label: '보드',
+      path: `${FOLDER}/v.board`,
+      id: 'board-v',
+      make: boardWith,
+      read: (c: string) => (JSON.parse(c) as { elements: { s: { text: string } } }).elements.s.text,
+    },
+  ];
+
+  for (const c of cases) {
+    it(`${c.label}: 첫 발행은 항상 나가고, view만 바뀌면 발행하지 않고(rev·내용 불변), 다른 필드가 바뀌면 최신 view와 함께 발행한다`, async () => {
+      const e = await setup('owner', { init: (fs) => fs.put(c.path, c.make('원본', V0)) });
+      await e.manager.idle();
+      const first = snap(e, c.id);
+      expect(first.doc.rev).toBeGreaterThan(0); // 첫 발행
+      expect(c.read(first.doc.content)).toBe('원본');
+
+      // view만 바뀜(소유자가 화면을 열고 fit·팬·줌) → 발행 안 함
+      await save(e, c.path, c.make('원본', V1));
+      await save(e, c.path, c.make('원본', { zoom: 0.7, panX: -5, panY: 9 }));
+      const same = snap(e, c.id);
+      expect(same.doc.rev).toBe(first.doc.rev);
+      expect(same.doc.content).toBe(first.doc.content);
+      expect(same.entry.rev).toBe(first.entry.rev);
+      expect((JSON.parse(same.doc.content) as { view: View }).view).toEqual(V0); // 참가자에게는 마지막으로 발행한 view가 그대로다
+
+      // 노드/요소 텍스트가 바뀜 → 발행, 그 저장의 최신 view를 포함
+      await save(e, c.path, c.make('고침', V1));
+      const changed = snap(e, c.id);
+      expect(changed.doc.rev).toBeGreaterThan(first.doc.rev);
+      expect(c.read(changed.doc.content)).toBe('고침');
+      expect((JSON.parse(changed.doc.content) as { view: View }).view).toEqual(V1);
+      expect(e.fs.writes).toEqual([]); // 소유자 파일은 절대 쓰지 않는다
+
+      // 바뀐 뒤 view만 다시 바뀌어도 발행하지 않는다(비교 기준은 마지막으로 발행한 내용)
+      await save(e, c.path, c.make('고침', V0));
+      expect(snap(e, c.id).doc.rev).toBe(changed.doc.rev);
+    });
+  }
+
+  it('view만 바뀌었어도 이름 변경(manifest 경로)은 따라간다 — 내용은 다시 쓰지 않는다', async () => {
+    const e = await setup('owner', { init: (fs) => fs.put(`${FOLDER}/v.mind`, mapWith('원본', V0)) });
+    await e.manager.idle();
+    const first = snap(e, 'map-v');
+    e.fs.remove(`${FOLDER}/v.mind`);
+    e.fs.put(`${FOLDER}/renamed.mind`, mapWith('원본', V1));
+    await e.manager.scan();
+    await e.manager.scan();
+    const after = snap(e, 'map-v');
+    expect(after.entry.path).toBe('renamed.mind');
+    expect(after.doc.rev).toBe(first.doc.rev);
   });
 });

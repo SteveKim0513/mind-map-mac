@@ -51,7 +51,10 @@ const NOTE_TEXT = ['---', `id: "${NOTE_ID}"`, 'title: "회의록"', 'links: []',
 
 const folderRow = (page: Page, name: string) => page.locator(`.row[data-node-path$="/${name}"]`);
 // 사이드바 파일 행은 종류 아이콘으로 찾는다 — 파일명 문자열은 macOS에서 유니코드 정규화(NFC/NFD)가 달라 못 믿는다. 폴더에는 종류당 파일이 하나뿐이다.
-const fileRow = (page: Page, file: string) => page.locator(`.row:has(.ficon--${file.endsWith('.board') ? 'board' : file.endsWith('.md') ? 'note' : 'map'})`).first();
+// 공유 폴더 안의 행만 잡는다 — 워크스페이스 최상위의 개인(비공유) 맵 행까지 `.first()`로 잡으면, 폴더 트리가 아직 펼쳐지지/갱신되지 않은 순간에
+// 개인 맵 행이 먼저 "보이는" 행이 되어 엉뚱한 파일을 열게 된다(3인 시나리오의 간헐 실패 원인: 테스트 인프라, 제품 버그 아님).
+const fileRow = (page: Page, file: string) =>
+  page.locator(`.row[data-node-path*="/${FOLDER}/"]:has(.ficon--${file.endsWith('.board') ? 'board' : file.endsWith('.md') ? 'note' : 'map'})`).first();
 
 const bell = (page: Page) => page.getByTestId('sb-notifications');
 const badge = (page: Page) => page.getByTestId('sb-notifications-badge');
@@ -428,11 +431,14 @@ test(
   },
 );
 
+// 인스턴스 3개(+ CI에서 다른 spec 병렬)는 느린 러너에서 20초 기대가 경합에 밀린다(v0.14.0 CI에서 comment-chip이 재시도로 통과) — 이 시나리오의 기대는 여유 있게 기다린다.
+const THREE_PERSON_WAIT_MS = 60_000;
+
 test(
   '코멘트: 비공유 파일에는 코멘트 UI가 없고, 관련 없는 참가자에게는 알림이 가지 않는다(코멘트는 보인다)',
   { tag: ['@share', '@map'] },
   async () => {
-    test.setTimeout(300_000);
+    test.setTimeout(420_000);
     const relay = await startTestRelay();
     try {
       await withApps(3, { MINDMAP_RELAY_URL: relay.url }, async ([a, b, c]) => {
@@ -452,20 +458,21 @@ test(
         await setupShared(a, b);
         const inviteRes = await newInviteCode(a.page);
         await joinWithCode(c.page, inviteRes, '하나');
-        await expect(folderRow(c.page, FOLDER)).toBeVisible({ timeout: 15_000 });
+        await expect(folderRow(c.page, FOLDER)).toBeVisible({ timeout: THREE_PERSON_WAIT_MS });
         await expect
-          .poll(() => existsSync(join(c.workspace, FOLDER, MAP_FILE)), { timeout: 40_000, message: 'C에도 소유자의 맵이 나타남' })
+          .poll(() => existsSync(join(c.workspace, FOLDER, MAP_FILE)), { timeout: THREE_PERSON_WAIT_MS, message: 'C에도 소유자의 맵이 나타남' })
           .toBe(true);
-        await expect(bell(c.page)).toBeVisible({ timeout: 15_000 });
+        await expect(bell(c.page)).toBeVisible({ timeout: THREE_PERSON_WAIT_MS });
 
         // B가 코멘트 → 소유자 A에게는 알림, 관련 없는 참가자 C에게는 알림 없음 (하지만 C 화면에는 코멘트 칩이 보인다)
         await openFromSidebar(c, MAP_FILE);
-        await c.page.waitForSelector('.canvas .node');
+        // 개인 맵이 아니라 소유자의 맵(루트 '루트 주제')이 열렸는지 확인한다 — 노드 존재만 기다리면 아무 맵이나 통과한다
+        await expect(c.page.locator('.node', { hasText: '루트 주제' })).toBeVisible({ timeout: THREE_PERSON_WAIT_MS });
         await openFromSidebar(b, MAP_FILE);
         await b.page.waitForSelector('.canvas .node');
         await commentOnNode(b.page, '다른 가지', '관련자에게만 알려요');
-        await expect(badge(a.page)).toHaveText('1', { timeout: 20_000 });
-        await expect(c.page.locator('.node', { hasText: '다른 가지' }).getByTestId('comment-chip')).toHaveText('1', { timeout: 20_000 });
+        await expect(badge(a.page)).toHaveText('1', { timeout: THREE_PERSON_WAIT_MS });
+        await expect(c.page.locator('.node', { hasText: '다른 가지' }).getByTestId('comment-chip')).toHaveText('1', { timeout: THREE_PERSON_WAIT_MS });
         await expect(badge(c.page)).toHaveCount(0);
         await expect(c.page.locator('.toast', { hasText: '코멘트' })).toHaveCount(0);
         await openCenter(c.page);
@@ -475,11 +482,11 @@ test(
         // C가 자기 코멘트를 남기면 C는 그 스레드 참여자가 된다 — 이후 B의 코멘트는 C에게도 알림
         await commentOnNode(c.page, '다른 가지', '저도 궁금해요');
         await c.page.keyboard.press('Escape');
-        await expect(badge(b.page)).toHaveText('1', { timeout: 20_000 }); // B(스레드 참여자)에게 C의 코멘트 알림
+        await expect(badge(b.page)).toHaveText('1', { timeout: THREE_PERSON_WAIT_MS }); // B(스레드 참여자)에게 C의 코멘트 알림
         await b.page.locator('.node', { hasText: '다른 가지' }).getByTestId('comment-chip').click();
         await b.page.getByTestId('comment-input').fill('답변드릴게요');
         await b.page.getByTestId('comment-input').press('Enter');
-        await expect(badge(c.page)).toHaveText('1', { timeout: 20_000 });
+        await expect(badge(c.page)).toHaveText('1', { timeout: THREE_PERSON_WAIT_MS });
       });
     } finally {
       await relay.close();

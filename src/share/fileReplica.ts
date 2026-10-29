@@ -22,6 +22,7 @@ import { isSafeDocId, isSafeRelPath } from '../io/shareFormat';
 import {
   isSharedFileKind,
   checkSharedContent,
+  contentIdentityKey,
   type NoteLinkResolver,
   sharedFileExt,
   sharedFileId,
@@ -198,6 +199,8 @@ interface OwnerFile {
   title: string;
   /** 마지막으로 발행한(정제된) 내용 — 원격에서 덮어써지면 이 값으로 되돌린다. */
   content: string;
+  /** 마지막으로 발행한 내용의 동일성 키(`contentIdentityKey` — 최상위 `view` 제외). view만 바뀐 저장은 발행하지 않는 데 쓴다. */
+  identity: string;
   /** 원본 파일에 노트 링크가 있었는가 — 공유 노트 목록이 바뀔 때 다시 정제할 후보 판단용(원본은 보관하지 않는다). */
   hasNoteLink: boolean;
   handle: ShareDocHandle | null;
@@ -368,13 +371,15 @@ export function createFileReplicaManager(opts: FileReplicaOptions): FileReplicaM
         log('warn', `shared file limit (${maxFiles}) reached — skip`);
         return;
       }
-      f = { id, path, rel, kind, title, content: '', hasNoteLink: false, handle: null, unobserve: null };
+      f = { id, path, rel, kind, title, content: '', identity: '', hasNoteLink: false, handle: null, unobserve: null };
       owned.set(id, f);
     }
     f.hasNoteLink = kind === 'board' && text.includes('"noteLink"'); // 사본이 같아 일찍 돌아가는 경우에도 갱신한다
     const entry = getManifestFileEntry(mdoc, id);
     const entryMatches = !!entry && entry.path === rel && entry.kind === kind && entry.title === title;
-    const contentSame = !fresh && f.content === content && f.kind === kind;
+    // view(팬·줌)만 바뀐 저장은 "같은 내용"이다 — 다시 발행하지 않고 rev도 올리지 않는다(다른 필드가 바뀌면 그때 최신 view와 함께 나간다).
+    const identity = contentIdentityKey(content);
+    const contentSame = !fresh && f.kind === kind && (f.content === content || f.identity === identity);
     if (contentSame && entryMatches && f.path === path) return;
 
     const ydoc = await ensureOwnerDoc(f);
@@ -388,6 +393,7 @@ export function createFileReplicaManager(opts: FileReplicaOptions): FileReplicaM
     f.title = title;
     if (!contentSame) {
       f.content = content;
+      f.identity = identity;
       const rev = Math.max(readFileDoc(ydoc)?.rev ?? 0, entry?.rev ?? 0) + 1;
       // 내용(file 문서)을 먼저 올린 뒤 manifest에 올린다 — 참가자가 항목을 보고 문서를 열 때 내용이 이미 있다.
       writeFileDoc(ydoc, { content, kind, rev });

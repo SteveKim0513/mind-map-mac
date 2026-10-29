@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { serialize, emptyDoc } from './formats';
 import { emptyBoard, serializeBoard } from './boardFormat';
-import { MAX_SHARED_FILE_CHARS, prepareSharedContent, rawDocId, sharedFileId, sharedFileKind } from './sharedFile';
+import { MAX_SHARED_FILE_CHARS, contentIdentityKey, prepareSharedContent, rawDocId, sharedFileId, sharedFileKind } from './sharedFile';
 import type { MindMapDoc } from '../types';
 
 function mapWithReminder(): MindMapDoc {
@@ -108,5 +108,46 @@ describe('prepareSharedContent', () => {
 
   it('너무 큰 내용은 거부한다', () => {
     expect(prepareSharedContent('map', 'x'.repeat(MAX_SHARED_FILE_CHARS + 1))).toBeNull();
+  });
+});
+
+describe('contentIdentityKey — 최상위 view(팬·줌)만 다른 사본은 같은 키', () => {
+  const withView = (doc: MindMapDoc, view: MindMapDoc['view']) => serialize({ ...doc, view });
+  const base = (): MindMapDoc => {
+    const d = emptyDoc();
+    d.id = 'm1';
+    d.rootIds = ['r'];
+    d.nodes = { r: { id: 'r', text: '루트', parentId: null, children: [], collapsed: false } };
+    return d;
+  };
+
+  it('맵: view만 바뀌면 같은 키, 노드 내용이 바뀌면 다른 키', () => {
+    const a = withView(base(), { zoom: 1, panX: 0, panY: 0 });
+    const b = withView(base(), { zoom: 1.4, panX: 272.4, panY: 302.2 });
+    expect(contentIdentityKey(a)).toBe(contentIdentityKey(b));
+    const edited = base();
+    edited.nodes.r.text = '고친 루트';
+    expect(contentIdentityKey(withView(edited, { zoom: 1, panX: 0, panY: 0 }))).not.toBe(contentIdentityKey(a));
+  });
+
+  it('공유용으로 정제한 사본끼리도 같다(발행 경로가 비교하는 값)', () => {
+    const a = prepareSharedContent('map', withView(base(), { zoom: 1, panX: 0, panY: 0 }))!;
+    const b = prepareSharedContent('map', withView(base(), { zoom: 2, panX: -10, panY: 5 }))!;
+    expect(a).not.toBe(b);
+    expect(contentIdentityKey(a)).toBe(contentIdentityKey(b));
+  });
+
+  it('보드: view만 바뀌면 같은 키, 요소가 바뀌면 다른 키', () => {
+    const b1 = emptyBoard();
+    b1.id = 'b1';
+    const b2 = { ...b1, view: { zoom: 0.5, panX: 40, panY: 60 } };
+    expect(contentIdentityKey(serializeBoard(b1))).toBe(contentIdentityKey(serializeBoard(b2)));
+    const b3 = { ...b1, elements: { s: { id: 's', kind: 'sticky', x: 0, y: 0, width: 10, height: 10, text: '새' } }, order: ['s'] } as never;
+    expect(contentIdentityKey(serializeBoard(b3))).not.toBe(contentIdentityKey(serializeBoard(b1)));
+  });
+
+  it('view 밖의 최상위 필드(예: id)가 다르면 다른 키이고, 파싱할 수 없으면 원문 그대로다', () => {
+    expect(contentIdentityKey(JSON.stringify({ id: 'a', view: 1 }))).not.toBe(contentIdentityKey(JSON.stringify({ id: 'b', view: 1 })));
+    expect(contentIdentityKey('{not json')).toBe('{not json');
   });
 });

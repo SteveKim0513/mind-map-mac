@@ -296,6 +296,36 @@ describe('맵·보드 보기 전용 공유 — 실제 릴레이 통합', () => {
     expect([...fileDoc(pa, 'map-plan').getMap(FILE_MAP_NAME).keys()].sort()).toEqual(['content', 'kind', 'rev']);
   }, 30_000);
 
+  it('(b2) 소유자의 view(팬·줌)만 바뀐 저장은 참가자 미러 파일을 다시 쓰지 않는다 — 바이트·mtime·쓰기 횟수 불변', async () => {
+    const { A, B, pa, pb } = await sharedPair();
+    const bPath = `${B.folder}/plan.mind`;
+    const before = B.fs.get(bPath)!;
+    const mtime = B.fs.files.get(bPath)!.mtimeMs;
+    const writesTo = () => B.fs.writes.filter((p) => p === bPath).length;
+    const writes = writesTo();
+    const revBefore = readFileDoc(fileDoc(pa, 'map-plan'))!.rev;
+
+    // 소유자가 맵을 열어 fit·팬·줌했다 → view만 다른 파일이 자동저장된다
+    const owner = JSON.parse(A.fs.get(`${A.folder}/plan.mind`)!) as MindMapDoc;
+    A.fs.put(`${A.folder}/plan.mind`, mapText({ ...owner, view: { zoom: 1.4, panX: 272.4, panY: 302.2 } }));
+    pa.manager.onFileSaved(`${A.folder}/plan.mind`);
+    await pa.manager.flush();
+
+    // 양성 신호: 그 뒤에 다른 파일의 실제 수정을 발행하고 참가자 미러에 도착할 때까지 기다린다 — view 저장이 (잘못) 발행됐다면 그 전에 갔을 것이다.
+    A.fs.put(`${A.folder}/sub/idea.board`, boardText('board-idea', sticky('s1', '아이디어 (수정됨)')));
+    pa.manager.onFileSaved(`${A.folder}/sub/idea.board`);
+    await pa.manager.flush();
+    await until(() => (B.fs.get(`${B.folder}/sub/idea.board`) ?? '').includes('아이디어 (수정됨)'), '보드 수정이 참가자에게 도착');
+    await pb.manager.idle();
+
+    expect(B.fs.get(bPath)).toBe(before);
+    expect(B.fs.files.get(bPath)!.mtimeMs).toBe(mtime);
+    expect(writesTo()).toBe(writes);
+    expect(readFileDoc(fileDoc(pa, 'map-plan'))!.rev).toBe(revBefore);
+    expect(readFileDoc(fileDoc(pb, 'map-plan'))!.rev).toBe(revBefore);
+    expect(A.fs.writes).toEqual([]);
+  }, 30_000);
+
   it('(c) 참가자가 file 문서·manifest를 고쳐도 서버가 버려 소유자와 다른 참가자에게 반영되지 않는다', async () => {
     const { room, A, B, pa, pb } = await sharedPair();
     const C = device('C');

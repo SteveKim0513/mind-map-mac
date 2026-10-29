@@ -155,6 +155,10 @@ const closeActiveTab = async (page: Page) => {
   await expect(page.locator('.tab')).toHaveCount(0);
 };
 
+/** 소유자 원본 파일에 저장된 보기 상태(팬·줌) — 화면을 열면 fit이 이걸 바꾸고 자동저장된다. */
+const viewOnDisk = (path: string): string => JSON.stringify((JSON.parse(readFileSync(path, 'utf-8')) as { view?: unknown }).view ?? null);
+const INITIAL_VIEW = JSON.stringify({ zoom: 1, panX: 0, panY: 0 });
+
 const nodeTexts = (page: Page) => page.$$eval('.node .text', (els) => els.map((e) => e.textContent?.trim() ?? '').sort());
 
 test(
@@ -174,10 +178,15 @@ test(
         expect(mirrored.nodes.n2.reminderOn).toBeUndefined();
         expect(mirrored.nodes.n2.reminderId).toBeUndefined();
         expect(readFileSync(aMap, 'utf-8')).toBe(MAP_TEXT);
+        // 소유자가 화면을 열면 fit이 view(팬·줌)를 바꿔 자동저장되지만 그것은 참가자에게 다시 보내지 않는다(내용이 아니라 소유자의 화면 위치) —
+        // 그래서 미러의 기준은 소유자가 열기 **전**에 잡는다. (열기 뒤에 잡으면 CI처럼 fit 타이밍이 늦는 환경에서만 통과/실패가 갈린다.)
+        const bBefore = readFileSync(bMap, 'utf-8');
+        const bMtime = statSync(bMap).mtimeMs;
 
         // 소유자 화면: 표식 없음, 편집 어포던스 그대로
         await openFromSidebar(a, `${MAP_NAME}.mind`);
         await a.page.waitForSelector('.canvas .node');
+        await expect.poll(() => viewOnDisk(aMap), { timeout: 15_000, message: '소유자의 fit이 view를 자동저장함(이제 미러 기준을 비교할 수 있다)' }).not.toBe(INITIAL_VIEW);
         await expect(a.page.getByTestId('viewer-badge')).toHaveCount(0);
         await a.page.locator('.node', { hasText: '루트 주제' }).click();
         await expect(a.page.locator('.sel-toolbar')).toBeVisible();
@@ -197,8 +206,6 @@ test(
         await shootBothThemes(b.page, 'viewer-map');
 
         // (b) 편집 시도 — Enter/Tab/Space/F2/Delete/입력/더블클릭/드래그/컨텍스트 메뉴/붙여넣기 → 아무 변화 없음
-        const bBefore = readFileSync(bMap, 'utf-8');
-        const bMtime = statSync(bMap).mtimeMs;
         const root = b.page.locator('.node', { hasText: '루트 주제' });
         await root.click();
         await expect(root).toHaveClass(/selected/); // 선택은 된다(보기 동작)
@@ -308,6 +315,8 @@ test(
       await withApps({ MINDMAP_RELAY_URL: relay.url }, async (a, b) => {
         const { aBoard, bBoard } = await setupShared(a, b);
         expect(readFileSync(aBoard, 'utf-8')).toBe(BOARD_TEXT); // 소유자 원본은 그대로
+        const bBefore = readFileSync(bBoard, 'utf-8'); // 미러 기준은 소유자가 열기 전에(소유자의 fit·팬·줌 저장은 참가자에게 다시 가지 않는다)
+        const bMtime = statSync(bBoard).mtimeMs;
 
         // 소유자 화면: 표식 없음 + 편집 툴바
         await openFromSidebar(a, `${BOARD_NAME}.board`);
@@ -329,8 +338,6 @@ test(
         await shootBothThemes(b.page, 'viewer-board');
 
         // 편집 시도 — 더블클릭 편집·입력·Delete·드래그·리사이즈·앵커·우클릭·붙여넣기 → 변화 없음
-        const bBefore = readFileSync(bBoard, 'utf-8');
-        const bMtime = statSync(bBoard).mtimeMs;
         const s1 = b.page.locator('.board-el--sticky', { hasText: '아이디어 조각' });
         const posOf = () => s1.evaluate((el) => ({ left: (el as HTMLElement).style.left, top: (el as HTMLElement).style.top }));
         const posBefore = await posOf();

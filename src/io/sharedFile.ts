@@ -124,6 +124,19 @@ export function prepareSharedContent(kind: SharedFileKind, text: string, opts: S
   return r.ok ? r.content : null;
 }
 
+/**
+ * 발행 여부 판단용 "내용 동일성 키": 최상위 `view`(팬·줌 — `MindMapDoc.view`/`BoardDoc.view`)를 뺀 나머지의 정규 직렬화.
+ * 소유자가 화면을 열거나 팬·줌만 해도 파일의 `view`가 바뀌어 자동저장되는데, 그것만으로는 참가자에게 다시 보낼 이유가 없다
+ * (문서 내용이 아니라 소유자의 화면 위치 — 최대 4MB 파일을 모두에게 다시 보내고 참가자 미러를 덮어쓰게 된다).
+ * 두 정제된 사본의 키가 같으면 view 말고는 같은 문서다. 파싱할 수 없으면 원문을 그대로 돌려준다(항상 "다름"에 가깝게 — 안전한 쪽).
+ */
+export function contentIdentityKey(text: string): string {
+  const raw = parseRaw(text);
+  if (!raw) return text;
+  const { view: _view, ...rest } = raw;
+  return JSON.stringify(rest);
+}
+
 /** 발행 여부 판단용: 정제된 내용의 해시(같으면 다시 발행하지 않는다). */
 export function sharedContentHash(content: string): string {
   return hashText(content);
