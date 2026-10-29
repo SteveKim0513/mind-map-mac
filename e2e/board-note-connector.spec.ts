@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
-import { launchApp } from './helpers';
+import { launchApp, waitForSaved } from './helpers';
 
 // 2026-09-09 "화살표 연결을 스티키 노트 밑에 추가된 노트로도 연결 가능하게
 // 해줘" — a sticky's fused "텍스트 박스 추가" note blocks (BoardStickyElement.
@@ -38,7 +38,7 @@ test('스티키 아래 텍스트 박스(추가된 노트)의 연결점을 클릭
     await expect(page.locator('.board-el--sticky')).toHaveCount(2);
     await expect(page.locator('.board-connector')).toHaveCount(1);
     await page.click('.board-canvas', { position: { x: 20, y: 20 } });
-    await page.waitForTimeout(1_100); // autosave debounce
+    await waitForSaved(page); // autosave 완료(저장 표시등 꺼짐)
 
     const doc = await readSavedBoard(workspace);
     const conn = Object.values(doc.elements).find((e) => e.kind === 'connector')!;
@@ -84,7 +84,7 @@ test('화살표를 다른 스티키의 텍스트 박스 위로 드래그하면 �
     await page.mouse.up();
 
     await expect(page.locator('.board-connector path')).toHaveCount(1);
-    await page.waitForTimeout(1_100); // autosave debounce
+    await waitForSaved(page); // autosave 완료(저장 표시등 꺼짐)
 
     const doc = await readSavedBoard(workspace);
     const conn = Object.values(doc.elements).find((e) => e.kind === 'connector')!;

@@ -10,6 +10,7 @@ node_modules/
 # E2E test artifacts (generated; not source)
 /playwright-report/
 /test-results/
+/test-results-serial/
 /etc/
 
 # Local Claude Code personal overrides (team config is tracked)
@@ -37,3 +38,6 @@ temp/
 # OS·편집기
 # 의존성·빌드 결과
 dist/
+
+# VM E2E 보고서 (scripts/e2e-vm.sh)
+/.e2e-vm/

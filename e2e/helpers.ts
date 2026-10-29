@@ -62,12 +62,17 @@ export async function launchApp(opts: LaunchOptions = {}): Promise<AppHandle> {
   // MINDMAP_E2E_QUIET keeps the Electron window off-screen and un-activated —
   // Playwright drives it over CDP either way, so there's no reason for it to
   // pop to the front and steal focus from whatever else is on screen.
-  const env = {
+  // Inside the E2E VM (scripts/e2e-vm.sh sets MINDMAP_E2E_VM) there is no
+  // human screen to protect, and quiet's 'accessory' policy breaks win.focus()
+  // on macOS 26, so windows open normally there. forceQuiet tests still get it.
+  const quiet = opts.forceQuiet || !process.env.MINDMAP_E2E_VM;
+  const env: Record<string, string | undefined> = {
     ...process.env,
     MINDMAP_USER_DATA: userData,
     MINDMAP_WORKSPACE: workspace,
-    MINDMAP_E2E_QUIET: '1',
   };
+  if (quiet) env.MINDMAP_E2E_QUIET = '1';
+  else delete env.MINDMAP_E2E_QUIET;
   // Skip the OS-global capture shortcut so parallel instances don't contend
   // over the single Alt+Space registration (opt in per test when needed).
   if (opts.globalShortcut) {
@@ -98,6 +103,15 @@ export async function launchApp(opts: LaunchOptions = {}): Promise<AppHandle> {
   };
 
   return { app, page, workspace, userData, cleanup };
+}
+
+/**
+ * 자동저장이 끝날 때까지 기다린다 — 툴바의 저장 표시등(`.map-save.saving` = dirty)이 꺼질 때까지.
+ * 고정 `waitForTimeout(1_100)`은 느린 디스크·부하에서 저장보다 먼저 파일을 읽어 깨진다.
+ * 편집 직후(저장 표시등이 켜진 뒤)에 호출한다.
+ */
+export async function waitForSaved(page: Page): Promise<void> {
+  await page.waitForSelector('.map-save:not(.saving)', { timeout: 10_000 });
 }
 
 /**

@@ -21,7 +21,7 @@ description: "테스트 작성 규칙 — Vitest(단위) + Playwright(E2E)"
 |---|---|---|---|
 | 매 기능 완료 | `make verify-feature tag=@<domain>` | typecheck + 단위 **전체** + 그 도메인 E2E만 | 낮음 |
 | E2E 부분만 다시 | `make e2e-tag tag=@<domain>` | 해당 도메인 E2E만 | 낮음 |
-| **배포 지시 받을 때** | `make pre-release` | verify-full + **전체 E2E** | 높음, 1회 |
+| **배포 지시 받을 때** | `make pre-release` (VM 준비됐으면 `make pre-release-vm`) | verify-full + **전체 E2E** | 높음, 1회 |
 
 - **개발 루프에서는 전체 E2E를 돌리지 않는다.** 여러 기능을 누적해 배포할 때 같은 전체 스위트를 반복 실행하던 낭비를 없앤다.
 - **단위 테스트 전체는 항상 실행한다** (공짜에 가깝고, 도메인 경계를 넘는 회귀를 초 단위로 잡는 1차 안전망).
@@ -67,6 +67,7 @@ test('제목', { tag: ['@calendar', '@schedule'] }, async () => { /* ... */ });
 - **OS 전역 단축키는 E2E에서 기본 비활성**이다(`MINDMAP_DISABLE_GLOBAL_SHORTCUT`). 병렬 인스턴스가 `Alt+Space` 하나를 두고 경쟁하기 때문. 등록 자체를 검증해야 하는 test만 `launchApp({ globalShortcut: true })`로 opt-in하고, 그런 test는 유일해야 한다(둘 이상이면 서로 경쟁).
 - `MINDMAP_USER_DATA`와 `MINDMAP_WORKSPACE` 환경변수로 실제 데이터와 격리한다 (`e2e/helpers.ts`의 `launchApp()` 사용).
 - `launchApp()`은 `MINDMAP_E2E_QUIET=1`도 함께 설정 — Electron 창을 화면 밖(off-screen, x/y만 이동) 위치에 띄우고, macOS에서는 앱 활성화 정책을 `accessory`(LSUIElement 상당)로 바꿔 Dock/Cmd+Tab에도 안 뜨고 실행 중 다른 작업의 키보드 포커스를 뺏지 않는다. `showInactive()`/포커스 불가 같은 트릭은 쓰지 않는다 — `win.focus()`가 실제로 창을 포커스시켜야 하는 `file-management.spec.ts`의 "regains focus" 테스트가 깨졌었다(CI에서 실제로 겪음). `accessory` 정책은 자동 활성화만 막을 뿐 `win.focus()` 같은 명시적 호출은 그대로 동작해 이 테스트에 영향 없다 — **단, 이 전제는 macOS 버전에 의존한다.** macOS 26(Tahoe, Darwin 25.x)에서 실측한 결과 `accessory` 정책 하에서는 `win.focus()`를 호출해도 더 이상 실제 OS 키보드 포커스가 옮겨가지 않아, `win.focus()`/`win.blur()` 기반 `@serial` 테스트(외부 변경 감지·새로고침류)가 로컬에서 일괄 실패한다(2026-09-09 확인). `CI` 환경변수가 있으면(GitHub Actions) 이 값을 끈다 — CI 러너에서는 어차피 화면을 가릴 사람이 없다. 이 CI 분기가 곧 로컬 우회책이기도 하다: macOS 26 이상에서 `make pre-release`/`make e2e-tag`가 이유 없이 `@serial` 테스트에서만 실패하면, `CI=1 make pre-release`처럼 `CI=1`을 붙여 quiet 모드 자체를 끄고 돌려본다(창이 화면에 보이고 포커스를 가져간다). 반대로 "quiet 모드가 실제로 포커스를 안 준다"는 동작 자체를 검증하는 테스트(`global-capture.spec.ts`의 capture 창 테스트 등)는 이 우회책과 충돌하므로 `launchApp({ forceQuiet: true })`로 그 한 번의 런치에서만 `CI`를 지우고 quiet를 강제한다. `make dev-safe`는 이 값을 설정하지 않는다 — 사람이 직접 보고 조작해야 한다.
+- **VM 실행(`make pre-release-vm`, `make e2e-vm tag=@x`)**: `scripts/e2e-vm.sh`가 Tart macOS VM을 화면 없이 켜고 작업 폴더를 복사해 같은 make 타겟을 VM 안에서 돌린다. 사용자 화면·포커스와 완전히 분리되므로 사람이 다른 작업 중이면 이쪽을 쓴다. VM 안에서는 `MINDMAP_E2E_VM=1`이라 `launchApp()`이 quiet 모드를 켜지 않는다(창이 VM 화면에 정상으로 뜨고 `win.focus()`가 실제로 동작 → macOS 26 `CI=1` 우회 불필요). `forceQuiet` 테스트는 VM에서도 quiet. 보고서는 `.e2e-vm/`. 상세: `docs/operations/testing.md` "VM에서 E2E".
 - 시간 기반 `sleep` 대기 대신 명시적인 준비 상태 확인(`waitForSelector` 등)을 사용한다.
 - VSCode 환경에서는 `ELECTRON_RUN_AS_NODE`를 반드시 제거한다 (`e2e/helpers.ts` 참조).
 

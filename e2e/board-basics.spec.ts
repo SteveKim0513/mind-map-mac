@@ -316,11 +316,16 @@ test('보드는 저장되고, 닫았다 다시 열어도 내용이 보존된다'
     await expect(page.locator('.board-el--sticky')).toHaveCount(2);
     await expect(page.locator('.board-connector')).toHaveCount(1);
 
-    await page.waitForTimeout(1_100); // autosave debounce (1s)
-
-    const boardName = readdirSync(workspace).find((f) => f.endsWith('.board'));
-    if (!boardName) throw new Error('.board 파일이 생성되지 않음');
-    const doc = JSON.parse(readFileSync(join(workspace, boardName), 'utf-8'));
+    // autosave 디바운스(1s) + 쓰기 지연 — 고정 대기 대신 3개 요소가 파일에 실제로 저장될 때까지 기다린다
+    const readDoc = () => {
+      const f = readdirSync(workspace).find((n) => n.endsWith('.board'));
+      if (!f) return null;
+      try { return JSON.parse(readFileSync(join(workspace, f), 'utf-8')); } catch { return null; }
+    };
+    await expect
+      .poll(() => Object.keys(readDoc()?.elements ?? {}).length, { timeout: 10_000, message: '스티키 2개 + 커넥터 1개가 파일에 저장됨' })
+      .toBe(3);
+    const doc = readDoc();
     expect(doc.version).toBe(1);
     expect(Object.keys(doc.elements)).toHaveLength(3); // 2 stickies + 1 connector
     const stickyEls = Object.values(doc.elements).filter((e) => e.kind === 'sticky');

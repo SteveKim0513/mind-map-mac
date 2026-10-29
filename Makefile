@@ -1,4 +1,4 @@
-.PHONY: setup dev-safe build test typecheck verify verify-full pre-release dist harness-check e2e e2e-tag verify-feature smoke bump tag release
+.PHONY: setup dev-safe build test typecheck verify verify-full pre-release dist harness-check e2e e2e-tag verify-feature smoke bump tag release e2e-vm-setup pre-release-vm e2e-vm e2e-vm-stop
 
 # Install dependencies
 setup:
@@ -39,6 +39,21 @@ verify-full:
 # 새 기능·UI 변경이 포함된 릴리즈는 반드시 이 타겟을 통과한 뒤 bump한다.
 pre-release:
 	npm --prefix server run build && npm run typecheck && npm test && npm --prefix server test && npm run build && npm run test:e2e
+
+# 같은 게이트·E2E를 화면 없는 macOS VM 안에서 실행 — 테스트가 이 Mac의 창·포커스를 건드리지 않는다.
+# 최초 1회 make e2e-vm-setup (Tart 필요, 이미지 약 25GB). 상세: docs/operations/testing.md "VM에서 E2E"
+e2e-vm-setup:
+	scripts/e2e-vm.sh setup
+
+pre-release-vm:
+	scripts/e2e-vm.sh run pre-release
+
+e2e-vm:
+	@[ "$(tag)" ] || { echo 'Usage: make e2e-vm tag=@<domain>  (예: @calendar)'; exit 1; }
+	scripts/e2e-vm.sh run e2e-tag tag="$(tag)"
+
+e2e-vm-stop:
+	scripts/e2e-vm.sh stop
 
 # Harness structure checks (architecture + doc integrity + design + e2e 태그)
 harness-check:

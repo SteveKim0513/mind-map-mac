@@ -181,6 +181,9 @@ function createWindow() {
     // with the 'accessory' activation policy set below, which stops the
     // launch-time app-activation blip from stealing OS keyboard focus.
     ...(E2E_QUIET ? { x: -3000, y: -3000 } : {}),
+    // E2E VM (scripts/e2e-vm.sh): 헤드리스 VM의 화면은 1024x768이라 1280x820 창이 줄어들어 오른쪽 요소가
+    // 화면 밖으로 밀린다(드래그 테스트가 깨짐). 테스트 전용으로 화면보다 큰 창을 허용한다.
+    ...(process.env.MINDMAP_E2E_VM ? { enableLargerThanScreen: true } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       // IF-12 · Explicit security hardening. These are already Electron's

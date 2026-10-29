@@ -51,6 +51,47 @@ make pre-release              # verify-full + 전체 E2E (배포 게이트 — m
 
 **계층 전략**: 매 기능 완료는 `make verify-feature tag=@x`(부분), 배포 지시를 받으면 `make pre-release`(전체 E2E)로 게이트. 배포 게이트는 부분집합으로 낮추지 않는다.
 
+## VM에서 E2E (화면·포커스를 건드리지 않음)
+
+로컬 E2E는 같은 화면에서 창을 화면 밖에 띄우는 방식이라, macOS 버전·`CI=1` 우회에 따라 포커스를 뺏을 수 있다. VM 실행은 테스트를 화면 없는 macOS VM 안에서 돌려 이 문제를 구조적으로 없앤다. 게이트 내용은 같다(VM 안에서 같은 make 타겟을 실행).
+
+```bash
+make pre-release-vm          # = VM 안에서 make pre-release
+make e2e-vm tag=@calendar    # = VM 안에서 make e2e-tag tag=@calendar
+make e2e-vm-stop             # 중간에 끊겼을 때 VM 끄기
+scripts/e2e-vm.sh status     # VM 상태
+scripts/e2e-vm.sh shell      # VM 안 셸(디버깅, 끝나면 stop)
+```
+
+- **무엇을 테스트하나**: 커밋 여부와 상관없이 지금 작업 폴더의 디스크 내용. 읽기 전용 공유 폴더로 넘긴 뒤 VM 디스크(`~/mind-map`)로 복사한다. `node_modules`·빌드 산출물은 VM 쪽 것을 쓰고, `package-lock.json`이 바뀌었을 때만 `npm ci`를 다시 한다.
+- **결과**: `.e2e-vm/run.log`, `.e2e-vm/playwright-report/index.html`, `.e2e-vm/test-results/`.
+- **동시 실행 불가**: VM 하나를 쓰므로 실행은 한 번에 하나. VM이 켜져 있으면 run은 거절한다.
+- **VM 안 동작 차이**: `MINDMAP_E2E_VM=1`이라 `launchApp()`이 quiet 모드를 켜지 않는다. 창이 VM 화면에 정상으로 뜨고 `win.focus()`가 실제로 동작하므로 macOS 26의 `CI=1` 우회가 필요 없다.
+
+### 최초 설정 (한 번)
+
+1. Tart 설치. Homebrew 수식(`cirruslabs/cli/tart`)은 2026-10 기준 최신 brew와 맞지 않아 실패했다. GitHub 릴리즈로 설치한다:
+   ```bash
+   gh release download -R cirruslabs/tart -p 'tart*'   # tart.tar.gz + checksums
+   shasum -a 256 tart.tar.gz                           # checksums 파일과 비교
+   tar -xzf tart.tar.gz && mv tart.app ~/Applications/
+   ln -sf ~/Applications/tart.app/Contents/MacOS/tart /opt/homebrew/bin/tart
+   ```
+2. `make e2e-vm-setup` — macOS Tahoe 기본 이미지(`ghcr.io/cirruslabs/macos-tahoe-base`, 디스크 약 25GB)를 받아 VM `mindmap-e2e`를 만들고 Node 22를 설치한다.
+
+**외장 SSD에 VM 두기 (내장 디스크 0GB).** ExFAT 외장 디스크에 VM을 바로 두면 빈 공간까지 50GB를 통째로 차지하므로, 그 안에 쓰는 만큼만 커지는 APFS 디스크 이미지를 만들어 둔다:
+
+```bash
+hdiutil create -size 120g -type SPARSEBUNDLE -fs APFS -volname MindMapE2E /Volumes/<SSD>/mindmap-e2e-vm.sparsebundle
+mkdir -p ~/.config/mindmap
+echo 'E2E_VM_BUNDLE=/Volumes/<SSD>/mindmap-e2e-vm.sparsebundle' >> ~/.config/mindmap/e2e-vm.conf
+make e2e-vm-setup
+```
+
+`scripts/e2e-vm.sh`는 실행할 때마다 이 이미지를 Finder에 안 보이게 열고(`hdiutil attach -nobrowse`), VM이 꺼지면 닫는다. 그래서 테스트가 안 돌 때는 SSD를 바로 뺄 수 있다. SSD가 빠져 있으면 "외장 SSD가 연결돼 있는지 확인" 오류로 멈춘다. 환경변수 `E2E_VM_BUNDLE`이 설정 파일보다 우선한다.
+
+설정값(환경변수): `E2E_VM_CPU`(기본 8), `E2E_VM_MEM`(MB, 기본 8192), `E2E_VM_IMAGE`, `E2E_VM_NAME`. CPU·메모리는 `make e2e-vm-setup`을 다시 돌리면 반영된다. VM 삭제는 `scripts/e2e-vm.sh destroy`, 받은 이미지 캐시 정리는 `tart prune --entries=caches`.
+
 ## E2E 격리
 
 E2E 테스트는 반드시 실제 사용자 데이터와 격리한다:

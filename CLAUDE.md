@@ -30,11 +30,13 @@ make verify                  # typecheck + unit test + server/ test  ← 완료 
 make verify-feature tag=@x   # verify + 해당 도메인 E2E만  ← 기능 단위 검증 (개발 루프)
 make verify-full             # typecheck + unit test + build  ← PR 전 반드시 실행
 make pre-release             # verify-full + 전체 E2E  ← 배포(make bump) 전 반드시 실행
+make pre-release-vm          # 같은 게이트를 화면 없는 macOS VM에서 (포커스 안 뺏음, 최초 make e2e-vm-setup)
+make e2e-vm tag=@x           # 도메인 E2E를 VM에서
 make harness-check           # 아키텍처·문서·E2E 태그 구조 검사
 ```
 
 - 매 기능 완료는 `make verify-feature tag=@<domain>`(관련 도메인 E2E만) 으로 빠르게 검증한다.
-- **배포 지시를 받으면** 그때 `make pre-release`(전체 E2E)로 게이트한다 — 부분집합으로 낮추지 않는다.
+- **배포 지시를 받으면** 그때 `make pre-release`(전체 E2E)로 게이트한다 — 부분집합으로 낮추지 않는다. VM이 준비돼 있으면(`scripts/e2e-vm.sh status`) 같은 게이트인 `make pre-release-vm`을 쓴다 — 사용자 화면·포커스를 건드리지 않는다.
 - 도메인 태그 어휘와 상세 규칙은 `.claude/rules/testing.md`의 "테스트 계층 전략" 참조.
 
 - `make verify` 없이 완료를 주장하지 않는다.

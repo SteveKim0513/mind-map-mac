@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { readdirSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { launchApp } from './helpers';
 
 // Board is a third, equal file type alongside map/note — these tests cover the
@@ -61,7 +63,7 @@ test('보드가 Quick Open · 즐겨찾기에서 ".board" 확장자 없이, 마�
 });
 
 test('전체 검색(⌘⇧F)이 보드 스티키 텍스트를 찾고, 선택하면 그 보드를 열고 스티키를 선택한다', { tag: ['@board', '@nav'] }, async () => {
-  const { page, cleanup } = await launchApp();
+  const { page, workspace, cleanup } = await launchApp();
   try {
     await page.click('.sb-section-btn[title="새 보드"]');
     await page.waitForSelector('.board-canvas', { timeout: 5_000 });
@@ -70,7 +72,14 @@ test('전체 검색(⌘⇧F)이 보드 스티키 텍스트를 찾고, 선택하�
     await page.locator('.board-el--sticky').dblclick();
     await page.keyboard.type('전역검색용스티키');
     await page.click('.board-canvas', { position: { x: 20, y: 20 } });
-    await page.waitForTimeout(1_100); // autosave debounce — global search reads from disk
+    // 전역 검색은 디스크를 읽는다 — 고정 대기 대신 스티키 텍스트가 .board 파일에 실제로 저장될 때까지 기다린다
+    // (느린 환경에서는 autosave debounce 뒤에도 쓰기가 늦을 수 있다).
+    await expect
+      .poll(() => {
+        const f = readdirSync(workspace).find((n) => n.endsWith('.board'));
+        return f ? readFileSync(join(workspace, f), 'utf-8').includes('전역검색용스티키') : false;
+      }, { timeout: 10_000, message: '스티키 텍스트가 .board 파일에 저장됨' })
+      .toBe(true);
 
     await page.keyboard.press('Meta+Shift+F');
     await page.waitForSelector('.gs', { timeout: 3_000 });

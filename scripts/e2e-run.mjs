@@ -63,7 +63,8 @@ const p1 = play(p1args, `E2E 1/2 · 병렬 (${domain ?? '전체'}, @serial 제�
 // 제목 문자열에 태그가 포함되므로 lookahead로 AND를 표현한다.
 const serialGrep = domain ? `(?=.*@serial)(?=.*(?:${domain}))` : '@serial';
 const p2 = play(
-  ['--grep', serialGrep, '--workers=1', '--pass-with-no-tests'],
+  // 출력 폴더를 분리한다 — 같은 폴더면 2단계 시작 때 1단계 실패 스크린샷이 지워진다.
+  ['--grep', serialGrep, '--workers=1', '--pass-with-no-tests', '--output=test-results-serial'],
   `E2E 2/2 · 직렬 workers=1 (@serial${domain ? ` ∩ ${domain}` : ''})`,
 );
 

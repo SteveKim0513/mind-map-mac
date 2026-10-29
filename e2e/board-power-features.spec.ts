@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { launchApp } from './helpers';
+import { launchApp, waitForSaved } from './helpers';
 
 async function newBoard(page: Page): Promise<void> {
   await page.click('.sb-section-btn[title="새 보드"]');
@@ -351,7 +351,7 @@ test('보드는 화살표 라벨과 노드 연결을 저장하고, 다시 열어
     await page.keyboard.press('Enter');
     await expect(page.locator('.board-sticky-link')).toHaveCount(1);
 
-    await page.waitForTimeout(1_100); // autosave debounce
+    await waitForSaved(page); // autosave 완료(저장 표시등 꺼짐)
 
     await page.click('.tab.active .tab-close'); // two tabs are open (map + board) — close the active (board) one specifically
     await expect(page.locator('.board-canvas')).toHaveCount(0);

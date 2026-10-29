@@ -38,13 +38,16 @@ test('커넥터를 선택하면 색을 바꿀 수 있고, 화살촉도 같은 �
     await expect(page.locator('.sel-toolbar .st-btn[title="화살표 색"]')).toBeVisible();
     await page.locator('.sel-toolbar .st-btn[title="화살표 색"]').click();
     await page.locator('.color-swatch-grid .color-swatch').nth(3).click();
-    await page.waitForTimeout(1_100); // autosave debounce
-
-    const boardName = readdirSync(workspace).find((f) => f.endsWith('.board'));
-    if (!boardName) throw new Error('.board 파일이 생성되지 않음');
-    const doc = JSON.parse(readFileSync(join(workspace, boardName), 'utf-8'));
-    const connEl = Object.values(doc.elements).find((e: unknown) => (e as { kind: string }).kind === 'connector') as { color?: string };
-    expect(connEl.color).toBeTruthy();
+    // autosave 디바운스(1s) + 쓰기 지연 — 고정 대기 대신 커넥터 색이 파일에 실제로 저장될 때까지 기다린다
+    const readConnColor = (): string | undefined => {
+      const f = readdirSync(workspace).find((n) => n.endsWith('.board'));
+      if (!f) return undefined;
+      try {
+        const d = JSON.parse(readFileSync(join(workspace, f), 'utf-8'));
+        return (Object.values(d.elements).find((e: unknown) => (e as { kind: string }).kind === 'connector') as { color?: string } | undefined)?.color;
+      } catch { return undefined; }
+    };
+    await expect.poll(readConnColor, { timeout: 10_000, message: '커넥터 색이 파일에 저장됨' }).toBeTruthy();
 
     // close and reopen — color survives the round trip
     await page.click('.tab-close');
